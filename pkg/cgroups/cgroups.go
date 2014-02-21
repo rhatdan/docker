@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/dotcloud/docker/pkg/mount"
+	"github.com/dotcloud/docker/pkg/systemd"
 	"io"
 	"io/ioutil"
 	"os"
@@ -89,6 +90,11 @@ func (c *Cgroup) Join(root, subsystem string, pid int) (string, error) {
 }
 
 func (c *Cgroup) Cleanup(root string) error {
+	if useSystemd() {
+		// systemd cleans up for us
+		return nil
+	}
+
 	get := func(subsystem string) string {
 		path, _ := c.Path(root, subsystem)
 		return path
@@ -125,6 +131,101 @@ func writeFile(dir, file, data string) error {
 	return ioutil.WriteFile(filepath.Join(dir, file), []byte(data), 0700)
 }
 
+func useSystemd() bool {
+	if !systemd.SdBooted() {
+		return false
+	}
+	manager, _ := systemd.GetManager()
+
+	return manager != nil && manager.HasStartTransientUnit
+}
+
+func (c *Cgroup) systemdApply(pid int) error {
+	scope := "docker-" + c.Name + ".scope"
+	slice := "system.slice"
+	if c.Parent != "" {
+		slice = "system-" + c.Parent + ".slice"
+	}
+
+	properties := []systemd.Property{
+		{"Slice", slice},
+		{"Description", "docker container " + c.Name},
+		{"PIDs", []uint32{uint32(pid)}},
+	}
+
+	if !c.DeviceAccess {
+		properties = append(properties,
+			systemd.Property{"DevicePolicy", "strict"},
+			systemd.Property{"DeviceAllow", []systemd.DeviceAllow{
+				{"/dev/null", "rwm"},
+				{"/dev/zero", "rwm"},
+				{"/dev/full", "rwm"},
+				{"/dev/random", "rwm"},
+				{"/dev/urandom", "rwm"},
+				{"/dev/tty", "rwm"},
+				{"/dev/tty", "rwm"},
+				{"/dev/console", "rwm"},
+				{"/dev/tty0", "rwm"},
+				{"/dev/tty1", "rwm"},
+				{"/dev/pts/ptmx", "rwm"},
+				// There is no way to add /dev/pts/* here atm, so we hack this manually below
+				// /dev/pts/* (how to add this?)
+				// Same with tuntap, which doesn't exist as a node most of the time
+			}})
+	}
+
+	if c.Memory != 0 {
+		properties = append(properties,
+			systemd.Property{"MemoryLimit", uint64(c.Memory)})
+	}
+	// TODO: MemorySwap not available in systemd
+
+	if c.CpuShares != 0 {
+		properties = append(properties,
+			systemd.Property{"CPUShares", uint64(c.CpuShares)})
+	}
+	manager, err := systemd.GetManager()
+	if err != nil {
+		return err
+	}
+
+	if err := manager.StartTransientUnit(scope, "replace", properties); err != nil {
+		return err
+	}
+
+	// To work around the lack of /dev/pts/* support above we need to manually add these
+	// so, ask systemd for the cgroup used
+	unit, err := manager.GetUnit(scope)
+	if err != nil {
+		return err
+	}
+
+	cgroup, err := unit.GetProperty("org.freedesktop.systemd1.Scope", "ControlGroup")
+	if err != nil {
+		return err
+	}
+
+	if !c.DeviceAccess {
+		mountpoint, err := FindCgroupMountpoint("devices")
+		if err != nil {
+			return err
+		}
+
+		path := filepath.Join(mountpoint, cgroup.(string))
+
+		// /dev/pts/*
+		if err := writeFile(path, "devices.allow", "c 136:* rwm"); err != nil {
+			return err
+		}
+		// tuntap
+		if err := writeFile(path, "devices.allow", "c 10:200 rwm"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (c *Cgroup) Apply(pid int) error {
 	// We have two implementation of cgroups support, one is based on
 	// systemd and the dbus api, and one is based on raw cgroup fs operations
@@ -132,6 +233,11 @@ func (c *Cgroup) Apply(pid int) error {
 	// http://www.freedesktop.org/wiki/Software/systemd/PaxControlGroups/
 	//
 	// we can pick any subsystem to find the root
+
+	if useSystemd() {
+		return c.systemdApply(pid)
+	}
+
 	cgroupRoot, err := FindCgroupMountpoint("cpu")
 	if err != nil {
 		return err
