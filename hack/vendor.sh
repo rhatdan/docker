@@ -58,3 +58,5 @@ mv src/code.google.com/p/go/src/pkg/archive/tar tmp-tar
 rm -rf src/code.google.com/p/go
 mkdir -p src/code.google.com/p/go/src/pkg/archive
 mv tmp-tar src/code.google.com/p/go/src/pkg/archive/tar
+
+clone git github.com/guelfey/go.dbus f6a3a2366cc39b8479cadc499d3c735fb10fbdda
