@@ -15,6 +15,13 @@ import (
 	"syscall"
 )
 
+func setupSocketActivation() error {
+	if os.Getenv("LISTEN_PID") == "" {
+		return nil
+	}
+	return os.Setenv("LISTEN_PID", "1")
+}
+
 // Init is the init process that first runs inside a new namespace to setup mounts, users, networking,
 // and other options required for the new container.
 func (ns *linuxNs) Init(container *libcontainer.Container, uncleanRootfs, console string, syncPipe *SyncPipe, args []string) error {
@@ -144,6 +151,9 @@ func finalizeNamespace(container *libcontainer.Container) error {
 	}
 	if err := setupUser(container); err != nil {
 		return fmt.Errorf("setup user %s", err)
+	}
+	if err := setupSocketActivation(); err != nil {
+		return fmt.Errorf("setupSocketActivation %s", err)
 	}
 	if err := label.SetProcessLabel(container.ProcessLabel); err != nil {
 		return fmt.Errorf("SetProcessLabel label %s", err)
