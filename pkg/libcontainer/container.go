@@ -21,6 +21,8 @@ type Container struct {
 	Capabilities Capabilities    `json:"capabilities,omitempty"` // capabilities to drop
 	Networks     []*Network      `json:"networks,omitempty"`     // nil for host's network stack
 	Cgroups      *cgroups.Cgroup `json:"cgroups,omitempty"`
+	MountLabel   string          `json:"mount_label,omitempty"`
+	ProcessLabel string          `json:"process_label,omitempty"`
 }
 
 // Network defines configuration for a container's networking stack

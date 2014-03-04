@@ -55,6 +55,8 @@ type Container struct {
 	HostsPath      string
 	Name           string
 	Driver         string
+	MountLabel     string
+	ProcessLabel   string
 
 	command   *execdriver.Command
 	stdout    *utils.WriteBroadcaster
@@ -384,18 +386,20 @@ func populateCommand(c *Container) {
 		CpuShares:  c.Config.CpuShares,
 	}
 	c.command = &execdriver.Command{
-		ID:         c.ID,
-		Privileged: c.hostConfig.Privileged,
-		Rootfs:     c.RootfsPath(),
-		InitPath:   "/.dockerinit",
-		Entrypoint: c.Path,
-		Arguments:  c.Args,
-		WorkingDir: c.Config.WorkingDir,
-		Network:    en,
-		Tty:        c.Config.Tty,
-		User:       c.Config.User,
-		Config:     driverConfig,
-		Resources:  resources,
+		ID:           c.ID,
+		Privileged:   c.hostConfig.Privileged,
+		Rootfs:       c.RootfsPath(),
+		InitPath:     "/.dockerinit",
+		Entrypoint:   c.Path,
+		Arguments:    c.Args,
+		WorkingDir:   c.Config.WorkingDir,
+		Network:      en,
+		Tty:          c.Config.Tty,
+		User:         c.Config.User,
+		Config:       driverConfig,
+		Resources:    resources,
+		MountLabel:   c.Config.MountLabel,
+		ProcessLabel: c.Config.ProcessLabel,
 	}
 	c.command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }

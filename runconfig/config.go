@@ -33,6 +33,8 @@ type Config struct {
 	Entrypoint      []string
 	NetworkDisabled bool
 	OnBuild         []string
+	MountLabel      string
+	ProcessLabel    string
 }
 
 func ContainerConfigFromJob(job *engine.Job) *Config {
@@ -53,6 +55,8 @@ func ContainerConfigFromJob(job *engine.Job) *Config {
 		VolumesFrom:     job.Getenv("VolumesFrom"),
 		WorkingDir:      job.Getenv("WorkingDir"),
 		NetworkDisabled: job.GetenvBool("NetworkDisabled"),
+		MountLabel:      job.Getenv("MountLabel"),
+		ProcessLabel:    job.Getenv("ProcessLabel"),
 	}
 	job.GetenvJson("ExposedPorts", &config.ExposedPorts)
 	job.GetenvJson("Volumes", &config.Volumes)

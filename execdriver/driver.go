@@ -102,19 +102,21 @@ type Resources struct {
 type Command struct {
 	exec.Cmd `json:"-"`
 
-	ID         string     `json:"id"`
-	Privileged bool       `json:"privileged"`
-	User       string     `json:"user"`
-	Rootfs     string     `json:"rootfs"`   // root fs of the container
-	InitPath   string     `json:"initpath"` // dockerinit
-	Entrypoint string     `json:"entrypoint"`
-	Arguments  []string   `json:"arguments"`
-	WorkingDir string     `json:"working_dir"`
-	ConfigPath string     `json:"config_path"` // this should be able to be removed when the lxc template is moved into the driver
-	Tty        bool       `json:"tty"`
-	Network    *Network   `json:"network"` // if network is nil then networking is disabled
-	Config     []string   `json:"config"`  //  generic values that specific drivers can consume
-	Resources  *Resources `json:"resources"`
+	ID           string     `json:"id"`
+	Privileged   bool       `json:"privileged"`
+	User         string     `json:"user"`
+	Rootfs       string     `json:"rootfs"`   // root fs of the container
+	InitPath     string     `json:"initpath"` // dockerinit
+	Entrypoint   string     `json:"entrypoint"`
+	Arguments    []string   `json:"arguments"`
+	WorkingDir   string     `json:"working_dir"`
+	MountLabel   string     `json:"mount_label"`   //  label to assign to mountpoints in the container
+	ProcessLabel string     `json:"process_label"` //  label to run the container process with
+	ConfigPath   string     `json:"config_path"`   // this should be able to be removed when the lxc template is moved into the driver
+	Tty          bool       `json:"tty"`
+	Network      *Network   `json:"network"` // if network is nil then networking is disabled
+	Config       []string   `json:"config"`  //  generic values that specific drivers can consume
+	Resources    *Resources `json:"resources"`
 
 	Terminal Terminal `json:"-"` // standard or tty terminal
 	Console  string   `json:"-"` // dev/console path

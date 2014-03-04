@@ -4,6 +4,7 @@ package nsinit
 
 import (
 	"fmt"
+	"github.com/dotcloud/docker/pkg/label"
 	"github.com/dotcloud/docker/pkg/libcontainer"
 	"github.com/dotcloud/docker/pkg/libcontainer/capabilities"
 	"github.com/dotcloud/docker/pkg/libcontainer/network"
@@ -55,7 +56,7 @@ func (ns *linuxNs) Init(container *libcontainer.Container, uncleanRootfs, consol
 			return fmt.Errorf("parent death signal %s", err)
 		}
 	*/
-	if err := setupNewMountNamespace(rootfs, console, container.ReadonlyFs); err != nil {
+	if err := setupNewMountNamespace(rootfs, console, container.ReadonlyFs, container.MountLabel); err != nil {
 		return fmt.Errorf("setup mount namespace %s", err)
 	}
 	if err := setupNetwork(container, context); err != nil {
@@ -143,6 +144,9 @@ func finalizeNamespace(container *libcontainer.Container) error {
 	}
 	if err := setupUser(container); err != nil {
 		return fmt.Errorf("setup user %s", err)
+	}
+	if err := label.SetProcessLabel(container.ProcessLabel); err != nil {
+		return fmt.Errorf("SetProcessLabel label %s", err)
 	}
 	if container.WorkingDir != "" {
 		if err := system.Chdir(container.WorkingDir); err != nil {
