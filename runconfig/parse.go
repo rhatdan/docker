@@ -10,6 +10,7 @@ import (
 	"github.com/dotcloud/docker/runtime/execdriver"
 	"github.com/dotcloud/docker/utils"
 	"io/ioutil"
+	"os"
 	"path"
 	"strings"
 )
@@ -195,6 +196,14 @@ func parseRun(cmd *flag.FlagSet, args []string, sysInfo *sysinfo.SysInfo) (*Conf
 		if _, exists := ports[p]; !exists {
 			ports[p] = struct{}{}
 		}
+	}
+
+	/* Configure for socket activation */
+	LISTEN_PID := os.Getenv("LISTEN_PID")
+	LISTEN_FDS := os.Getenv("LISTEN_FDS")
+	if LISTEN_PID == string(os.Getpid()) && LISTEN_FDS != "" {
+		flEnv.Set(fmt.Sprintf("LISTEN_FDS=%s", LISTEN_FDS))
+		flEnv.Set("LISTEN_PID=1")
 	}
 
 	config := &Config{
