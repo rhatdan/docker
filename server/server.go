@@ -41,7 +41,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dotcloud/docker/api"
 	"github.com/dotcloud/docker/archive"
 	"github.com/dotcloud/docker/daemon"
 	"github.com/dotcloud/docker/daemonconfig"
@@ -113,7 +112,7 @@ func InitServer(job *engine.Job) engine.Status {
 		"start":            srv.ContainerStart,
 		"kill":             srv.ContainerKill,
 		"wait":             srv.ContainerWait,
-		"tag":              srv.ImageTag,
+		"tag":              srv.ImageTag, // FIXME merge with "image_tag"
 		"resize":           srv.ContainerResize,
 		"commit":           srv.ContainerCommit,
 		"info":             srv.DockerInfo,
@@ -128,7 +127,6 @@ func InitServer(job *engine.Job) engine.Status {
 		"logs":             srv.ContainerLogs,
 		"changes":          srv.ContainerChanges,
 		"top":              srv.ContainerTop,
-		"version":          srv.DockerVersion,
 		"load":             srv.ImageLoad,
 		"build":            srv.Build,
 		"pull":             srv.ImagePull,
@@ -142,6 +140,11 @@ func InitServer(job *engine.Job) engine.Status {
 		if err := job.Eng.Register(name, handler); err != nil {
 			return job.Error(err)
 		}
+	}
+	// Install image-related commands from the image subsystem.
+	// See `graph/service.go`
+	if err := srv.daemon.Repositories().Install(job.Eng); err != nil {
+		return job.Error(err)
 	}
 	return engine.StatusOK
 }
@@ -195,6 +198,15 @@ func (srv *Server) ContainerKill(job *engine.Job) engine.Status {
 	return engine.StatusOK
 }
 
+func (srv *Server) EvictListener(from string) {
+	srv.Lock()
+	if old, ok := srv.listeners[from]; ok {
+		delete(srv.listeners, from)
+		close(old)
+	}
+	srv.Unlock()
+}
+
 func (srv *Server) Events(job *engine.Job) engine.Status {
 	if len(job.Args) != 1 {
 		return job.Errorf("Usage: %s FROM", job.Name)
@@ -212,15 +224,7 @@ func (srv *Server) Events(job *engine.Job) engine.Status {
 			return fmt.Errorf("JSON error")
 		}
 		_, err = job.Stdout.Write(b)
-		if err != nil {
-			// On error, evict the listener
-			utils.Errorf("%s", err)
-			srv.Lock()
-			delete(srv.listeners, from)
-			srv.Unlock()
-			return err
-		}
-		return nil
+		return err
 	}
 
 	listener := make(chan utils.JSONMessage)
@@ -241,8 +245,9 @@ func (srv *Server) Events(job *engine.Job) engine.Status {
 					continue
 				}
 				if err != nil {
-					job.Error(err)
-					return engine.StatusErr
+					// On error, evict the listener
+					srv.EvictListener(from)
+					return job.Error(err)
 				}
 			}
 		}
@@ -260,6 +265,8 @@ func (srv *Server) Events(job *engine.Job) engine.Status {
 				continue
 			}
 			if err != nil {
+				// On error, evict the listener
+				srv.EvictListener(from)
 				return job.Error(err)
 			}
 		case <-timeout.C:
@@ -796,23 +803,6 @@ func (srv *Server) DockerInfo(job *engine.Job) engine.Status {
 	v.Set("IndexServerAddress", registry.IndexServerAddress())
 	v.Set("InitSha1", dockerversion.INITSHA1)
 	v.Set("InitPath", initPath)
-	if _, err := v.WriteTo(job.Stdout); err != nil {
-		return job.Error(err)
-	}
-	return engine.StatusOK
-}
-
-func (srv *Server) DockerVersion(job *engine.Job) engine.Status {
-	v := &engine.Env{}
-	v.Set("Version", dockerversion.VERSION)
-	v.SetJson("ApiVersion", api.APIVERSION)
-	v.Set("GitCommit", dockerversion.GITCOMMIT)
-	v.Set("GoVersion", runtime.Version())
-	v.Set("Os", runtime.GOOS)
-	v.Set("Arch", runtime.GOARCH)
-	if kernelVersion, err := utils.GetKernelVersion(); err == nil {
-		v.Set("KernelVersion", kernelVersion.String())
-	}
 	if _, err := v.WriteTo(job.Stdout); err != nil {
 		return job.Error(err)
 	}
@@ -2043,37 +2033,6 @@ func (srv *Server) ImageGetCached(imgID string, config *runconfig.Config) (*imag
 	return match, nil
 }
 
-func (srv *Server) RegisterLinks(container *daemon.Container, hostConfig *runconfig.HostConfig) error {
-	daemon := srv.daemon
-
-	if hostConfig != nil && hostConfig.Links != nil {
-		for _, l := range hostConfig.Links {
-			parts, err := utils.PartParser("name:alias", l)
-			if err != nil {
-				return err
-			}
-			child, err := srv.daemon.GetByName(parts["name"])
-			if err != nil {
-				return err
-			}
-			if child == nil {
-				return fmt.Errorf("Could not get container for %s", parts["name"])
-			}
-			if err := daemon.RegisterLink(container, child, parts["alias"]); err != nil {
-				return err
-			}
-		}
-
-		// After we load all the links into the daemon
-		// set them to nil on the hostconfig
-		hostConfig.Links = nil
-		if err := container.WriteHostConfig(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (srv *Server) ContainerStart(job *engine.Job) engine.Status {
 	if len(job.Args) < 1 {
 		return job.Errorf("Usage: %s container_id", job.Name)
@@ -2114,7 +2073,7 @@ func (srv *Server) ContainerStart(job *engine.Job) engine.Status {
 			}
 		}
 		// Register any links from the host config before starting the container
-		if err := srv.RegisterLinks(container, hostConfig); err != nil {
+		if err := srv.daemon.RegisterLinks(container, hostConfig); err != nil {
 			return job.Error(err)
 		}
 		container.SetHostConfig(hostConfig)

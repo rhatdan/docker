@@ -36,7 +36,7 @@ func InitializeMountNamespace(rootfs, console string, container *libcontainer.Co
 		flag = syscall.MS_SLAVE
 	}
 	if err := system.Mount("", "/", "", uintptr(flag|syscall.MS_REC), ""); err != nil {
-		return fmt.Errorf("mounting / as slave %s", err)
+		return fmt.Errorf("mounting / with flags %X %s", (flag | syscall.MS_REC), err)
 	}
 	if err := system.Mount(rootfs, rootfs, "bind", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
 		return fmt.Errorf("mouting %s as bind %s", rootfs, err)
@@ -91,6 +91,28 @@ func mountSystem(rootfs string, container *libcontainer.Container) error {
 	return nil
 }
 
+func createIfNotExists(path string, isDir bool) error {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			if isDir {
+				if err := os.MkdirAll(path, 0755); err != nil {
+					return err
+				}
+			} else {
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					return err
+				}
+				f, err := os.OpenFile(path, os.O_CREATE, 0755)
+				if err != nil {
+					return err
+				}
+				f.Close()
+			}
+		}
+	}
+	return nil
+}
+
 func setupBindmounts(rootfs string, bindMounts libcontainer.Mounts) error {
 	for _, m := range bindMounts.OfType("bind") {
 		var (
@@ -100,6 +122,15 @@ func setupBindmounts(rootfs string, bindMounts libcontainer.Mounts) error {
 		if !m.Writable {
 			flags = flags | syscall.MS_RDONLY
 		}
+
+		stat, err := os.Stat(m.Source)
+		if err != nil {
+			return err
+		}
+		if err := createIfNotExists(dest, stat.IsDir()); err != nil {
+			return fmt.Errorf("Creating new bind-mount target, %s", err)
+		}
+
 		if err := system.Mount(m.Source, dest, "bind", uintptr(flags), ""); err != nil {
 			return fmt.Errorf("mounting %s into %s %s", m.Source, dest, err)
 		}
@@ -125,6 +156,7 @@ func newSystemMounts(rootfs, mountLabel string, mounts libcontainer.Mounts) []mo
 		{source: "sysfs", path: filepath.Join(rootfs, "sys"), device: "sysfs", flags: defaultMountFlags},
 		{source: "shm", path: filepath.Join(rootfs, "dev", "shm"), device: "tmpfs", flags: defaultMountFlags, data: label.FormatMountLabel("mode=1777,size=65536k", mountLabel)},
 		{source: "devpts", path: filepath.Join(rootfs, "dev", "pts"), device: "devpts", flags: syscall.MS_NOSUID | syscall.MS_NOEXEC, data: label.FormatMountLabel("newinstance,ptmxmode=0666,mode=620,gid=5", mountLabel)},
+		{source: "tmpfs", path: filepath.Join(rootfs, "run"), device: "tmpfs", flags: defaultMountFlags},
 	}
 
 	if len(mounts.OfType("devtmpfs")) == 1 {

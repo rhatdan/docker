@@ -667,6 +667,35 @@ func (daemon *Daemon) RegisterLink(parent, child *Container, alias string) error
 	return nil
 }
 
+func (daemon *Daemon) RegisterLinks(container *Container, hostConfig *runconfig.HostConfig) error {
+	if hostConfig != nil && hostConfig.Links != nil {
+		for _, l := range hostConfig.Links {
+			parts, err := utils.PartParser("name:alias", l)
+			if err != nil {
+				return err
+			}
+			child, err := daemon.GetByName(parts["name"])
+			if err != nil {
+				return err
+			}
+			if child == nil {
+				return fmt.Errorf("Could not get container for %s", parts["name"])
+			}
+			if err := daemon.RegisterLink(container, child, parts["alias"]); err != nil {
+				return err
+			}
+		}
+
+		// After we load all the links into the daemon
+		// set them to nil on the hostconfig
+		hostConfig.Links = nil
+		if err := container.WriteHostConfig(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // FIXME: harmonize with NewGraph()
 func NewDaemon(config *daemonconfig.Config, eng *engine.Engine) (*Daemon, error) {
 	daemon, err := NewDaemonFromDirectory(config, eng)
@@ -680,6 +709,12 @@ func NewDaemonFromDirectory(config *daemonconfig.Config, eng *engine.Engine) (*D
 	if !config.EnableSelinuxSupport {
 		selinux.SetDisabled()
 	}
+
+	// Create the root directory if it doesn't exists
+	if err := os.MkdirAll(config.Root, 0700); err != nil && !os.IsExist(err) {
+		return nil, err
+	}
+
 	// Set the default driver
 	graphdriver.DefaultDriver = config.GraphDriver
 
