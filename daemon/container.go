@@ -998,6 +998,7 @@ func (container *Container) createDaemonEnvironment(linkedEnv []string) []string
 		"HOME=/",
 		"PATH=" + DefaultPathEnv,
 		"HOSTNAME=" + container.Config.Hostname,
+		"LANG=" + os.Getenv("LANG"),
 	}
 	if container.Config.Tty {
 		env = append(env, "TERM=xterm")
