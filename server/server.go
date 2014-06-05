@@ -58,6 +58,8 @@ import (
 	"github.com/dotcloud/docker/utils/filters"
 )
 
+var RegistryList = []string{"", "registry.access.redhat.com/redhat/"}
+
 func (srv *Server) handlerWrap(h engine.Handler) engine.Handler {
 	return func(job *engine.Job) engine.Status {
 		if !srv.IsRunning() {
@@ -144,7 +146,7 @@ func InitServer(job *engine.Job) engine.Status {
 		"top":              srv.ContainerTop,
 		"load":             srv.ImageLoad,
 		"build":            srv.Build,
-		"pull":             srv.ImagePull,
+		"pull":             srv.RegistryPull,
 		"import":           srv.ImageImport,
 		"image_delete":     srv.ImageDelete,
 		"events":           srv.Events,
@@ -1172,13 +1174,13 @@ func (srv *Server) pullImage(r *registry.Registry, out io.Writer, imgID, endpoin
 }
 
 func (srv *Server) pullRepository(r *registry.Registry, out io.Writer, localName, remoteName, askedTag string, sf *utils.StreamFormatter, parallel bool) error {
-	out.Write(sf.FormatStatus("", "Pulling repository %s", localName))
 
 	repoData, err := r.GetRepositoryData(remoteName)
 	if err != nil {
 		return err
 	}
 
+	out.Write(sf.FormatStatus("", "Pulling repository %s", localName))
 	utils.Debugf("Retrieving the tag list")
 	tagsList, err := r.GetRemoteTags(repoData.Endpoints, remoteName, repoData.Tokens)
 	if err != nil {
@@ -1402,6 +1404,23 @@ func (srv *Server) ImagePull(job *engine.Job) engine.Status {
 	}
 
 	return engine.StatusOK
+}
+
+func (srv *Server) RegistryPull(job *engine.Job) engine.Status {
+	var (
+		tmp    = job.Args[0]
+		status = engine.StatusErr
+	)
+	for r := len(RegistryList) - 1; r >= 0; r-- {
+		job.Args[0] = fmt.Sprintf("%s%s", RegistryList[r], tmp)
+		status := srv.ImagePull(job)
+		if status == engine.StatusOK {
+			job.Args[1] = tmp
+			srv.ImageTag(job)
+			return status
+		}
+	}
+	return status
 }
 
 // Retrieve the all the images to be uploaded in the correct order
