@@ -1,8 +1,8 @@
 package template
 
 import (
-	"github.com/dotcloud/docker/pkg/apparmor"
 	"github.com/dotcloud/docker/pkg/libcontainer"
+	"github.com/dotcloud/docker/pkg/libcontainer/apparmor"
 	"github.com/dotcloud/docker/pkg/libcontainer/cgroups"
 )
 
@@ -21,6 +21,7 @@ func New() *libcontainer.Container {
 			"SETPCAP",
 			"NET_BIND_SERVICE",
 			"SYS_CHROOT",
+			"KILL",
 		},
 		Namespaces: map[string]bool{
 			"NEWNS":  true,

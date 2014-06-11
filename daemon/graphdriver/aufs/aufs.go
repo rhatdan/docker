@@ -32,7 +32,7 @@ import (
 
 	"github.com/dotcloud/docker/archive"
 	"github.com/dotcloud/docker/daemon/graphdriver"
-	"github.com/dotcloud/docker/pkg/label"
+	"github.com/dotcloud/docker/pkg/libcontainer/label"
 	mountpk "github.com/dotcloud/docker/pkg/mount"
 	"github.com/dotcloud/docker/utils"
 )
@@ -57,7 +57,7 @@ type Driver struct {
 
 // New returns a new AUFS driver.
 // An error is returned if AUFS is not supported.
-func Init(root string) (graphdriver.Driver, error) {
+func Init(root string, options []string) (graphdriver.Driver, error) {
 	// Try to load the aufs kernel module
 	if err := supportsAufs(); err != nil {
 		return nil, graphdriver.ErrNotSupported
@@ -94,6 +94,10 @@ func Init(root string) (graphdriver.Driver, error) {
 		if os.IsExist(err) {
 			return a, nil
 		}
+		return nil, err
+	}
+
+	if err := graphdriver.MakePrivate(root); err != nil {
 		return nil, err
 	}
 
@@ -371,12 +375,14 @@ func (a *Driver) Cleanup() error {
 	if err != nil {
 		return err
 	}
+
 	for _, id := range ids {
 		if err := a.unmount(id); err != nil {
 			utils.Errorf("Unmounting %s: %s", utils.TruncateID(id), err)
 		}
 	}
-	return nil
+
+	return mountpk.Unmount(a.root)
 }
 
 func (a *Driver) aufsMount(ro []string, rw, target, mountLabel string) (err error) {

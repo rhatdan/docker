@@ -6,12 +6,12 @@ page_keywords: API, Docker, rcli, REST, documentation
 
 ## 1. Brief introduction
 
- - The Remote API has replaced rcli
+ - The Remote API has replaced `rcli`.
  - The daemon listens on `unix:///var/run/docker.sock` but you can bind
    Docker to another host/port or a Unix socket.
  - The API tends to be REST, but for some complex commands, like `attach`
-   or `pull`, the HTTP connection is hijacked to transport `stdout, stdin`
-   and `stderr`
+   or `pull`, the HTTP connection is hijacked to transport `STDOUT`, `STDIN`
+   and `STDERR`.
 
 # 2. Endpoints
 
@@ -123,7 +123,6 @@ Create a container
              "Cmd":[
                      "date"
              ],
-             "Dns":null,
              "Image":"base",
              "Volumes":{
                      "/tmp": {}
@@ -410,7 +409,9 @@ Start the container `id`
              "LxcConf":{"lxc.utsname":"docker"},
              "PortBindings":{ "22/tcp": [{ "HostPort": "11022" }] },
              "PublishAllPorts":false,
-             "Privileged":false
+             "Privileged":false,
+             "Dns": ["8.8.8.8"],
+             "VolumesFrom": ["parent", "other:ro"]
         }
 
     **Example response**:
@@ -947,7 +948,7 @@ Remove the image `name` from the filesystem
 
 `GET /images/search`
 
-Search for an image on [Docker.io](https://index.docker.io).
+Search for an image on [Docker Hub](https://hub.docker.com).
 
 > **Note**:
 > The response keys have changed from API v1.6 to reflect the JSON

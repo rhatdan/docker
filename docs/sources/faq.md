@@ -96,7 +96,7 @@ functionalities:
    all your future projects. And so on.
 
  - *Sharing.*
-   Docker has access to a [public registry](http://index.docker.io) where
+   Docker has access to a [public registry](https://hub.docker.com) where
    thousands of people have uploaded useful containers: anything from Redis,
    CouchDB, Postgres to IRC bouncers to Rails app servers to Hadoop to
    base images for various Linux distros. The
@@ -122,8 +122,7 @@ functionalities:
 ### What is different between a Docker container and a VM?
 
 There's a great StackOverflow answer [showing the differences](
-http://stackoverflow.com/questions/16047306/
-how-is-docker-io-different-from-a-normal-virtual-machine).
+http://stackoverflow.com/questions/16047306/how-is-docker-io-different-from-a-normal-virtual-machine).
 
 ### Do I lose my data when the container exits?
 
@@ -185,8 +184,7 @@ this [mailbox](mailto:security@docker.com).
 ### Why do I need to sign my commits to Docker with the DCO?
 
 Please read [our blog post](
-http://blog.docker.io/2014/01/
-docker-code-contributions-require-developer-certificate-of-origin/)
+http://blog.docker.io/2014/01/docker-code-contributions-require-developer-certificate-of-origin/)
 on the introduction of the DCO.
 
 ### Can I help by adding some questions and answers?

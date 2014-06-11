@@ -13,7 +13,7 @@ application inside a container takes a single command: `docker run`.
 
 Let's try it now.
 
-    $ sudo docker run ubuntu:14.04 /bin/echo "Hello World!"
+    $ sudo docker run ubuntu:14.04 /bin/echo 'Hello World!'
     Hello World!
 
 And you just launched your first container!
@@ -30,11 +30,11 @@ operating system image.
 
 When you specify an image, Docker looks first for the image on your
 Docker host. If it can't find it then it downloads the image from the public
-image registry: [Docker.io](https://index.docker.io).
+image registry: [Docker Hub](https://hub.docker.com).
 
 Next we told Docker what command to run inside our new container:
 
-    /bin/echo "Hello World!"
+    /bin/echo 'Hello World!'
 
 When our container was launched Docker created a new Ubuntu 14.04
 environment and then executed the `/bin/echo` command inside it. We saw
@@ -146,7 +146,7 @@ We can also see the image we used to build it, `ubuntu:14.04`, the command it
 is running, its status and an automatically assigned name,
 `insane_babbage`. 
 
-> **NoteL** 
+> **Note:** 
 > Docker automatically names any containers you start, a
 > little later on we'll see how you can specify your own names.
 
@@ -179,7 +179,7 @@ has just stopped.
 
 Let's check it worked with the `docker ps` command.
 
-    $ docker ps
+    $ sudo docker ps
     CONTAINER ID  IMAGE         COMMAND               CREATED        STATUS       PORTS NAMES
 
 Excellent. Our container has been stopped.

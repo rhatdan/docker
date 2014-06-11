@@ -73,6 +73,7 @@ expect an integer, and they can only be specified once.
       -p, --pidfile="/var/run/docker.pid"        Path to use for daemon PID file
       -r, --restart=true                         Restart previously running containers
       -s, --storage-driver=""                    Force the docker runtime to use a specific storage driver
+      --storage-opt=[]                           Set storage driver options
       --selinux-enabled=false                    Enable selinux support
       --tls=false                                Use TLS; implied by tls-verify flags
       --tlscacert="/home/sven/.docker/ca.pem"    Trust only remotes providing a certificate signed by the CA given here
@@ -739,9 +740,9 @@ Running `docker ps` showing 2 linked containers.
     Pull an image or a repository from the registry
 
 Most of your images will be created on top of a base image from the
-[Docker.io](https://index.docker.io) registry.
+[Docker Hub](https://hub.docker.com) registry.
 
-[Docker.io](https://index.docker.io) contains many pre-built images that you
+[Docker Hub](https://hub.docker.com) contains many pre-built images that you
 can `pull` and try without needing to define and configure your own.
 
 To download a particular image, or set of images (i.e., a repository),
@@ -760,7 +761,7 @@ use `docker pull`:
 
     Push an image or a repository to the registry
 
-Use `docker push` to share your images to the [Docker.io](https://index.docker.io)
+Use `docker push` to share your images to the [Docker Hub](https://hub.docker.com)
 registry or to a self-hosted one.
 
 ## restart
@@ -1116,7 +1117,7 @@ It is used to create a backup that can then be used with
 
 ## search
 
-Search [Docker.io](https://index.docker.io) for images
+Search [Docker Hub](https://hub.docker.com) for images
 
     Usage: docker search TERM
 
@@ -1126,9 +1127,9 @@ Search [Docker.io](https://index.docker.io) for images
       -s, --stars=0          Only displays with at least xxx stars
       --automated=false      Only show automated builds
 
-See [*Find Public Images on Docker.io*](
-/userguide/dockerrepos/#find-public-images-on-dockerio) for
-more details on finding shared images from the commandline.
+See [*Find Public Images on Docker Hub*](
+/userguide/dockerrepos/#find-public-images-on-docker-hub) for
+more details on finding shared images from the command line.
 
 ## start
 
@@ -1138,6 +1139,9 @@ more details on finding shared images from the commandline.
 
       -a, --attach=false         Attach container's stdout/stderr and forward all signals to the process
       -i, --interactive=false    Attach container's stdin
+
+When run on a container that has already been started, 
+takes no action and succeeds unconditionally.
 
 ## stop
 
