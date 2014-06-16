@@ -132,7 +132,7 @@ func main() {
 		}
 
 		// set up the TempDir to use a canonical path
-		tmp := os.TempDir()
+		tmp := utils.TempDir()
 		realTmp, err := utils.ReadSymlinkedDirectory(tmp)
 		if err != nil {
 			log.Fatalf("Unable to get the full path to the TempDir (%s): %s", tmp, err)
