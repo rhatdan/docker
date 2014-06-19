@@ -109,6 +109,9 @@ func Init(container *libcontainer.Config, uncleanRootfs, consolePath string, syn
 		return fmt.Errorf("get parent death signal %s", err)
 	}
 
+	// Report to parent that we're done. By this point all network and volumes are set up.
+	syncPipe.Close()
+
 	if err := FinalizeNamespace(container); err != nil {
 		return fmt.Errorf("finalize namespace %s", err)
 	}

@@ -47,7 +47,8 @@ func (s *SyncPipe) SendToChild(networkState *network.NetworkState) error {
 
 	s.parent.Write(data)
 
-	return syscall.Shutdown(int(s.parent.Fd()), syscall.SHUT_WR)
+	syscall.Shutdown(int(s.parent.Fd()), syscall.SHUT_WR)
+	return nil
 }
 
 func (s *SyncPipe) ReadFromChild() error {
@@ -59,7 +60,17 @@ func (s *SyncPipe) ReadFromChild() error {
 	if len(data) > 0 {
 		return fmt.Errorf("%s", data)
 	}
+	return nil
+}
 
+func (s *SyncPipe) BlockOnChild() error {
+	data, err := ioutil.ReadAll(s.parent)
+	if err != nil {
+		return nil
+	}
+	if len(data) > 0 {
+		return fmt.Errorf("Child error: %s", string(data))
+	}
 	return nil
 }
 
@@ -78,6 +89,11 @@ func (s *SyncPipe) ReadFromParent() (*network.NetworkState, error) {
 }
 
 func (s *SyncPipe) ReportChildError(err error) {
+	s.child.Write([]byte(err.Error()))
+	s.CloseChild()
+}
+
+func (s *SyncPipe) ReportError(err error) {
 	s.child.Write([]byte(err.Error()))
 	s.CloseChild()
 }
