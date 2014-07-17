@@ -45,6 +45,11 @@ func readAll(root, prefix string) ([]SecretData, error) {
 	for _, f := range files {
 		fileData, err := readFile(root, filepath.Join(prefix, f.Name()))
 		if err != nil {
+			// If the file did not exist, might be a dangling symlink
+			// Ignore the error
+			if os.IsNotExist(err) {
+				continue
+			}
 			return nil, err
 		}
 		data = append(data, fileData...)
