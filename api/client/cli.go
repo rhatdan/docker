@@ -38,8 +38,11 @@ func (cli *DockerCli) ParseCommands(args ...string) error {
 	if len(args) > 0 {
 		method, exists := cli.getMethod(args[0])
 		if !exists {
-			fmt.Println("Error: Command not found:", args[0])
+			fmt.Fprintf(cli.err, "Error: Command not found:", args[0])
 			return cli.CmdHelp(args[1:]...)
+		}
+		if args[0] == "help" {
+			cli.err = cli.out
 		}
 		return method(args[1:]...)
 	}
@@ -49,7 +52,7 @@ func (cli *DockerCli) ParseCommands(args ...string) error {
 func (cli *DockerCli) Subcmd(name, signature, description string) *flag.FlagSet {
 	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	flags.Usage = func() {
-		fmt.Fprintf(cli.err, "\nUsage: docker %s %s\n\n%s\n\n", name, signature, description)
+		fmt.Fprintf(flags.GetOutput(), "\nUsage: docker %s %s\n\n%s\n\n", name, signature, description)
 		flags.PrintDefaults()
 		os.Exit(2)
 	}

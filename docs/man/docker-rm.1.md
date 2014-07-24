@@ -20,6 +20,9 @@ remove a running container unless you use the \fB-f\fR option. To see all
 containers on a host use the **docker ps -a** command.
 
 # OPTIONS
+**--help**
+  Print usage statement
+
 **-k**, **--kill**=*true*|*false*
    Kill and remove a running container. The default is *false*.
 

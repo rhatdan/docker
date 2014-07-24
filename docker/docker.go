@@ -71,6 +71,7 @@ func main() {
 		flCert               = flag.String([]string{"-tlscert"}, filepath.Join(dockerConfDir, defaultCertFile), "Path to TLS certificate file")
 		flKey                = flag.String([]string{"-tlskey"}, filepath.Join(dockerConfDir, defaultKeyFile), "Path to TLS key file")
 		flSelinuxEnabled     = flag.Bool([]string{"-selinux-enabled"}, false, "Enable selinux support. SELinux does not presently support the BTRFS storage driver")
+		help                 = flag.Bool([]string{"h", "-help"}, false, "Print usage")
 	)
 	flag.Var(&flDns, []string{"#dns", "-dns"}, "Force Docker to use specific DNS servers")
 	flag.Var(&flDnsSearch, []string{"-dns-search"}, "Force Docker to use specific DNS search domains")
@@ -79,6 +80,11 @@ func main() {
 
 	flag.Parse()
 
+	if *help {
+		flag.SetOutput(os.Stdout)
+		flag.Usage()
+		return
+	}
 	if *flVersion {
 		showVersion()
 		return
