@@ -298,6 +298,9 @@ func (container *Container) Start() (err error) {
 		return err
 	}
 	env := container.createDaemonEnvironment(linkedEnv)
+	if err := container.setupMachineId(); err != nil {
+		return err
+	}
 	if err := populateCommand(container, env); err != nil {
 		return err
 	}
@@ -312,6 +315,28 @@ func (container *Container) Start() (err error) {
 	}
 
 	return container.waitForStart()
+}
+
+// some semblance of a UUID for the container runtime.
+func (container *Container) setupMachineId() error {
+	etcPath, err := container.getResourcePath("/etc")
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(etcPath, 0755); err != nil {
+		return err
+	}
+
+	machineIdPath := filepath.Join(etcPath, "machine-id")
+	fh, err := os.Create(machineIdPath)
+	if err != nil {
+		return err
+	}
+	// or perhaps container.Name?
+	_, err = fmt.Fprintln(fh, container.ID)
+	fh.Close()
+	return err
 }
 
 func (container *Container) Run() error {
