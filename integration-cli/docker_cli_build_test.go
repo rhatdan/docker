@@ -12,6 +12,31 @@ import (
 	"github.com/docker/docker/archive"
 )
 
+func TestBuildComment(t *testing.T) {
+	name := "testbuildcomment"
+	defer deleteImages(name)
+	comment = "hello, is there anyone in there?"
+
+	_, err := buildImage(name, fmt.Sprintf(`
+FROM busybox
+COMMENT %s
+`, comment), true)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := inspectField(name, "Config.Comment")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res != comment {
+		t.Fatal("Comment did not match the one provided.")
+	}
+}
+
 func TestBuildCacheADD(t *testing.T) {
 	buildDirectory := filepath.Join(workingDirectory, "build_tests", "TestBuildCacheADD", "1")
 	buildCmd := exec.Command(dockerBinary, "build", "-t", "testcacheadd1", ".")

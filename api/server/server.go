@@ -501,6 +501,7 @@ func postImagesCreate(eng *engine.Engine, version version.Version, w http.Respon
 			repo, tag = utils.ParseRepositoryTag(repo)
 		}
 		job = eng.Job("import", r.Form.Get("fromSrc"), repo, tag)
+		job.Setenv("comment", r.Form.Get("comment"))
 		job.Stdin.Add(r.Body)
 	}
 

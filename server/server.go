@@ -1709,7 +1709,11 @@ func (srv *Server) ImageImport(job *engine.Job) engine.Status {
 		defer progressReader.Close()
 		archive = progressReader
 	}
-	img, err := srv.daemon.Graph().Create(archive, "", "", "Imported from "+src, "", nil, nil)
+	comment := job.Getenv("comment")
+	if comment == "" {
+		comment = "Imported from " + src
+	}
+	img, err := srv.daemon.Graph().Create(archive, "", "", comment, "", nil, nil)
 	if err != nil {
 		return job.Error(err)
 	}

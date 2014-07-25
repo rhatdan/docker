@@ -225,6 +225,21 @@ default specified in `CMD`.
 > the result; `CMD` does not execute anything at build time, but specifies
 > the intended command for the image.
 
+## COMMENT
+   COMMENT [STRING]
+
+The `COMMENT` instruction allows you to describe your Dockerfile. If
+you want a multiline string, supply `\` at the end of the line.
+
+For example:
+
+  COMMENT This is a Dockerfile, of course! \
+  It does some neat things!
+
+This is yielded from the API as well; from the output of `docker inspect [IMAGE]`,
+in the "Config" section, there is a "Description" element that corresponds to 
+this string.
+
 ## EXPOSE
 
     EXPOSE <port> [<port>...]
@@ -515,6 +530,8 @@ For example you might add something like this:
 
     FROM      ubuntu
     MAINTAINER Victor Vieux <victor@docker.com>
+
+    COMMENT This image runs Nginx on an Ubunto base
 
     # make sure the package repository is up to date
     RUN echo "deb http://archive.ubuntu.com/ubuntu precise main universe" > /etc/apt/sources.list

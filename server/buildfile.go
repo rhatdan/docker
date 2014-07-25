@@ -43,6 +43,7 @@ type buildFile struct {
 	daemon *daemon.Daemon
 	srv    *Server
 
+	comment    string
 	image      string
 	maintainer string
 	config     *runconfig.Config
@@ -163,6 +164,11 @@ func (b *buildFile) CmdOnbuild(trigger string) error {
 func (b *buildFile) CmdMaintainer(name string) error {
 	b.maintainer = name
 	return b.commit("", b.config.Cmd, fmt.Sprintf("MAINTAINER %s", name))
+}
+
+func (b *buildFile) CmdComment(comment string) error {
+	b.comment = comment
+	return b.commit("", b.config.Cmd, fmt.Sprintf("COMMENT %s", comment))
 }
 
 // probeCache checks to see if image-caching is enabled (`b.utilizeCache`)
@@ -752,7 +758,7 @@ func (b *buildFile) commit(id string, autoCmd []string, comment string) error {
 	autoConfig := *b.config
 	autoConfig.Cmd = autoCmd
 	// Commit the container
-	image, err := b.daemon.Commit(container, "", "", "", b.maintainer, true, &autoConfig)
+	image, err := b.daemon.Commit(container, "", "", b.comment, b.maintainer, true, &autoConfig)
 	if err != nil {
 		return err
 	}

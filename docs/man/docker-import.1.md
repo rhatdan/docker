@@ -9,6 +9,7 @@ docker-import - Create an empty filesystem image and import the contents of the 
 [**-e**|**--env**[=*[]*]]
 [**--env-file**[=*[]*]]
 [**--help**]
+[**-m**|**--message**[=*MESSAGE*]]
 URL|- [REPOSITORY[:TAG]]
 
 # DESCRIPTION
@@ -27,6 +28,8 @@ inside of the container.
 **--env-file**=[]
    Read in a line delimited file of environment variables
 
+**-m**, **--message**=""
+   Commit message
 # EXAMPLES
 
 ## Import from a remote location
