@@ -332,7 +332,7 @@ const (
 	// Allow preventing system suspends
 	CAP_BLOCK_SUSPEND Cap = 36
 
-	CAP_LAST_CAP = CAP_BLOCK_SUSPEND
+	CAP_LAST_CAP Cap = 62
 )
 
 const capUpperMask = (uint32(1) << (uint(CAP_LAST_CAP) - 31)) - 1
