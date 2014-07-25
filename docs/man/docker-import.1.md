@@ -6,6 +6,8 @@ docker-import - Create an empty filesystem image and import the contents of the 
 
 # SYNOPSIS
 **docker import**
+[**-e**|**--env**[=*[]*]]
+[**--env-file**[=*[]*]]
 [**--help**]
 URL|- [REPOSITORY[:TAG]]
 
@@ -16,6 +18,14 @@ Create a new filesystem image from the contents of a tarball (`.tar`,
 # OPTIONS
 **--help**
   Print usage statement
+
+**-e**, **--env**=*environment*
+   Set environment variables. This option allows you to specify arbitrary
+environment variables that are available for the process that will be launched
+inside of the container.
+
+**--env-file**=[]
+   Read in a line delimited file of environment variables
 
 # EXAMPLES
 
