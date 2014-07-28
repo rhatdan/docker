@@ -1713,7 +1713,10 @@ func (srv *Server) ImageImport(job *engine.Job) engine.Status {
 	if comment == "" {
 		comment = "Imported from " + src
 	}
-	img, err := srv.daemon.Graph().Create(archive, "", "", comment, "", nil, nil)
+	config := &runconfig.Config{
+		Env: job.GetenvList("env"),
+	}
+	img, err := srv.daemon.Graph().Create(archive, "", "", comment, "", nil, config)
 	if err != nil {
 		return job.Error(err)
 	}

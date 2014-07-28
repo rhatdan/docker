@@ -502,6 +502,7 @@ func postImagesCreate(eng *engine.Engine, version version.Version, w http.Respon
 		}
 		job = eng.Job("import", r.Form.Get("fromSrc"), repo, tag)
 		job.Setenv("comment", r.Form.Get("comment"))
+		job.SetenvList("env", strings.Split(r.Form.Get("env"), " "))
 		job.Stdin.Add(r.Body)
 	}
 
