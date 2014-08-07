@@ -40,6 +40,7 @@ type HostConfig struct {
 	NetworkMode     NetworkMode
 	CapAdd          []string
 	CapDrop         []string
+	NoRunFs         bool
 }
 
 func ContainerHostConfigFromJob(job *engine.Job) *HostConfig {
