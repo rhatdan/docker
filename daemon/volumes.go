@@ -53,8 +53,6 @@ func setupMountsForContainer(container *Container) error {
 		return err
 	}
 
-	mounts = append(mounts, execdriver.Mount{secretsPath, "/run/secrets", true, true})
-
 	if !container.hostConfig.NoRunFs {
 		runMount, err := setupRun(container)
 		if err != nil {
@@ -62,6 +60,8 @@ func setupMountsForContainer(container *Container) error {
 		}
 		mounts = append(mounts, *runMount)
 	}
+
+	mounts = append(mounts, execdriver.Mount{secretsPath, "/run/secrets", true, true})
 
 	// Mount user specified volumes
 	// Note, these are not private because you may want propagation of (un)mounts from host

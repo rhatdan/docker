@@ -327,6 +327,15 @@ func (container *Container) Start() (err error) {
 			return err
 		}
 	}
+	// Now the container is running, unmount the secrets on the host
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return err
+	}
+
+	if err := syscall.Unmount(secretsPath, syscall.MNT_DETACH); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -1188,15 +1197,6 @@ func (container *Container) startLoggingToDisk() error {
 	}
 
 	if err := container.daemon.LogToDisk(container.stderr, pth, "stderr"); err != nil {
-		return err
-	}
-
-	secretsPath, err := container.secretsPath()
-	if err != nil {
-		return err
-	}
-
-	if err := syscall.Unmount(secretsPath, syscall.MNT_DETACH); err != nil {
 		return err
 	}
 
