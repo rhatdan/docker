@@ -97,6 +97,12 @@ func doRequest(req *http.Request, jar http.CookieJar, timeout TimeoutType) (*htt
 	if err != nil && !os.IsNotExist(err) {
 		return nil, nil, err
 	}
+	hostDir = path.Join(" /etc/pki/entitlement", req.URL.Host)
+	if fs1, err := ioutil.ReadDir(hostDir); err == nil {
+		for _, f := range fs1 {
+			fs = append(fs, f)
+		}
+	}
 
 	var (
 		pool  *x509.CertPool
@@ -131,6 +137,26 @@ func doRequest(req *http.Request, jar http.CookieJar, timeout TimeoutType) (*htt
 			certName := keyName[:len(keyName)-4] + ".cert"
 			if !hasFile(fs, certName) {
 				return nil, nil, fmt.Errorf("Missing certificate %s for key %s", certName, keyName)
+			}
+		}
+		if strings.HasSuffix(f.Name(), ".pem") {
+			if strings.HasSuffix(f.Name(), "-key.pem") {
+				keyName := f.Name()
+				certName := keyName[:len(keyName)-len("-key.pem")] + ".pem"
+				if !hasFile(fs, certName) {
+					return nil, nil, fmt.Errorf("Missing certificate %s for key %s", certName, keyName)
+				}
+			} else {
+				certName := f.Name()
+				keyName := certName[:len(certName)-len(".pem")] + "-key.pem"
+				if !hasFile(fs, keyName) {
+					return nil, nil, fmt.Errorf("Missing key %s for certificate %s", keyName, certName)
+				}
+				cert, err := tls.LoadX509KeyPair(path.Join(hostDir, certName), path.Join(hostDir, keyName))
+				if err != nil {
+					return nil, nil, err
+				}
+				certs = append(certs, &cert)
 			}
 		}
 	}
