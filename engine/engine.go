@@ -62,6 +62,9 @@ type Engine struct {
 }
 
 func (eng *Engine) Register(name string, handler Handler) error {
+	eng.l.Lock()
+	defer eng.l.Unlock()
+
 	_, exists := eng.handlers[name]
 	if exists {
 		return fmt.Errorf("Can't overwrite handler for command %s", name)
@@ -71,6 +74,9 @@ func (eng *Engine) Register(name string, handler Handler) error {
 }
 
 func (eng *Engine) RegisterCatchall(catchall Handler) {
+	eng.l.Lock()
+	defer eng.l.Unlock()
+
 	eng.catchall = catchall
 }
 
@@ -104,6 +110,9 @@ func (eng *Engine) String() string {
 // Commands returns a list of all currently registered commands,
 // sorted alphabetically.
 func (eng *Engine) commands() []string {
+	eng.l.RLock()
+	defer eng.l.RUnlock()
+
 	names := make([]string, 0, len(eng.handlers))
 	for name := range eng.handlers {
 		names = append(names, name)
@@ -128,6 +137,8 @@ func (eng *Engine) Job(name string, args ...string) *Job {
 	if eng.Logging {
 		job.Stderr.Add(ioutils.NopWriteCloser(eng.Stderr))
 	}
+	eng.l.RLock()
+	defer eng.l.RUnlock()
 
 	// Catchall is shadowed by specific Register.
 	if handler, exists := eng.handlers[name]; exists {
