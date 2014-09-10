@@ -9,6 +9,7 @@ import (
 	"path"
 
 	"github.com/docker/docker/daemon/graphdriver"
+	"github.com/docker/docker/engine"
 	"github.com/docker/docker/pkg/log"
 	"github.com/docker/docker/pkg/mount"
 	"github.com/docker/docker/pkg/units"
@@ -148,4 +149,28 @@ func (d *Driver) Put(id string) {
 
 func (d *Driver) Exists(id string) bool {
 	return d.DeviceSet.HasDevice(id)
+}
+
+func (d *Driver) resizePool(job *engine.Job) engine.Status {
+	args := job.Args
+	if len(args) != 1 {
+		return job.Errorf("Usage: resize-pool NEW_SIZE")
+	}
+
+	size, err := units.FromHumanSize(args[0])
+	if err != nil {
+		return job.Errorf("Invalid size: %s", args[0])
+	}
+
+	err = d.DeviceSet.ResizePool(size)
+	if err != nil {
+		return job.Errorf("Error resizing pool: %s", err.Error())
+	}
+
+	return engine.StatusOK
+}
+
+func (d *Driver) Install(eng *engine.Engine) error {
+	eng.Register("dm:resize-pool", d.resizePool)
+	return nil
 }
