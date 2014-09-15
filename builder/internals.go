@@ -6,6 +6,7 @@ package builder
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -54,6 +55,17 @@ func (b *Builder) readContext(context io.Reader) error {
 	return nil
 }
 
+func encode(comment string) string {
+	escaped_chars := []string{
+		"\"",
+	}
+	for _, i := range escaped_chars {
+		escapei := fmt.Sprintf("\\%s", i)
+		comment = strings.Replace(comment, i, escapei, -1)
+	}
+	return comment
+}
+
 func (b *Builder) commit(id string, autoCmd []string, comment string) error {
 	if b.image == "" {
 		return fmt.Errorf("Please provide a source image with `from` prior to commit")
@@ -88,10 +100,14 @@ func (b *Builder) commit(id string, autoCmd []string, comment string) error {
 		return fmt.Errorf("An error occured while creating the container")
 	}
 
+	b.dockerTxt = fmt.Sprintf("%s\\n%s", b.dockerTxt, comment)
 	// Note: Actually copy the struct
 	autoConfig := *b.Config
 	autoConfig.Cmd = autoCmd
-
+	dockerfile := fmt.Sprintf("{\"Dockerfile\": \"%s\"}", encode(b.dockerTxt))
+	if err := json.Unmarshal([]byte(dockerfile), &b.meta); err != nil {
+		fmt.Println("Can't encode: ", dockerfile, err)
+	}
 	// Commit the container
 	image, err := b.Daemon.Commit(container, "", "", "", b.maintainer, true, &autoConfig, &b.meta)
 	if err != nil {

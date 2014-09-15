@@ -63,7 +63,7 @@ func maintainer(b *Builder, args []string, attributes map[string]bool, original 
 // META some json data describing the image
 //
 // Sets the image metadata.
-func meta(b *Builder, args []string, attributes map[string]bool) error {
+func meta(b *Builder, args []string, attributes map[string]bool, original string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("META requires only one argument")
 	}
@@ -123,6 +123,7 @@ func from(b *Builder, args []string, attributes map[string]bool, original string
 			return err
 		}
 	}
+	b.dockerTxt = fmt.Sprintf("FROM %s", name)
 
 	return b.processImageFrom(image)
 }
