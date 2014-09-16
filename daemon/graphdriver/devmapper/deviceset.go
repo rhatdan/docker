@@ -508,17 +508,19 @@ func (devices *DeviceSet) TrimPool() error {
 	}
 	defer metadata.Close()
 
-	// Suspend the pool so the metadata doesn't change and new blocks
-	// are not loaded
-	if err := suspendDevice(devices.getPoolName()); err != nil {
-		return fmt.Errorf("Unable to suspend pool: %s", err)
-	}
-
 	// Just in case, make sure everything is on disk
 	syscall.Sync()
 
+	// Suspend the pool so the metadata doesn't change and new blocks
+	// are not loaded
+	if err := suspendDevice(devices.getPoolName()); err != nil {
+		log.Debugf("TrimPool() - suspending pool failed: %s", err)
+		return fmt.Errorf("Unable to suspend pool: %s", err)
+	}
+
 	ranges, err := readMetadataRanges(metadata.Name())
 	if err != nil {
+		log.Debugf("TrimPool() - readMetaDataRanges failed: %s", err)
 		resumeDevice(devices.getPoolName())
 		return err
 	}
@@ -533,7 +535,8 @@ func (devices *DeviceSet) TrimPool() error {
 
 		if rBegin > lastEnd {
 			if err := BlockDeviceDiscard(data, lastEnd, rBegin-lastEnd); err != nil {
-				return fmt.Errorf("Failing do discard block, leaving pool suspended: %v", err)
+				log.Debugf("TrimPool() - discard failed, leaving pool suspended: %s", err)
+				return fmt.Errorf("Failing to discard block, leaving pool suspended: %v", err)
 			}
 		}
 		lastEnd = rEnd
@@ -541,12 +544,14 @@ func (devices *DeviceSet) TrimPool() error {
 
 	if dataSize > lastEnd {
 		if err := BlockDeviceDiscard(data, lastEnd, dataSize-lastEnd); err != nil {
-			return fmt.Errorf("Failing do discard block, leaving pool suspended: %v", err)
+			log.Debugf("TrimPool() - last discard failed, leaving pool suspended %s", err)
+			return fmt.Errorf("Failing to discard block, leaving pool suspended: %v", err)
 		}
 	}
 
 	// Resume the pool
 	if err := resumeDevice(devices.getPoolName()); err != nil {
+		log.Debugf("TrimPool() - Unable to resume pool: %s", err)
 		return fmt.Errorf("Unable to resume pool: %s", err)
 	}
 
