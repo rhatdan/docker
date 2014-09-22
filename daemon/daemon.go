@@ -714,6 +714,11 @@ func NewDaemon(config *Config, eng *engine.Engine) (*Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if installer, ok := daemon.driver.(engine.Installer); ok {
+		installer.Install(eng)
+	}
+
 	return daemon, nil
 }
 

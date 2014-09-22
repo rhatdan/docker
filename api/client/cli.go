@@ -74,6 +74,12 @@ func (cli *DockerCli) Cmd(args ...string) error {
 	if len(args) > 0 {
 		method, exists := cli.getMethod(args[0])
 		if !exists {
+			// Look for generic methods of form "plugin:operation"
+			op := strings.SplitN(args[0], ":", 2)
+			if len(op) == 2 {
+				return cli.GenericCmd(op[0], op[1], args[1:]...)
+			}
+
 			fmt.Println("Error: Command not found:", args[0])
 			return cli.CmdHelp(args[1:]...)
 		}
