@@ -1132,6 +1132,7 @@ func (container *Container) createDaemonEnvironment(linkedEnv []string) []string
 	if container.Config.Tty {
 		env = append(env, "TERM=xterm")
 	}
+	env = append(env, fmt.Sprintf("container_uuid=%s", convirtUUID(container.ID)))
 	env = append(env, linkedEnv...)
 	// because the env on the container can override certain default values
 	// we need to replace the 'env' keys where they match and append anything

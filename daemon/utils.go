@@ -51,3 +51,7 @@ func mergeLxcConfIntoOptions(hostConfig *runconfig.HostConfig) []string {
 
 	return out
 }
+
+func convirtUUID(id string) string {
+	return fmt.Sprintf("%s-%s-%s-%s-%.12s\n", id[0:8], id[8:12], id[12:16], id[16:20], id[20:])
+}

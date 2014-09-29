@@ -754,6 +754,7 @@ func TestRunEnvironment(t *testing.T) {
 		"cky",
 		"",
 		"HOME=/root",
+		"container_uuid=ID",
 	}
 	sort.Strings(goodEnv)
 	if len(goodEnv) != len(actualEnv) {
@@ -761,7 +762,9 @@ func TestRunEnvironment(t *testing.T) {
 	}
 	for i := range goodEnv {
 		if actualEnv[i] != goodEnv[i] {
-			t.Fatalf("Wrong environment variable: should be %s, not %s", goodEnv[i], actualEnv[i])
+			if strings.Split(actualEnv[i], "=")[0] != "container_uuid" {
+				t.Fatalf("Wrong environment variable: should be %s, not %s", goodEnv[i], actualEnv[i])
+			}
 		}
 	}
 
@@ -2137,6 +2140,24 @@ func TestRunMountOrdering(t *testing.T) {
 
 	deleteAllContainers()
 	logDone("run - volumes are mounted in the correct order")
+}
+
+// "uuid" should be printed
+func TestRunContainerUuidEnvironment(t *testing.T) {
+	runCmd := exec.Command(dockerBinary, "run", "busybox", "printenv", "container_uuid")
+	out, _, _, err := runCommandWithStdoutStderr(runCmd)
+	if err != nil {
+		t.Fatalf("failed to run container: %v, output: %q", err, out)
+	}
+
+	out = strings.Trim(out, "\r\n")
+
+	if out == "" {
+		t.Errorf("container should've printed uuid but printed nothing")
+	}
+
+	deleteAllContainers()
+	logDone("run - printenv container_uuid")
 }
 
 func TestRunExecDir(t *testing.T) {

@@ -117,6 +117,8 @@ is the case the **--dns** flags is necessary for every run.
 environment variables that are available for the process that will be launched
 inside of the container.
 
+   container_uuid is set automatically with a 32 char truncated Container ID
+in standard UUID format.
 
 **--entrypoint**=*command*
    This option allows you to overwrite the default entrypoint of the image that
@@ -402,6 +404,7 @@ Running the **env** command in the linker container shows environment variables
  with the LT (alias) context (**LT_**)
 
     # env
+    container_uuid=be84194d-87f9-08c2-b2e1-67311f4409f5
     HOSTNAME=668231cb0978
     TERM=xterm
     LT_PORT_80_TCP=tcp://172.17.0.3:80
