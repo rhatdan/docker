@@ -2,6 +2,7 @@ package libcontainer
 
 import (
 	"github.com/docker/libcontainer/cgroups"
+	"github.com/docker/libcontainer/ipc"
 	"github.com/docker/libcontainer/mount"
 	"github.com/docker/libcontainer/network"
 )
@@ -9,6 +10,8 @@ import (
 type MountConfig mount.MountConfig
 
 type Network network.Network
+
+type Ipc ipc.Ipc
 
 // Config defines configuration options for executing a process inside a contained environment.
 type Config struct {
@@ -46,6 +49,9 @@ type Config struct {
 
 	// Networks specifies the container's network setup to be created
 	Networks []*Network `json:"networks,omitempty"`
+
+	// Networks specifies the container's network setup to be created
+	Ipc *Ipc `json:"ipc,omitempty"`
 
 	// Routes can be specified to create entries in the route table as the container is started
 	Routes []*Route `json:"routes,omitempty"`
