@@ -92,11 +92,14 @@ func SetFileLabel(path string, fileLabel string) error {
 // containers to share the content.  If the relabel string is a "Z" then
 // the MCS label should continue to be used.  SELinux will use this field
 // to make sure the content can not be shared by other containes.
-func Relabel(path string, fileLabel string, relabel string) error {
+func Relabel(path string, fileLabel string, mode string) error {
 	if fileLabel == "" {
 		return nil
 	}
-	if relabel == "z" {
+	if strings.Index(mode, "z") == -1 && strings.Index(mode, "Z") == -1 {
+		return nil
+	}
+	if strings.Index(mode, "z") != -1 {
 		c := selinux.NewContext(fileLabel)
 		c["level"] = "s0"
 		fileLabel = c.Get()

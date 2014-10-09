@@ -25,7 +25,7 @@ func SetFileLabel(path string, fileLabel string) error {
 	return nil
 }
 
-func Relabel(path string, fileLabel string, relabel string) error {
+func Relabel(path string, fileLabel string, mode string) error {
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"text/template"
 
 	"github.com/docker/docker/daemon/execdriver"
+	"github.com/docker/docker/volumes"
 	"github.com/docker/libcontainer/label"
 )
 
@@ -70,7 +71,7 @@ lxc.mount.entry = devpts {{escapeFstabSpaces $ROOTFS}}/dev/pts devpts {{formatMo
 lxc.mount.entry = shm {{escapeFstabSpaces $ROOTFS}}/dev/shm tmpfs {{formatMountLabel "size=65536k,nosuid,nodev,noexec" ""}} 0 0
 
 {{range $value := .Mounts}}
-{{if $value.Writable}}
+{{if writable $value.Mode}}
 lxc.mount.entry = {{$value.Source}} {{escapeFstabSpaces $ROOTFS}}/{{escapeFstabSpaces $value.Destination}} none rbind,rw 0 0
 {{else}}
 lxc.mount.entry = {{$value.Source}} {{escapeFstabSpaces $ROOTFS}}/{{escapeFstabSpaces $value.Destination}} none rbind,ro 0 0
@@ -143,6 +144,7 @@ func init() {
 		"getMemorySwap":     getMemorySwap,
 		"escapeFstabSpaces": escapeFstabSpaces,
 		"formatMountLabel":  label.FormatMountLabel,
+		"writable":          volumes.Writable,
 	}
 	LxcTemplateCompiled, err = template.New("lxc").Funcs(funcMap).Parse(LxcTemplate)
 	if err != nil {

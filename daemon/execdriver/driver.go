@@ -86,7 +86,7 @@ type Resources struct {
 type Mount struct {
 	Source      string `json:"source"`
 	Destination string `json:"destination"`
-	Writable    bool   `json:"writable"`
+	Mode        string `json:"mode"`
 	Private     bool   `json:"private"`
 	Slave       bool   `json:"slave"`
 }

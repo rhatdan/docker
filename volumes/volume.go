@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/docker/docker/pkg/symlink"
@@ -14,7 +15,7 @@ type Volume struct {
 	ID          string
 	Path        string
 	IsBindMount bool
-	Writable    bool
+	Mode        string
 	containers  map[string]struct{}
 	configPath  string
 	repository  *Repository
@@ -136,4 +137,36 @@ func (v *Volume) jsonPath() (string, error) {
 func (v *Volume) getRootResourcePath(path string) (string, error) {
 	cleanPath := filepath.Join("/", path)
 	return symlink.FollowSymlinkInScope(filepath.Join(v.configPath, cleanPath), v.configPath)
+}
+
+func Writable(mode string) bool {
+	if (strings.Index(mode, "R") != -1 && strings.Index(mode, "RW") == -1) || strings.Index(mode, "ro") != -1 {
+		return false
+	}
+	return true
+}
+
+func MakeReadOnly(mode string) string {
+	return mode + "R"
+}
+
+func ValidMode(mode string) bool {
+	validModes := map[string]bool{
+		"rw": true,
+		"ro": true,
+		"r":  true,
+		"o":  true,
+		"w":  true,
+		"R":  true,
+		"W":  true,
+		"z":  true,
+		"Z":  true,
+	}
+
+	for i := 0; i < len(mode); i++ {
+		if !validModes[string(mode[i])] {
+			return false
+		}
+	}
+	return true
 }
