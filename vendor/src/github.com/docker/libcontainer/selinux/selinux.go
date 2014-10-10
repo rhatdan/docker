@@ -177,9 +177,6 @@ func Getexeccon() (string, error) {
 }
 
 func writeCon(name string, val string) error {
-	if !SelinuxEnabled() {
-		return nil
-	}
 	out, err := os.OpenFile(name, os.O_WRONLY, 0)
 	if err != nil {
 		return err
