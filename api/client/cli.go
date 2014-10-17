@@ -80,8 +80,8 @@ func (cli *DockerCli) Cmd(args ...string) error {
 				return cli.GenericCmd(op[0], op[1], args[1:]...)
 			}
 
-			fmt.Println("Error: Command not found:", args[0])
-			return cli.CmdHelp(args[1:]...)
+			fmt.Fprintf(cli.err, "docker: '%s' is not a docker command. See 'docker --help'.\n", args[0])
+			os.Exit(1)
 		}
 		return method(args[1:]...)
 	}
@@ -95,9 +95,10 @@ func (cli *DockerCli) Subcmd(name, signature, description string) *flag.FlagSet 
 		if flags.FlagCountUndeprecated() > 0 {
 			options = "[OPTIONS] "
 		}
-		fmt.Fprintf(cli.err, "\nUsage: docker %s %s%s\n\n%s\n\n", name, options, signature, description)
+		fmt.Fprintf(cli.out, "\nUsage: docker %s %s%s\n\n%s\n\n", name, options, signature, description)
+		flags.SetOutput(cli.out)
 		flags.PrintDefaults()
-		os.Exit(2)
+		os.Exit(0)
 	}
 	return flags
 }
