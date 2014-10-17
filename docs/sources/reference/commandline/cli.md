@@ -451,6 +451,7 @@ schema.
 
       -a, --author=""     Author (e.g., "John Hannibal Smith <hannibal@a-team.com>")
       -m, --message=""    Commit message
+      --meta=             META data about the image, must be specified in json format
       -p, --pause=true    Pause container during commit
 
 It can be useful to commit a container's file changes or settings into a
@@ -866,7 +867,9 @@ specified, the given template will be executed for each result.
 Go's [text/template](http://golang.org/pkg/text/template/) package
 describes all the details of the format.
 
-#### Examples
+      --meta=             META data about the image, must be specified in json format
+
+### Examples
 
 **Get an instance's IP address:**
 

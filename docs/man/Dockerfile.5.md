@@ -113,6 +113,15 @@ or
 **COMMENT**
  --The COMMENT instruction sets the Comment field for the generated images.
 
+**META**
+ --The `META` instruction allows you to describe the image your Dockerfile
+is building. META Data has to be specified in the JSON format.  This data can 
+be retrieved using the docker inspect command
+
+META { "Description" : "This image is used to start the foobar executable", \
+       "vendor" : "ACME Products", \
+       "Version" : "1.0" }
+
 **EXPOSE**
  --**EXPOSE <port> [<port>...]**
  The **EXPOSE** instruction informs Docker that the container listens on the

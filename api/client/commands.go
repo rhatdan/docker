@@ -1136,6 +1136,7 @@ func (cli *DockerCli) CmdImport(args ...string) error {
 	cmd.Var(&flEnv, []string{"e", "-env"}, "Set environment variables")
 	cmd.Var(&flEnvFile, []string{"-env-file"}, "Read in a line delimited file of environment variables")
 	help := cmd.Bool([]string{"#help", "-help"}, false, "Print usage")
+	flMeta := cmd.String([]string{"#META", "-meta"}, "", "Meta data about the image, must be specified in JSON format")
 
 	if err := cmd.Parse(args); err != nil {
 		return nil
@@ -1169,6 +1170,7 @@ func (cli *DockerCli) CmdImport(args ...string) error {
 	v.Set("fromSrc", src)
 	v.Set("repo", repository)
 	v.Set("comment", *flComment)
+	v.Set("meta", *flMeta)
 
 	if cmd.NArg() == 3 {
 		fmt.Fprintf(cli.err, "[DEPRECATED] The format 'URL|- [REPOSITORY [TAG]]' as been deprecated. Please use URL|- [REPOSITORY[:TAG]]\n")
@@ -1728,6 +1730,7 @@ func (cli *DockerCli) CmdCommit(args ...string) error {
 	cmd := cli.Subcmd("commit", "CONTAINER [REPOSITORY[:TAG]]", "Create a new image from a container's changes")
 	flPause := cmd.Bool([]string{"p", "-pause"}, true, "Pause container during commit")
 	flComment := cmd.String([]string{"m", "-message"}, "", "Commit message")
+	flMeta := cmd.String([]string{"#META", "-meta"}, "", "Meta data about the image, must be specified in JSON format")
 	flAuthor := cmd.String([]string{"a", "#author", "-author"}, "", "Author (e.g., \"John Hannibal Smith <hannibal@a-team.com>\")")
 	// FIXME: --run is deprecated, it will be replaced with inline Dockerfile commands.
 	flConfig := cmd.String([]string{"#run", "#-run"}, "", "This option is deprecated and will be removed in a future version in favor of inline Dockerfile-compatible commands")
@@ -1759,12 +1762,12 @@ func (cli *DockerCli) CmdCommit(args ...string) error {
 			return err
 		}
 	}
-
 	v := url.Values{}
 	v.Set("container", name)
 	v.Set("repo", repository)
 	v.Set("tag", tag)
 	v.Set("comment", *flComment)
+	v.Set("meta", *flMeta)
 	v.Set("author", *flAuthor)
 
 	if *flPause != true {

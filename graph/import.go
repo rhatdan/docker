@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/docker/docker/engine"
+	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
@@ -21,6 +22,7 @@ func (s *TagStore) CmdImport(job *engine.Job) engine.Status {
 		sf      = utils.NewStreamFormatter(job.GetenvBool("json"))
 		archive archive.ArchiveReader
 		resp    *http.Response
+		meta    *image.MetaData
 	)
 	if len(job.Args) > 2 {
 		tag = job.Args[2]
@@ -56,7 +58,8 @@ func (s *TagStore) CmdImport(job *engine.Job) engine.Status {
 	if comment == "" {
 		comment = "Imported from " + src
 	}
-	img, err := s.graph.Create(archive, "", "", comment, "", nil, &config)
+	job.GetenvJson("meta", &meta)
+	img, err := s.graph.Create(archive, "", "", comment, "", nil, &config, meta)
 	if err != nil {
 		return job.Error(err)
 	}
