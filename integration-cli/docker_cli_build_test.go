@@ -15,6 +15,31 @@ import (
 	"github.com/docker/docker/pkg/archive"
 )
 
+func TestBuildMeta(t *testing.T) {
+	name := "testbuildmeta"
+	defer deleteImages(name)
+	meta = "{ 'test' : 'Hello, is there anyone in there?' }"
+
+	_, err := buildImage(name, fmt.Sprintf(`
+FROM busybox
+META %s
+`, meta), true)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := inspectField(name, "Config.Meta")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res != meta {
+		t.Fatal("Meta did not match the one provided.")
+	}
+}
+
 func TestBuildOnBuildForbiddenMaintainerInSourceImage(t *testing.T) {
 	name := "testbuildonbuildforbiddenmaintainerinsourceimage"
 	defer deleteImages(name)
