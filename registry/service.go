@@ -4,6 +4,8 @@ import (
 	"github.com/docker/docker/engine"
 )
 
+var RegistryList = []string{"index.docker.io"}
+
 // Service exposes registry capabilities in the standard Engine
 // interface. Once installed, it extends the engine with the
 // following calls:
@@ -81,6 +83,9 @@ func (s *Service) Search(job *engine.Job) engine.Status {
 		term        = job.Args[0]
 		metaHeaders = map[string][]string{}
 		authConfig  = &AuthConfig{}
+		endpoint    *Endpoint
+		r           *Session
+		err         error
 	)
 	job.GetenvJson("authConfig", authConfig)
 	job.GetenvJson("metaHeaders", metaHeaders)
@@ -89,11 +94,20 @@ func (s *Service) Search(job *engine.Job) engine.Status {
 	if err != nil {
 		return job.Error(err)
 	}
-	endpoint, err := NewEndpoint(hostname)
-	if err != nil {
-		return job.Error(err)
+	if hostname != IndexServerAddress() {
+		if endpoint, err = NewEndpoint(hostname); err == nil {
+			r, err = NewSession(authConfig, HTTPRequestFactory(metaHeaders), endpoint, true)
+		}
+	} else {
+		for reg := len(RegistryList) - 1; reg >= 0; reg-- {
+			if endpoint, err = NewEndpoint(RegistryList[reg]); err == nil {
+				r, err = NewSession(authConfig, HTTPRequestFactory(metaHeaders), endpoint, true)
+				if err == nil {
+					break
+				}
+			}
+		}
 	}
-	r, err := NewSession(authConfig, HTTPRequestFactory(metaHeaders), endpoint, true)
 	if err != nil {
 		return job.Error(err)
 	}
