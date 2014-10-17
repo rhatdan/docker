@@ -52,7 +52,11 @@ func (s *TagStore) CmdImport(job *engine.Job) engine.Status {
 		config.Env = job.GetenvList("env")
 	}
 
-	img, err := s.graph.Create(archive, "", "", "Imported from "+src, "", nil, &config)
+	comment := job.Getenv("comment")
+	if comment == "" {
+		comment = "Imported from " + src
+	}
+	img, err := s.graph.Create(archive, "", "", comment, "", nil, &config)
 	if err != nil {
 		return job.Error(err)
 	}

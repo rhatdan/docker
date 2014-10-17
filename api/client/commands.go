@@ -1131,7 +1131,8 @@ func (cli *DockerCli) CmdImport(args ...string) error {
 		flEnv     = opts.NewListOpts(opts.ValidateEnv)
 		flEnvFile = opts.NewListOpts(nil)
 	)
-	cmd := cli.Subcmd("import", "URL|- [REPOSITORY[:TAG]]", "Create an empty filesystem image and import the contents of the tarball (.tar, .tar.gz, .tgz, .bzip, .tar.xz, .txz) into it, then optionally tag it.")
+	cmd := cli.Subcmd("import", "URL|- [OPTIONS] [REPOSITORY[:TAG]]", "Create an empty filesystem image and import the contents of the tarball (.tar, .tar.gz, .tgz, .bzip, .tar.xz, .txz) into it, then optionally tag it.")
+	flComment := cmd.String([]string{"m", "-message"}, "", "Commit message")
 	cmd.Var(&flEnv, []string{"e", "-env"}, "Set environment variables")
 	cmd.Var(&flEnvFile, []string{"-env-file"}, "Read in a line delimited file of environment variables")
 	help := cmd.Bool([]string{"#help", "-help"}, false, "Print usage")
@@ -1167,6 +1168,7 @@ func (cli *DockerCli) CmdImport(args ...string) error {
 	v.Set("env", strings.Join(envVariables, " "))
 	v.Set("fromSrc", src)
 	v.Set("repo", repository)
+	v.Set("comment", *flComment)
 
 	if cmd.NArg() == 3 {
 		fmt.Fprintf(cli.err, "[DEPRECATED] The format 'URL|- [REPOSITORY [TAG]]' as been deprecated. Please use URL|- [REPOSITORY[:TAG]]\n")

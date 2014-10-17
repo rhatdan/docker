@@ -791,7 +791,15 @@ the `-` parameter to take the data from `STDIN`.
     --env-file=[]
        Read in a line delimited file of environment variables
 
+<<<<<<< HEAD
 #### Examples
+||||||| parent of ec85865... Allow docker import -m to specify the COMMENT field.
+### Examples
+=======
+      -m, --message=""    Commit message
+
+### Examples
+>>>>>>> ec85865... Allow docker import -m to specify the COMMENT field.
 
 **Import from a remote location:**
 
