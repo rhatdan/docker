@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/pkg/log"
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/docker/docker/volumes"
+	"github.com/docker/libcontainer/label"
 )
 
 type Mount struct {
@@ -218,6 +219,14 @@ func (container *Container) setupMounts() error {
 		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Mode: "w", Private: true})
 	}
 
+	if container.hostConfig.MountRun {
+		runMount, err := setupRun(container)
+		if err != nil {
+			return err
+		}
+		mounts = append(mounts, *runMount)
+	}
+
 	// Mount user specified volumes
 	// Note, these are not private because you may want propagation of (un)mounts from host
 	// volumes. For instance if you use -v /usr:/usr and the host later mounts /usr/share you
@@ -327,4 +336,33 @@ func copyOwnership(source, destination string) error {
 	}
 
 	return os.Chmod(destination, os.FileMode(stat.Mode))
+}
+
+func setupRun(container *Container) (*execdriver.Mount, error) {
+	runPath, err := container.runPath()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(runPath, 0700); err != nil && !os.IsExist(err) {
+		return nil, err
+	}
+
+	if err := syscall.Mount("tmpfs", runPath, "tmpfs", uintptr(syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV), label.FormatMountLabel("", container.GetMountLabel())); err != nil {
+		return nil, fmt.Errorf("mounting run tmpfs: %s", err)
+	}
+
+	runSource, err := symlink.FollowSymlinkInScope(filepath.Join(container.basefs, "/run"), container.basefs)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := archive.CopyWithTar(runSource, runPath); err != nil {
+		return nil, err
+	}
+
+	return &execdriver.Mount{
+		Source:      runPath,
+		Destination: "/run",
+		Mode:        "w",
+		Private:     true}, nil
 }
