@@ -351,6 +351,17 @@ func (container *Container) setupMounts() error {
 		})
 	}
 
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return err
+	}
+
+	mounts = append(mounts, execdriver.Mount{
+		Source:      secretsPath,
+		Destination: "/run/secrets",
+		Mode:        "w",
+	})
+
 	container.command.Mounts = mounts
 	return nil
 }
