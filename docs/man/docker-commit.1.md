@@ -39,7 +39,7 @@ create a new image run docker ps to find the container's ID and then run:
     # docker commit -m="Added Apache to Fedora base image" \
       -a="A D Ministrator" 98bd7fc99854 fedora/fedora_httpd:20
 
-## Modify configuration settings before committing an image
+## Apply specified Dockerfile instuctions while committing the image
 If an existing container was created without the DEBUG environment
 variable set to "true", you can create a new image based on that
 container by first getting the container's ID with docker ps and
