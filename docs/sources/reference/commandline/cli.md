@@ -493,14 +493,12 @@ while the image is committed. This reduces the likelihood of
 encountering data corruption during the process of creating the commit.
 If this behavior is undesired, set the 'p' option to false.
 
-The `--change` option will apply Dockerfile instructions data in the created
-image's JSON file. This data will be used within the image unless a layered
-image replaces some of the instructions. Since the image contains the data,
-all containers run using this image will include the Dockerfile instructions.
-   Supported Dockerfile instructions: CMD, ENTRYPOINT, ENV, EXPOSE, ONBUILD,
-   	     USER, VOLUME, WORKDIR
+The `--change` option will apply `Dockerfile` instructions to the image
+that is created.
+Supported Dockerfile instructions: `CMD`, `ENTRYPOINT`, `ENV`, `EXPOSE`,
+`ONBUILD`, `USER`, `VOLUME`, `WORKDIR`
 
-#### Commit an existing container
+#### Commit a container
 
     $ sudo docker ps
     ID                  IMAGE               COMMAND             CREATED             STATUS              PORTS
@@ -512,7 +510,7 @@ all containers run using this image will include the Dockerfile instructions.
     REPOSITORY                        TAG                 ID                  CREATED             VIRTUAL SIZE
     SvenDowideit/testimage            version3            f5283438590d        16 seconds ago      335.7 MB
 
-#### Commit an existing container with new configurations
+#### Commit a container with new configurations
 
     $ sudo docker ps
     ID                  IMAGE               COMMAND             CREATED             STATUS              PORTS
@@ -847,12 +845,10 @@ URLs must start with `http` and point to a single file archive (.tar,
 you would like to import from a local directory or archive, you can use
 the `-` parameter to take the data from `STDIN`.
 
-The `--change` option will apply Dockerfile instructions data in the created
-image's JSON file. This data will be used within the image unless a layered
-image replaces some of the instructions. Since the image contains the data,
-all containers run using this image will include the Dockerfile instructions.
-   Supported Dockerfile instructions: CMD, ENTRYPOINT, ENV, EXPOSE, ONBUILD,
-   	     USER, VOLUME, WORKDIR
+The `--change` option will apply `Dockerfile` instructions to the image
+that is created.
+Supported Dockerfile instructions: `CMD`, `ENTRYPOINT`, `ENV`, `EXPOSE`,
+`ONBUILD`, `USER`, `VOLUME`, `WORKDIR`
 
 #### Examples
 
