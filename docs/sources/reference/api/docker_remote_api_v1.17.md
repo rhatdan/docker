@@ -129,6 +129,11 @@ Create a container
              ],
              "Entrypoint": "",
              "Image": "base",
+             "Labels": {
+                     "Vendor": "Acme",
+                     "License": "GPL",
+                     "Version": "1.0"
+             },
              "Volumes": {
                      "/tmp": {}
              },
@@ -1164,6 +1169,7 @@ Return low-level information on the image `name`
                              "Cmd": ["/bin/bash"],
                              "Dns": null,
                              "Image": "base",
+                             "Labels": null,
                              "Volumes": null,
                              "VolumesFrom": "",
                              "WorkingDir": ""

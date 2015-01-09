@@ -50,6 +50,7 @@ func init() {
 		"workdir":    parseString,
 		"env":        parseEnv,
 		"maintainer": parseString,
+		"label":      parseLabel,
 		"from":       parseString,
 		"add":        parseMaybeJSONToList,
 		"copy":       parseMaybeJSONToList,

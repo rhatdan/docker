@@ -59,6 +59,7 @@ func init() {
 	evaluateTable = map[string]func(*Builder, []string, map[string]bool, string) error{
 		"env":        env,
 		"maintainer": maintainer,
+		"label":      label,
 		"add":        add,
 		"copy":       dispatchCopy, // copy() is a go builtin
 		"from":       from,
