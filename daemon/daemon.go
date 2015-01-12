@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/libcontainer/label"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/daemon/execdriver"
@@ -43,7 +41,7 @@ import (
 	"github.com/docker/docker/trust"
 	"github.com/docker/docker/utils"
 	"github.com/docker/docker/volumes"
-
+	"github.com/docker/libcontainer/label"
 	"github.com/go-fsnotify/fsnotify"
 )
 
@@ -603,6 +601,10 @@ func parseSecurityOpt(container *Container, config *runconfig.HostConfig) error 
 		err       error
 	)
 
+	disable_secomp := false
+	container.RestrictSyscalls = []string{"kexec_load", "open_by_handle_at", "init_module", "finit_module", "delete_module", "iopl", "ioperm", "swapon", "swapoff", "sysfs", "sysctl", "adjtimex", "clock_adjtime", "lookup_dcookie", "perf_event_open", "fanotify_init", "kcmp"}
+
+	// settimeofday where a0=CLOCK_REALTIME
 	for _, opt := range config.SecurityOpt {
 		con := strings.SplitN(opt, ":", 2)
 		if len(con) == 1 {
@@ -613,11 +615,34 @@ func parseSecurityOpt(container *Container, config *runconfig.HostConfig) error 
 			labelOpts = append(labelOpts, con[1])
 		case "apparmor":
 			container.AppArmorProfile = con[1]
+		case "seccomp":
+			con1 := strings.SplitN(con[1], ":", 2)
+			switch con1[0] {
+			case "add_arch":
+				container.RestrictSyscalls = append(container.RestrictSyscalls, con1[1])
+			case "add":
+				container.RestrictSyscalls = append(container.RestrictSyscalls, con1[1])
+			case "remove":
+				var newlist []string
+				for _, r := range container.RestrictSyscalls {
+					if r != con1[1] {
+						newlist = append(newlist, r)
+					}
+				}
+				container.RestrictSyscalls = newlist
+			case "disable":
+				disable_secomp = true
+			default:
+				return fmt.Errorf("Invalid --security-opt: %q", opt)
+			}
 		default:
 			return fmt.Errorf("Invalid --security-opt: %q", opt)
 		}
 	}
 
+	if disable_secomp {
+		container.RestrictSyscalls = nil
+	}
 	container.ProcessLabel, container.MountLabel, err = label.InitLabels(labelOpts)
 	return err
 }

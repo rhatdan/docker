@@ -276,6 +276,8 @@ the container exits**, you can add the `--rm` flag:
     --security-opt="label:disable"     : Turn off label confinement for the container
     --security-opt="apparmor:PROFILE"  : Set the apparmor profile to be applied 
                                          to the container
+    --security-opt="seccomp:disable"   : Turn off seccomp syscall filtering for the container
+    --security-opt="seccomp:swapoff"   : Turn off swapoff syscall for the container
 
 You can override the default labeling scheme for each container by specifying
 the `--security-opt` flag. For example, you can specify the MCS/MLS level, a

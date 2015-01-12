@@ -170,6 +170,15 @@ ENTRYPOINT.
                                'container:<name|id>': reuses another container shared memory, semaphores and message queues
                                'host': use the host shared memory,semaphores and message queues inside the container.  Note: the host mode gives the container full access to local shared memory and is therefore considered insecure.
 
+**--security-opt**=*secdriver*:*name*:*value*
+    "label:user:USER"   : Set the label user for the container
+    "label:role:ROLE"   : Set the label role for the container
+    "label:type:TYPE"   : Set the label type for the container
+    "label:level:LEVEL" : Set the label level for the container
+    "label:disable"     : Turn off label confinement for the container
+    "seccomp:disable"   : Turn off seccomp syscall filtering for the container
+    "seccomp:add:swapoff"   : Turn on swapoff syscall for the container
+
 **--link**=[]
    Add link to another container in the form of <name or id>:alias
 
@@ -529,6 +538,11 @@ To disable the security labeling for this container versus running with the
 `--permissive` flag, use the following command:
 
     # docker run --security-opt label:disable -i -t fedora bash
+
+To disable the seccomp syscall filtering for this container versus running with the
+`--permissive` flag, use the following command:
+
+    # docker run --security-opt seccomp:disable -i -t fedora bash
 
 If you want a tighter security policy on the processes within a container,
 you can specify an alternate type for the container. You could run a container

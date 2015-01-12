@@ -4,6 +4,7 @@ import (
 	"github.com/docker/libcontainer/cgroups"
 	"github.com/docker/libcontainer/mount"
 	"github.com/docker/libcontainer/network"
+	"github.com/docker/libcontainer/security/seccomp"
 )
 
 type MountConfig mount.MountConfig
@@ -116,6 +117,9 @@ type Config struct {
 	// RestrictSys will remount /proc/sys, /sys, and mask over sysrq-trigger as well as /proc/irq and
 	// /proc/bus
 	RestrictSys bool `json:"restrict_sys,omitempty"`
+
+	// Syscalls which will be restricted on container start
+	Seccomps []seccomp.Seccomp `json:"seccomps,omitempty"`
 
 	// Rlimits specifies the resource limits, such as max open files, to set in the container
 	// If Rlimits are not set, the container will inherit rlimits from the parent process

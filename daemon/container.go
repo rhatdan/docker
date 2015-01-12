@@ -80,6 +80,7 @@ type Container struct {
 	daemon                   *Daemon
 	MountLabel, ProcessLabel string
 	AppArmorProfile          string
+	RestrictSyscalls         []string
 	RestartCount             int
 	UpdateDns                bool
 
