@@ -711,7 +711,7 @@ If this behavior is undesired, set the 'p' option to false.
 The `--change` option will apply `Dockerfile` instructions to the image
 that is created.
 Supported `Dockerfile` instructions: `CMD`, `ENTRYPOINT`, `ENV`, `EXPOSE`,
-`ONBUILD`, `USER`, `VOLUME`, `WORKDIR`
+`LABEL`, `ONBUILD`, `USER`, `VOLUME`, `WORKDIR`
 
 #### Commit a container
 
@@ -1168,7 +1168,7 @@ the `-` parameter to take the data from `STDIN`.
 The `--change` option will apply `Dockerfile` instructions to the image
 that is created.
 Supported `Dockerfile` instructions: `CMD`, `ENTRYPOINT`, `ENV`, `EXPOSE`,
-`ONBUILD`, `USER`, `VOLUME`, `WORKDIR`
+`LABEL`, `ONBUILD`, `USER`, `VOLUME`, `WORKDIR`
 
 #### Examples
 
