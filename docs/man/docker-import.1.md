@@ -13,7 +13,7 @@ URL|- [REPOSITORY[:TAG]]
 # OPTIONS
 **-c**, **--change**=[]
    Apply specified Dockerfile instuctions while importing the image
-   Supported Dockerfile instructions: CMD, ENTRYPOINT, ENV, EXPOSE, ONBUILD, USER, VOLUME, WORKDIR
+   Supported Dockerfile instructions: CMD, ENTRYPOINT, ENV, EXPOSE, LABEL, ONBUILD, USER, VOLUME, WORKDIR
 
 # DESCRIPTION
 Create a new filesystem image from the contents of a tarball (`.tar`,
