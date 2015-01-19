@@ -110,7 +110,8 @@ type Builder struct {
 	OutOld          io.Writer
 	StreamFormatter *utils.StreamFormatter
 
-	Config *runconfig.Config // runconfig for cmd, run, entrypoint etc.
+	Config     *runconfig.Config // runconfig for cmd, run, entrypoint etc.
+	HostConfig *runconfig.HostConfig
 
 	// both of these are controlled by the Remove and ForceRemove options in BuildOpts
 	TmpContainers map[string]struct{} // a map of containers used for removes
@@ -154,6 +155,7 @@ func (b *Builder) Run(context io.Reader) (string, error) {
 
 	// some initializations that would not have been supplied by the caller.
 	b.Config = &runconfig.Config{}
+	b.HostConfig = &runconfig.HostConfig{}
 	b.TmpContainers = map[string]struct{}{}
 
 	for i, n := range b.dockerfile.Children {
