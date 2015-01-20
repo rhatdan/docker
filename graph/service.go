@@ -23,7 +23,7 @@ func (s *TagStore) Install(eng *engine.Engine) error {
 		"viz":            s.CmdViz,
 		"load":           s.CmdLoad,
 		"import":         s.CmdImport,
-		"pull":           s.CmdPull,
+		"pull":           s.CmdRegistryPull,
 		"push":           s.CmdPush,
 		"image_manifest": s.CmdManifest,
 	} {

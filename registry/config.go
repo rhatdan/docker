@@ -37,11 +37,15 @@ var (
 )
 
 func IndexServerAddress() string {
-	return INDEXSERVER
+	if RegistryList[0] == INDEXNAME {
+		return INDEXSERVER
+	} else {
+		return "http://" + RegistryList[0] + "/v1/"
+	}
 }
 
 func IndexServerName() string {
-	return INDEXNAME
+	return RegistryList[0]
 }
 
 // InstallFlags adds command-line options to the top-level flag parser for
@@ -114,12 +118,14 @@ func NewServiceConfig(options *Options) *ServiceConfig {
 		}
 	}
 
-	// Configure public registry.
-	config.IndexConfigs[IndexServerName()] = &IndexInfo{
-		Name:     IndexServerName(),
-		Mirrors:  options.Mirrors.GetAll(),
-		Secure:   true,
-		Official: true,
+	if config.IndexConfigs[IndexServerName()] == nil {
+		// Configure public registry.
+		config.IndexConfigs[IndexServerName()] = &IndexInfo{
+			Name:     IndexServerName(),
+			Mirrors:  options.Mirrors.GetAll(),
+			Secure:   true,
+			Official: true,
+		}
 	}
 
 	return config

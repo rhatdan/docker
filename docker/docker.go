@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/dockerversion"
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/pkg/reexec"
+	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 )
 
@@ -35,6 +36,17 @@ func main() {
 	if *flVersion {
 		showVersion()
 		return
+	}
+
+	if *flDefaultRegistry != "" {
+		registry.RegistryList = strings.Split(*flDefaultRegistry, ",")
+	}
+
+	if *flAppendRegistry != "" {
+		regs := strings.Split(*flAppendRegistry, ",")
+		for r := range regs {
+			registry.RegistryList = append(registry.RegistryList, regs[r])
+		}
 	}
 
 	if *flLogLevel != "" {

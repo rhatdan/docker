@@ -5,6 +5,8 @@ import (
 	"github.com/docker/docker/engine"
 )
 
+var RegistryList = []string{INDEXNAME}
+
 // Service exposes registry capabilities in the standard Engine
 // interface. Once installed, it extends the engine with the
 // following calls:
