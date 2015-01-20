@@ -63,7 +63,9 @@ complete -c docker -f -n '__fish_docker_no_subcommand' -l ip-masq -d "Enable IP 
 complete -c docker -f -n '__fish_docker_no_subcommand' -l iptables -d "Enable Docker's addition of iptables rules"
 complete -c docker -f -n '__fish_docker_no_subcommand' -l mtu -d 'Set the containers network MTU'
 complete -c docker -f -n '__fish_docker_no_subcommand' -s p -l pidfile -d 'Path to use for daemon PID file'
-complete -c docker -f -n '__fish_docker_no_subcommand' -l registry-mirror -d 'Specify a preferred Docker registry mirror'
+complete -c docker -f -n '__fish_docker_no_subcommand' -l registry-mirror -d "Specify a preferred Docker registry mirror for pulls from official registry"
+complete -c docker -f -n '__fish_docker_no_subcommand' -l registry-replace -d "Registry that shall replace official registry and index. Registry is expected to be insecure."
+complete -c docker -f -n '__fish_docker_no_subcommand' -l registry-prepend -d "Each given registry will be prepended to a list of registries queried during image pulls or searches. The last registry given will be queried first. They will be treated as insecure."
 complete -c docker -f -n '__fish_docker_no_subcommand' -s s -l storage-driver -d 'Force the Docker runtime to use a specific storage driver'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l selinux-enabled -d 'Enable selinux support. SELinux does not presently support the BTRFS storage driver'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l storage-opt -d 'Set storage driver options'

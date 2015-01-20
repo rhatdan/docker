@@ -16,8 +16,10 @@ import (
 
 // Options holds command line options.
 type Options struct {
-	Mirrors            opts.ListOpts
-	InsecureRegistries opts.ListOpts
+	Mirrors              opts.ListOpts
+	InsecureRegistries   opts.ListOpts
+	DefaultRegistry      *string
+	AdditionalRegistries opts.ListOpts
 }
 
 const (
@@ -31,6 +33,8 @@ const (
 )
 
 var (
+	// List of registries to query.
+	RegistryList             = []string{INDEXNAME}
 	ErrInvalidRepositoryName = errors.New("Invalid repository name (ex: \"registry.domain.tld/myrepos\")")
 	emptyServiceConfig       = NewServiceConfig(nil)
 	validNamespaceChars      = regexp.MustCompile(`^([a-z0-9-_]*)$`)
@@ -45,24 +49,24 @@ func IndexServerName() string {
 // IndexServerAddress returns an index uri for given name. Empty string is
 // treated the same as a result of IndexServerName().
 func IndexServerAddress(indexName string) string {
-	if (indexName == "" && RegistryList[0] == INDEXNAME) || indexName == INDEXNAME || indexName == INDEXSERVER {
+	if (indexName == "" && IndexServerName() == INDEXNAME) || indexName == INDEXNAME || indexName == INDEXSERVER {
 		return INDEXSERVER
 	} else if indexName != "" {
 		return fmt.Sprintf("http://%s/v1/", indexName)
 	} else {
-		return fmt.Sprintf("http://%s/v1/", RegistryList[0])
+		return fmt.Sprintf("http://%s/v1/", IndexServerName())
 	}
 }
 
 // RegistryServerAddress returns a registry uri for given index name. Empty string
 // is treated the same as a result of IndexServerName().
 func RegistryServerAddress(indexName string) string {
-	if (indexName == "" && RegistryList[0] == INDEXNAME) || indexName == INDEXNAME {
+	if (indexName == "" && IndexServerName() == INDEXNAME) || indexName == INDEXNAME {
 		return REGISTRYSERVER
 	} else if indexName != "" {
 		return fmt.Sprintf("http://%s/v2/", indexName)
 	} else {
-		return fmt.Sprintf("http://%s/v2/", RegistryList[0])
+		return fmt.Sprintf("http://%s/v2/", IndexServerName())
 	}
 }
 
@@ -70,9 +74,12 @@ func RegistryServerAddress(indexName string) string {
 // the current process.
 func (options *Options) InstallFlags() {
 	options.Mirrors = opts.NewListOpts(ValidateMirror)
-	flag.Var(&options.Mirrors, []string{"-registry-mirror"}, "Specify a preferred Docker registry mirror")
+	flag.Var(&options.Mirrors, []string{"-registry-mirror"}, "Specify a preferred Docker registry mirror for pulls from official registry")
 	options.InsecureRegistries = opts.NewListOpts(ValidateIndexName)
 	flag.Var(&options.InsecureRegistries, []string{"-insecure-registry"}, "Enable insecure communication with specified registries (no certificate verification for HTTPS and enable HTTP fallback) (e.g., localhost:5000 or 10.20.0.0/16)")
+	options.DefaultRegistry = flag.String([]string{"-registry-replace"}, "", "Registry that shall replace official registry and index. It will be treated as insecure.")
+	options.AdditionalRegistries = opts.NewListOpts(ValidateIndexName)
+	flag.Var(&options.AdditionalRegistries, []string{"-registry-prepend"}, "Each given registry will be prepended to a list of registries queried during image pulls or searches. The last registry given will be queried first. They will be treated as insecure.")
 }
 
 type netIPNet net.IPNet
@@ -136,13 +143,21 @@ func NewServiceConfig(options *Options) *ServiceConfig {
 		}
 	}
 
-	if config.IndexConfigs[IndexServerName()] == nil {
-		// Configure public registry.
-		config.IndexConfigs[IndexServerName()] = &IndexInfo{
-			Name:     IndexServerName(),
-			Mirrors:  options.Mirrors.GetAll(),
-			Secure:   IndexServerName() == INDEXNAME,
-			Official: IndexServerName() == INDEXNAME,
+	for _, r := range RegistryList {
+		var mirrors []string
+		if config.IndexConfigs[r] == nil {
+			// Use mirrors only with official index
+			if r == INDEXNAME {
+				mirrors = options.Mirrors.GetAll()
+			} else {
+				mirrors = make([]string, 0)
+			}
+			config.IndexConfigs[r] = &IndexInfo{
+				Name:     r,
+				Mirrors:  mirrors,
+				Secure:   r == INDEXNAME,
+				Official: r == INDEXNAME,
+			}
 		}
 	}
 
