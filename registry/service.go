@@ -1,9 +1,14 @@
 package registry
 
 import (
+	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/engine"
 )
+
+// List of indexes to query.
+// The lower the index, the higher the priority.
+var RegistryList = []string{INDEXNAME}
 
 // Service exposes registry capabilities in the standard Engine
 // interface. Once installed, it extends the engine with the
@@ -52,7 +57,7 @@ func (s *Service) Auth(job *engine.Job) engine.Status {
 	addr := authConfig.ServerAddress
 	if addr == "" {
 		// Use the official registry address if not specified.
-		addr = IndexServerAddress()
+		addr = IndexServerAddress("")
 	}
 
 	if index, err = ResolveIndexInfo(job, addr); err != nil {
@@ -105,28 +110,58 @@ func (s *Service) Search(job *engine.Job) engine.Status {
 	job.GetenvJson("authConfig", authConfig)
 	job.GetenvJson("metaHeaders", metaHeaders)
 
-	repoInfo, err := ResolveRepositoryInfo(job, term)
-	if err != nil {
-		return job.Error(err)
-	}
-	// *TODO: Search multiple indexes.
-	endpoint, err := repoInfo.GetEndpoint()
-	if err != nil {
-		return job.Error(err)
-	}
-	r, err := NewSession(authConfig, HTTPRequestFactory(metaHeaders), endpoint, true)
-	if err != nil {
-		return job.Error(err)
-	}
-	results, err := r.SearchRepositories(repoInfo.GetSearchTerm())
-	if err != nil {
-		return job.Error(err)
-	}
 	outs := engine.NewTable("star_count", 0)
-	for _, result := range results.Results {
-		out := &engine.Env{}
-		out.Import(result)
-		outs.Add(out)
+
+	doSearch := func(term string) error {
+		repoInfo, err := ResolveRepositoryInfo(job, term)
+		if err != nil {
+			return err
+		}
+		// *TODO: Search multiple indexes.
+		endpoint, err := repoInfo.GetEndpoint()
+		if err != nil {
+			return err
+		}
+		r, err := NewSession(authConfig, HTTPRequestFactory(metaHeaders), endpoint, true)
+		if err != nil {
+			return err
+		}
+		results, err := r.SearchRepositories(repoInfo.GetSearchTerm())
+		if err != nil {
+			return err
+		}
+		for _, result := range results.Results {
+			out := &engine.Env{}
+			out.Import(result)
+			outs.Add(out)
+		}
+		return nil
+	}
+	if RepositoryNameHasIndex(term) {
+		if err := doSearch(term); err != nil {
+			return job.Error(err)
+		}
+	} else {
+		var (
+			err              error
+			successfulSearch = false
+		)
+		for i, r := range RegistryList {
+			if i > 0 {
+				job.Args[0] = fmt.Sprintf("%s/%s", r, term)
+			} else {
+				job.Args[0] = term
+			}
+			err = doSearch(job.Args[0])
+			if err == nil {
+				successfulSearch = true
+			} else {
+				log.Errorf("%s", err.Error())
+			}
+		}
+		if !successfulSearch {
+			return job.Error(err)
+		}
 	}
 	outs.ReverseSort()
 	if _, err := outs.WriteListTo(job.Stdout); err != nil {
