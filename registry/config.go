@@ -31,38 +31,53 @@ const (
 )
 
 var (
+	// A set of blocked registries
+	BlockedRegistries map[string]struct{}
+	// List of registries to query.
+	RegistryList             = []string{INDEXNAME}
 	ErrInvalidRepositoryName = errors.New("Invalid repository name (ex: \"registry.domain.tld/myrepos\")")
 	emptyServiceConfig       = NewServiceConfig(nil)
 	validNamespaceChars      = regexp.MustCompile(`^([a-z0-9-_]*)$`)
 	validRepo                = regexp.MustCompile(`^([a-z0-9-_.]+)$`)
 )
 
+func init() {
+	BlockedRegistries = make(map[string]struct{})
+}
+
 // IndexServerName returns the name of default index server.
 func IndexServerName() string {
+	if len(RegistryList) < 1 {
+		return ""
+	}
 	return RegistryList[0]
 }
 
 // IndexServerAddress returns an index uri for given name. Empty string is
 // treated the same as a result of IndexServerName().
 func IndexServerAddress(indexName string) string {
-	if (indexName == "" && RegistryList[0] == INDEXNAME) || indexName == INDEXNAME || indexName == INDEXSERVER {
+	if (indexName == "" && IndexServerName() == INDEXNAME) || indexName == INDEXNAME || indexName == INDEXSERVER {
 		return INDEXSERVER
 	} else if indexName != "" {
 		return fmt.Sprintf("http://%s/v1/", indexName)
+	} else if IndexServerName() == "" {
+		return ""
 	} else {
-		return fmt.Sprintf("http://%s/v1/", RegistryList[0])
+		return fmt.Sprintf("http://%s/v1/", IndexServerName())
 	}
 }
 
 // RegistryServerAddress returns a registry uri for given index name. Empty string
 // is treated the same as a result of IndexServerName().
 func RegistryServerAddress(indexName string) string {
-	if (indexName == "" && RegistryList[0] == INDEXNAME) || indexName == INDEXNAME {
+	if (indexName == "" && IndexServerName() == INDEXNAME) || indexName == INDEXNAME {
 		return REGISTRYSERVER
 	} else if indexName != "" {
 		return fmt.Sprintf("http://%s/v2/", indexName)
+	} else if IndexServerName() == "" {
+		return ""
 	} else {
-		return fmt.Sprintf("http://%s/v2/", RegistryList[0])
+		return fmt.Sprintf("http://%s/v2/", IndexServerName())
 	}
 }
 
@@ -136,13 +151,21 @@ func NewServiceConfig(options *Options) *ServiceConfig {
 		}
 	}
 
-	if config.IndexConfigs[IndexServerName()] == nil {
-		// Configure public registry.
-		config.IndexConfigs[IndexServerName()] = &IndexInfo{
-			Name:     IndexServerName(),
-			Mirrors:  options.Mirrors.GetAll(),
-			Secure:   IndexServerName() == INDEXNAME,
-			Official: IndexServerName() == INDEXNAME,
+	for _, r := range RegistryList {
+		var mirrors []string
+		if config.IndexConfigs[r] == nil {
+			// Use mirrors only with official index
+			if r == INDEXNAME {
+				mirrors = options.Mirrors.GetAll()
+			} else {
+				mirrors = make([]string, 0)
+			}
+			config.IndexConfigs[r] = &IndexInfo{
+				Name:     r,
+				Mirrors:  mirrors,
+				Secure:   r == INDEXNAME,
+				Official: r == INDEXNAME,
+			}
 		}
 	}
 
@@ -219,8 +242,13 @@ func ValidateMirror(val string) (string, error) {
 // ValidateIndexName validates an index name.
 func ValidateIndexName(val string) (string, error) {
 	// 'index.docker.io' => 'docker.io'
-	if val == "index."+IndexServerName() {
-		val = IndexServerName()
+	if val == "index."+INDEXNAME {
+		val = INDEXNAME
+	}
+	for _, r := range RegistryList {
+		if val == "index."+r {
+			val = r
+		}
 	}
 	// *TODO: Check if valid hostname[:port]/ip[:port]?
 	return val, nil
@@ -356,6 +384,10 @@ func (config *ServiceConfig) NewRepositoryInfo(reposName string) (*RepositoryInf
 
 	repoInfo := &RepositoryInfo{
 		RemoteName: remoteName,
+	}
+
+	if _, ok := BlockedRegistries[indexName]; ok {
+		return nil, fmt.Errorf("Blocked registry \"%s\"", indexName)
 	}
 
 	var err error
