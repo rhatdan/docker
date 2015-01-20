@@ -28,6 +28,13 @@ func (s *TagStore) CmdRegistryPull(job *engine.Job) engine.Status {
 	// the matching image is found.
 	if registry.RepositoryNameHasIndex(tmp) {
 		registries = []string{""}
+	} else if len(registries) == 0 {
+		return job.Errorf("No configured registry to pull from.")
+	} else if job.GetenvBool("protectOfficialRegistry") && registries[0] != registry.INDEXNAME {
+		// We must ensure that registry missing hostname will be pulled from
+		// official one, if the `protectOfficialRegistry` tells us so.
+		registries = []string{""}
+		tmp = fmt.Sprintf("%s/%s", registry.INDEXNAME, tmp)
 	}
 	for i, r := range registries {
 		if i > 0 {
