@@ -28,6 +28,8 @@ func (s *TagStore) CmdRegistryPull(job *engine.Job) engine.Status {
 	// the matching image is found.
 	if registry.RepositoryNameHasIndex(tmp) {
 		registries = []string{""}
+	} else if len(registries) == 0 {
+		return job.Errorf("No configured registry to pull from.")
 	}
 	for i, r := range registries {
 		if i > 0 {

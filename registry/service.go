@@ -55,6 +55,9 @@ func (s *Service) Auth(job *engine.Job) engine.Status {
 		// Use the official registry address if not specified.
 		addr = IndexServerAddress("")
 	}
+	if addr == "" {
+		return job.Errorf("No configured registry to authenticate to.")
+	}
 
 	if index, err = ResolveIndexInfo(job, addr); err != nil {
 		return job.Error(err)
@@ -136,6 +139,8 @@ func (s *Service) Search(job *engine.Job) engine.Status {
 		if err := doSearch(term); err != nil {
 			return job.Error(err)
 		}
+	} else if len(RegistryList) < 1 {
+		return job.Errorf("No configured repository to search.")
 	} else {
 		var (
 			err              error

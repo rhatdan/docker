@@ -80,16 +80,18 @@ func mainDaemon() {
 		return
 	}
 
-	if *registryCfg.DefaultRegistry != "" {
-		defaultRegistry, err := registry.ValidateIndexName(*registryCfg.DefaultRegistry)
-		if err != nil {
-			log.Fatal("Given invalid default registry \"%s\": %s", *registryCfg.DefaultRegistry, err.Error())
+	for _, r := range registryCfg.BlockedRegistries.GetAll() {
+		if r == "public" {
+			r = registry.INDEXNAME
 		}
-		registry.RegistryList[0] = defaultRegistry
+		registry.BlockedRegistries[r] = struct{}{}
+		if r == registry.INDEXNAME {
+			registry.RegistryList = []string{}
+		}
 	}
 
 	for _, r := range registryCfg.AdditionalRegistries.GetAll() {
-		if r != "" {
+		if _, ok := registry.BlockedRegistries[r]; !ok {
 			registry.RegistryList = append([]string{r}, registry.RegistryList...)
 		}
 	}
