@@ -18,6 +18,35 @@ import (
 	"github.com/docker/docker/utils"
 )
 
+func (s *TagStore) CmdRegistryPull(job *engine.Job) engine.Status {
+	var (
+		tmp        = job.Args[0]
+		status     = engine.StatusErr
+		registries = registry.RegistryList
+	)
+	// Unless the index name is specified, iterate over all registries until
+	// the matching image is found.
+	if registry.RepositoryNameHasIndex(tmp) {
+		registries = []string{""}
+	}
+	for i, r := range registries {
+		if i > 0 {
+			// Prepend the index name to the image/repository.
+			job.Args[0] = fmt.Sprintf("%s/%s", r, tmp)
+		} else {
+			job.Args[0] = tmp
+		}
+		status := s.CmdPull(job)
+		if status == engine.StatusOK {
+			tagjob := job
+			tagjob.Args = append(tagjob.Args, tmp)
+			s.CmdTag(tagjob)
+			return status
+		}
+	}
+	return status
+}
+
 func (s *TagStore) CmdPull(job *engine.Job) engine.Status {
 	if n := len(job.Args); n != 1 && n != 2 {
 		return job.Errorf("Usage: %s IMAGE [TAG]", job.Name)
