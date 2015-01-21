@@ -235,6 +235,12 @@ func populateCommand(c *Container, env []string) error {
 			return err
 		}
 		en.ContainerID = nc.ID
+	case "ns":
+		ns, err := c.getNetNs()
+		if err != nil {
+			return err
+		}
+		en.NetNs = ns
 	default:
 		return fmt.Errorf("invalid network mode: %s", c.hostConfig.NetworkMode)
 	}
@@ -365,11 +371,28 @@ func (container *Container) Start() (err error) {
 	if err := populateCommand(container, env); err != nil {
 		return err
 	}
+	if err := container.setupSecretFiles(); err != nil {
+		return err
+	}
 	if err := container.setupMounts(); err != nil {
 		return err
 	}
 
-	return container.waitForStart()
+	if err := container.waitForStart(); err != nil {
+		return err
+	}
+
+	// Now the container is running, unmount the secrets on the host
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return err
+	}
+
+	if err := syscall.Unmount(secretsPath, syscall.MNT_DETACH); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (container *Container) Run() error {
@@ -550,6 +573,7 @@ func (container *Container) AllocateNetwork() error {
 	container.NetworkSettings.IPPrefixLen = env.GetInt("IPPrefixLen")
 	container.NetworkSettings.MacAddress = env.Get("MacAddress")
 	container.NetworkSettings.Gateway = env.Get("Gateway")
+	container.NetworkSettings.NetNs = env.Get("NetNs")
 	container.NetworkSettings.LinkLocalIPv6Address = env.Get("LinkLocalIPv6")
 	container.NetworkSettings.LinkLocalIPv6PrefixLen = 64
 	container.NetworkSettings.GlobalIPv6Address = env.Get("GlobalIPv6")
@@ -850,6 +874,10 @@ func (container *Container) hostConfigPath() (string, error) {
 
 func (container *Container) jsonPath() (string, error) {
 	return container.getRootResourcePath("config.json")
+}
+
+func (container *Container) secretsPath() (string, error) {
+	return container.getRootResourcePath("secrets")
 }
 
 // This method must be exported to be used from the lxc template
@@ -1220,6 +1248,31 @@ func (container *Container) verifyDaemonSettings() {
 	}
 }
 
+func (container *Container) setupSecretFiles() error {
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(secretsPath, 0700); err != nil {
+		return err
+	}
+
+	if err := syscall.Mount("tmpfs", secretsPath, "tmpfs", uintptr(syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV), label.FormatMountLabel("", container.GetMountLabel())); err != nil {
+		return fmt.Errorf("mounting secret tmpfs: %s", err)
+	}
+
+	data, err := getHostSecretData()
+	if err != nil {
+		return err
+	}
+	for _, s := range data {
+		s.SaveTo(secretsPath)
+	}
+
+	return nil
+}
+
 func (container *Container) setupLinkedContainers() ([]string, error) {
 	var (
 		env    []string
@@ -1436,6 +1489,20 @@ func (container *Container) getNetworkedContainer() (*Container, error) {
 		return nc, nil
 	default:
 		return nil, fmt.Errorf("network mode not set to container")
+	}
+}
+
+func (container *Container) getNetNs() (string, error) {
+	parts := strings.SplitN(string(container.hostConfig.NetworkMode), ":", 2)
+	switch parts[0] {
+	case "ns":
+		nc := parts[1]
+		if nc == "" {
+			return "", fmt.Errorf("no network namespace specified")
+		}
+		return nc, nil
+	default:
+		return "", fmt.Errorf("network mode not set to ns")
 	}
 }
 

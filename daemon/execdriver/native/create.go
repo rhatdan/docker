@@ -130,7 +130,9 @@ func (d *driver) createNetwork(container *libcontainer.Config, c *execdriver.Com
 		nspath := filepath.Join("/proc", fmt.Sprint(cmd.Process.Pid), "ns", "net")
 		container.Namespaces.Add(libcontainer.NEWNET, nspath)
 	}
-
+	if c.Network.NetNs != "" {
+		container.Namespaces.Add(libcontainer.NEWNET, c.Network.NetNs)
+	}
 	return nil
 }
 
