@@ -71,7 +71,7 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 	c.Mounts = append(c.Mounts, execdriver.Mount{
 		Source:      d.initPath,
 		Destination: c.InitPath,
-		Writable:    false,
+		Mode:        "r",
 		Private:     true,
 	})
 
@@ -438,7 +438,7 @@ func (d *driver) generateEnvConfig(c *execdriver.Command) error {
 	c.Mounts = append(c.Mounts, execdriver.Mount{
 		Source:      p,
 		Destination: "/.dockerenv",
-		Writable:    false,
+		Mode:        "r",
 		Private:     true,
 	})
 

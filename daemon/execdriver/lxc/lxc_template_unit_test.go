@@ -205,13 +205,13 @@ func TestCustomLxcConfigMounts(t *testing.T) {
 		{
 			Source:      tempDir,
 			Destination: tempDir,
-			Writable:    false,
+			Mode:        "r",
 			Private:     true,
 		},
 		{
 			Source:      tempFile.Name(),
 			Destination: tempFile.Name(),
-			Writable:    true,
+			Mode:        "w",
 			Private:     true,
 		},
 	}

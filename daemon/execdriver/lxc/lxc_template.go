@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/daemon/execdriver"
 	nativeTemplate "github.com/docker/docker/daemon/execdriver/native/template"
 	"github.com/docker/docker/utils"
+	"github.com/docker/docker/volumes"
 	"github.com/docker/libcontainer/label"
 	"github.com/docker/libcontainer/security/capabilities"
 )
@@ -89,7 +90,7 @@ lxc.mount.entry = shm {{escapeFstabSpaces $ROOTFS}}/dev/shm tmpfs {{formatMountL
 
 {{range $value := .Mounts}}
 {{$createVal := isDirectory $value.Source}}
-{{if $value.Writable}}
+{{if writable $value.Mode}}
 lxc.mount.entry = {{$value.Source}} {{escapeFstabSpaces $ROOTFS}}/{{escapeFstabSpaces $value.Destination}} none rbind,rw,create={{$createVal}} 0 0
 {{else}}
 lxc.mount.entry = {{$value.Source}} {{escapeFstabSpaces $ROOTFS}}/{{escapeFstabSpaces $value.Destination}} none rbind,ro,create={{$createVal}} 0 0
@@ -242,6 +243,7 @@ func init() {
 		"getMemorySwap":     getMemorySwap,
 		"escapeFstabSpaces": escapeFstabSpaces,
 		"formatMountLabel":  label.FormatMountLabel,
+		"writable":          volumes.Writable,
 		"isDirectory":       isDirectory,
 		"keepCapabilities":  keepCapabilities,
 		"dropList":          dropList,

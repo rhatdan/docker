@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/docker/docker/pkg/archive"
@@ -17,7 +18,7 @@ type Volume struct {
 	ID          string
 	Path        string
 	IsBindMount bool
-	Writable    bool
+	Mode        string
 	containers  map[string]struct{}
 	configPath  string
 	repository  *Repository
@@ -157,6 +158,46 @@ func (v *Volume) jsonPath() (string, error) {
 func (v *Volume) getRootResourcePath(path string) (string, error) {
 	cleanPath := filepath.Join("/", path)
 	return symlink.FollowSymlinkInScope(filepath.Join(v.configPath, cleanPath), v.configPath)
+}
+
+func Writable(mode string) bool {
+	if strings.Index(strings.ToLower(mode), "r") != -1 && strings.Index(strings.ToLower(mode), "w") == -1 {
+		return false
+	}
+	return true
+}
+
+func MakeReadOnly(mode string) string {
+	modes := strings.Split(mode, "w")
+	modes = strings.Split(strings.Join(modes, ""), "W")
+	return strings.Join(modes, "") + "r"
+}
+
+/*
+ValidMode takes the mode string and then verifies the option.  Also takes a
+flag indicating whether or not the caller supports relabling.  BindMounts
+support relabeling, while VolumesFrom do not.
+*/
+func ValidMode(mode string, relabel bool) bool {
+	validModes := map[string]bool{
+		"rw": true,
+		"ro": true,
+		"r":  true,
+		"o":  true,
+		"w":  true,
+		"R":  true,
+		"W":  true,
+	}
+	if relabel {
+		validModes["z"] = true
+		validModes["Z"] = true
+	}
+	for i := 0; i < len(mode); i++ {
+		if !validModes[string(mode[i])] {
+			return false
+		}
+	}
+	return true
 }
 
 func (v *Volume) getResourcePath(path string) (string, error) {
