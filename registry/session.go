@@ -48,13 +48,13 @@ func NewSession(authConfig *AuthConfig, factory *utils.HTTPRequestFactory, endpo
 
 	// If we're working with a standalone private registry over HTTPS, send Basic Auth headers
 	// alongside our requests.
-	if r.indexEndpoint.VersionString(1) != IndexServerAddress() && r.indexEndpoint.URL.Scheme == "https" {
+	if r.indexEndpoint.VersionString(1) != INDEXSERVER && r.indexEndpoint.URL.Scheme == "https" {
 		info, err := r.indexEndpoint.Ping()
 		if err != nil {
 			return nil, err
 		}
 		if info.Standalone {
-			log.Debugf("Endpoint %s is eligible for private registry registry. Enabling decorator.", r.indexEndpoint.String())
+			log.Debugf("Endpoint %s is eligible for private registry. Enabling decorator.", r.indexEndpoint.String())
 			dec := utils.NewHTTPAuthDecorator(authConfig.Username, authConfig.Password)
 			factory.AddDecorator(dec)
 		}

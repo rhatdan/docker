@@ -45,7 +45,9 @@ func main() {
 	if *flAppendRegistry != "" {
 		regs := strings.Split(*flAppendRegistry, ",")
 		for r := range regs {
-			registry.RegistryList = append(registry.RegistryList, regs[r])
+			// TODO: we actually prepend here - reflect this in the option name
+			// (--registry-prepend)
+			registry.RegistryList = append([]string{regs[r]}, registry.RegistryList...)
 		}
 	}
 

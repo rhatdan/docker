@@ -20,11 +20,18 @@ import (
 
 func (s *TagStore) CmdRegistryPull(job *engine.Job) engine.Status {
 	var (
-		tmp    = job.Args[0]
-		status = engine.StatusErr
+		tmp        = job.Args[0]
+		status     = engine.StatusErr
+		registries = registry.RegistryList
 	)
-	for _, r := range registry.RegistryList {
-		if r != registry.INDEXNAME {
+	// Unless the index name is specified, iterate over all registries until
+	// the matching image is found.
+	if registry.RepositoryNameHasIndex(tmp) {
+		registries = []string{""}
+	}
+	for i, r := range registries {
+		if i > 0 {
+			// Prepend the index name to the image/repository.
 			job.Args[0] = fmt.Sprintf("%s/%s", r, tmp)
 		} else {
 			job.Args[0] = tmp
