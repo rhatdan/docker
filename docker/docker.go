@@ -14,7 +14,6 @@ import (
 	"github.com/docker/docker/dockerversion"
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/pkg/reexec"
-	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 )
 
@@ -36,19 +35,6 @@ func main() {
 	if *flVersion {
 		showVersion()
 		return
-	}
-
-	if *flDefaultRegistry != "" {
-		registry.RegistryList = strings.Split(*flDefaultRegistry, ",")
-	}
-
-	if *flAppendRegistry != "" {
-		regs := strings.Split(*flAppendRegistry, ",")
-		for r := range regs {
-			// TODO: we actually prepend here - reflect this in the option name
-			// (--registry-prepend)
-			registry.RegistryList = append([]string{regs[r]}, registry.RegistryList...)
-		}
 	}
 
 	if *flLogLevel != "" {

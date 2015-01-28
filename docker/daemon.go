@@ -33,6 +33,21 @@ func mainDaemon() {
 		flag.Usage()
 		return
 	}
+
+	if *registryCfg.DefaultRegistry != "" {
+		defaultRegistry, err := registry.ValidateIndexName(*registryCfg.DefaultRegistry)
+		if err != nil {
+			log.Fatal("Given invalid default registry \"%s\": %s", *registryCfg.DefaultRegistry, err.Error())
+		}
+		registry.RegistryList[0] = defaultRegistry
+	}
+
+	for _, r := range registryCfg.AdditionalRegistries.GetAll() {
+		if r != "" {
+			registry.RegistryList = append([]string{r}, registry.RegistryList...)
+		}
+	}
+
 	eng := engine.New()
 	signal.Trap(eng.Shutdown)
 

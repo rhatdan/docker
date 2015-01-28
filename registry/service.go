@@ -6,10 +6,6 @@ import (
 	"github.com/docker/docker/engine"
 )
 
-// List of indexes to query.
-// The lower the index, the higher the priority.
-var RegistryList = []string{INDEXNAME}
-
 // Service exposes registry capabilities in the standard Engine
 // interface. Once installed, it extends the engine with the
 // following calls:
@@ -117,7 +113,6 @@ func (s *Service) Search(job *engine.Job) engine.Status {
 		if err != nil {
 			return err
 		}
-		// *TODO: Search multiple indexes.
 		endpoint, err := repoInfo.GetEndpoint()
 		if err != nil {
 			return err
