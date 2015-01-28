@@ -89,7 +89,13 @@ unix://[/path/to/socket] to use.
   Path to use for daemon PID file. Default is `/var/run/docker.pid`
 
 **--registry-mirror**=<scheme>://<host>
-  Prepend a registry mirror to be used for image pulls. May be specified multiple times.
+  Prepend a registry mirror to be used for image pulls from public Docker registry. May be specified multiple times.
+
+**--registry-prepend**=[]
+  Each given registry will be prepended to a list of registries queried during image pulls or searches. The last registry given will be queried first. They will be treated as insecure. Registry mirrors won't apply to them.
+
+**--registry-replace**=""
+  Registry that shall replace official Docker registry and index (e.g. 10.172.10.2:5000, private-registry.foo.bar). Additional registries added with --registry-prepend will be queried before this one. Use this option if you do not want to query official registry at all. It will be treated as insecure. Registry mirrors won't apply to given registry.
 
 **-s**=""
   Force the Docker runtime to use a specific storage driver.
@@ -99,12 +105,6 @@ unix://[/path/to/socket] to use.
 
 **-v**=*true*|*false*
   Print version information and quit. Default is false.
-
-**--registry-prepend**=""
-  Comma separated list of registries to prepend to default registry. Registries will be searched in reverse order.
-
-**--registry-replace**=""
-Comma separated list of registries to replace the default registry. Registries will be searched in reverse order
 
 **--selinux-enabled**=*true*|*false*
   Enable selinux support. Default is false. SELinux does not presently support the BTRFS storage driver.
