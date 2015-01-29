@@ -35,7 +35,7 @@ unix://[/path/to/socket] to use.
    tcp://host:port, unix:///path/to/socket, fd://* or fd://socketfd.
 
 **--add-registry**=[]
-  Each given registry will be prepended to a list of registries queried during image pulls or searches. The last registry given will be queried first. They will be treated as insecure. Registry mirrors won't apply to them.
+  Each given registry will be queried before a public Docker registry during image pulls or searches. They will be searched in the order given and treated as insecure. Registry mirrors won't apply to them.
 
 **--api-enable-cors**=*true*|*false*
   Enable CORS headers in the remote API. Default is false.

@@ -90,11 +90,13 @@ func mainDaemon() {
 		}
 	}
 
+	newRegistryList := []string{}
 	for _, r := range registryCfg.AdditionalRegistries.GetAll() {
 		if _, ok := registry.BlockedRegistries[r]; !ok {
-			registry.RegistryList = append([]string{r}, registry.RegistryList...)
+			newRegistryList = append(newRegistryList, r)
 		}
 	}
+	registry.RegistryList = append(newRegistryList, registry.RegistryList...)
 
 	eng := engine.New()
 	signal.Trap(eng.Shutdown)

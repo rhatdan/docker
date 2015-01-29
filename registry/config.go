@@ -93,7 +93,7 @@ func (options *Options) InstallFlags() {
 	options.BlockedRegistries = opts.NewListOpts(ValidateIndexName)
 	flag.Var(&options.BlockedRegistries, []string{"-block-registry"}, "Prevent Docker daemon from contacting specified registries. Special keyword \"public\" represents public Docker registry.")
 	options.AdditionalRegistries = opts.NewListOpts(ValidateIndexName)
-	flag.Var(&options.AdditionalRegistries, []string{"-add-registry"}, "Each given registry will be prepended to a list of registries queried during image pulls or searches. The last registry given will be queried first. They will be treated as insecure.")
+	flag.Var(&options.AdditionalRegistries, []string{"-add-registry"}, "Each given registry will be queried before a public Docker registry during image pulls or searches. They will be searched in the order given and treated as insecure.")
 }
 
 type netIPNet net.IPNet

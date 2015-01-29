@@ -43,7 +43,7 @@ function __fish_print_docker_repositories --description 'Print a list of docker 
 end
 
 # common options
-complete -c docker -f -n '__fish_docker_no_subcommand' -l add-registry -d "Each given registry will be prepended to a list of registries queried during image pulls or searches. The last registry given will be queried first. They will be treated as insecure."
+complete -c docker -f -n '__fish_docker_no_subcommand' -l add-registry -d "Each given registry will be queried before a public Docker registry during image pulls or searches. They will be searched in the order given and treated as insecure."
 complete -c docker -f -n '__fish_docker_no_subcommand' -l api-enable-cors -d 'Enable CORS headers in the remote API'
 complete -c docker -f -n '__fish_docker_no_subcommand' -s b -l bridge -d 'Attach containers to a pre-existing network bridge'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l bip -d "Use this CIDR notation address for the network bridge's IP, not compatible with -b"
