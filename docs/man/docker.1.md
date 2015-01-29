@@ -35,7 +35,7 @@ unix://[/path/to/socket] to use.
    tcp://host:port, unix:///path/to/socket, fd://* or fd://socketfd.
 
 **--add-registry**=[]
-  Each given registry will be queried before a public Docker registry during image pulls or searches. They will be searched in the order given and treated as insecure. Registry mirrors won't apply to them.
+  **EXPERIMENTAL** Each given registry will be queried before a public Docker registry during image pulls or searches. They will be searched in the order given and treated as insecure. Registry mirrors won't apply to them.
 
 **--api-enable-cors**=*true*|*false*
   Enable CORS headers in the remote API. Default is false.
@@ -47,7 +47,7 @@ unix://[/path/to/socket] to use.
   Use the provided CIDR notation address for the dynamically created bridge (docker0); Mutually exclusive of \-b
 
 **--block-registry**=[]
-  Prevent Docker daemon from contacting specified registries. Special keyword "public" represents public Docker registry.
+  **EXPERIMENTAL** Prevent Docker daemon from contacting specified registries. Special keyword "public" represents public Docker registry.
 
 **-d**=*true*|*false*
   Enable daemon mode. Default is false.
