@@ -16,10 +16,8 @@ import (
 
 // Options holds command line options.
 type Options struct {
-	Mirrors              opts.ListOpts
-	InsecureRegistries   opts.ListOpts
-	BlockedRegistries    opts.ListOpts
-	AdditionalRegistries opts.ListOpts
+	Mirrors            opts.ListOpts
+	InsecureRegistries opts.ListOpts
 }
 
 const (
@@ -90,10 +88,6 @@ func (options *Options) InstallFlags() {
 	flag.Var(&options.Mirrors, []string{"-registry-mirror"}, "Specify a preferred Docker registry mirror for pulls from official registry")
 	options.InsecureRegistries = opts.NewListOpts(ValidateIndexName)
 	flag.Var(&options.InsecureRegistries, []string{"-insecure-registry"}, "Enable insecure communication with specified registries (no certificate verification for HTTPS and enable HTTP fallback) (e.g., localhost:5000 or 10.20.0.0/16)")
-	options.BlockedRegistries = opts.NewListOpts(ValidateIndexName)
-	flag.Var(&options.BlockedRegistries, []string{"-block-registry"}, "Prevent Docker daemon from contacting specified registries. Special keyword \"public\" represents public Docker registry.")
-	options.AdditionalRegistries = opts.NewListOpts(ValidateIndexName)
-	flag.Var(&options.AdditionalRegistries, []string{"-add-registry"}, "Each given registry will be queried before a public Docker registry during image pulls or searches. They will be searched in the order given and treated as insecure.")
 }
 
 type netIPNet net.IPNet

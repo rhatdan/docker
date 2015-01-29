@@ -80,7 +80,7 @@ func mainDaemon() {
 		return
 	}
 
-	for _, r := range registryCfg.BlockedRegistries.GetAll() {
+	for _, r := range daemonCfg.BlockedRegistries.GetAll() {
 		if r == "public" {
 			r = registry.INDEXNAME
 		}
@@ -91,7 +91,7 @@ func mainDaemon() {
 	}
 
 	newRegistryList := []string{}
-	for _, r := range registryCfg.AdditionalRegistries.GetAll() {
+	for _, r := range daemonCfg.AdditionalRegistries.GetAll() {
 		if _, ok := registry.BlockedRegistries[r]; !ok {
 			newRegistryList = append(newRegistryList, r)
 		}
