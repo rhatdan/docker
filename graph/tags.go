@@ -222,6 +222,11 @@ func (store *TagStore) Set(repoName, tag, imageName string, force bool) error {
 		return err
 	}
 	var repo Repository
+	// Do not default to the first additional registry if we deal with an image
+	// from the official one which will be missing a hostname.
+	if !registry.RepositoryNameHasIndex(repoName) && registry.IndexServerName() != registry.INDEXSERVER {
+		repoName = fmt.Sprintf("%s/%s", registry.INDEXNAME, repoName)
+	}
 	repoName = registry.NormalizeLocalName(repoName)
 	if r, exists := store.Repositories[repoName]; exists {
 		repo = r
