@@ -16,10 +16,8 @@ import (
 
 // Options holds command line options.
 type Options struct {
-	Mirrors              opts.ListOpts
-	InsecureRegistries   opts.ListOpts
-	DefaultRegistry      *string
-	AdditionalRegistries opts.ListOpts
+	Mirrors            opts.ListOpts
+	InsecureRegistries opts.ListOpts
 }
 
 const (
@@ -33,6 +31,8 @@ const (
 )
 
 var (
+	// A set of blocked registries
+	BlockedRegistries map[string]struct{}
 	// List of registries to query.
 	RegistryList             = []string{INDEXNAME}
 	ErrInvalidRepositoryName = errors.New("Invalid repository name (ex: \"registry.domain.tld/myrepos\")")
@@ -41,8 +41,15 @@ var (
 	validRepo                = regexp.MustCompile(`^([a-z0-9-_.]+)$`)
 )
 
+func init() {
+	BlockedRegistries = make(map[string]struct{})
+}
+
 // IndexServerName returns the name of default index server.
 func IndexServerName() string {
+	if len(RegistryList) < 1 {
+		return ""
+	}
 	return RegistryList[0]
 }
 
@@ -53,6 +60,8 @@ func IndexServerAddress(indexName string) string {
 		return INDEXSERVER
 	} else if indexName != "" {
 		return fmt.Sprintf("http://%s/v1/", indexName)
+	} else if IndexServerName() == "" {
+		return ""
 	} else {
 		return fmt.Sprintf("http://%s/v1/", IndexServerName())
 	}
@@ -65,6 +74,8 @@ func RegistryServerAddress(indexName string) string {
 		return REGISTRYSERVER
 	} else if indexName != "" {
 		return fmt.Sprintf("http://%s/v2/", indexName)
+	} else if IndexServerName() == "" {
+		return ""
 	} else {
 		return fmt.Sprintf("http://%s/v2/", IndexServerName())
 	}
@@ -77,9 +88,6 @@ func (options *Options) InstallFlags() {
 	flag.Var(&options.Mirrors, []string{"-registry-mirror"}, "Specify a preferred Docker registry mirror for pulls from official registry")
 	options.InsecureRegistries = opts.NewListOpts(ValidateIndexName)
 	flag.Var(&options.InsecureRegistries, []string{"-insecure-registry"}, "Enable insecure communication with specified registries (no certificate verification for HTTPS and enable HTTP fallback) (e.g., localhost:5000 or 10.20.0.0/16)")
-	options.DefaultRegistry = flag.String([]string{"-registry-replace"}, "", "Registry that shall replace official registry and index. It will be treated as insecure.")
-	options.AdditionalRegistries = opts.NewListOpts(ValidateIndexName)
-	flag.Var(&options.AdditionalRegistries, []string{"-registry-prepend"}, "Each given registry will be prepended to a list of registries queried during image pulls or searches. The last registry given will be queried first. They will be treated as insecure.")
 }
 
 type netIPNet net.IPNet
@@ -234,8 +242,13 @@ func ValidateMirror(val string) (string, error) {
 // ValidateIndexName validates an index name.
 func ValidateIndexName(val string) (string, error) {
 	// 'index.docker.io' => 'docker.io'
-	if val == "index."+IndexServerName() {
-		val = IndexServerName()
+	if val == "index."+INDEXNAME {
+		val = INDEXNAME
+	}
+	for _, r := range RegistryList {
+		if val == "index."+r {
+			val = r
+		}
 	}
 	// *TODO: Check if valid hostname[:port]/ip[:port]?
 	return val, nil
@@ -371,6 +384,10 @@ func (config *ServiceConfig) NewRepositoryInfo(reposName string) (*RepositoryInf
 
 	repoInfo := &RepositoryInfo{
 		RemoteName: remoteName,
+	}
+
+	if _, ok := BlockedRegistries[indexName]; ok {
+		return nil, fmt.Errorf("Blocked registry \"%s\"", indexName)
 	}
 
 	var err error

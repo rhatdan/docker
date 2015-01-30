@@ -84,6 +84,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	for _, lopt := range []string{"-add-registry", "-block-registry"} {
+		if flag.IsSet(lopt) {
+			log.Fatalf("The -%s option is recognized only by Docker daemon.", lopt)
+		}
+	}
+
 	var (
 		cli       *client.DockerCli
 		tlsConfig tls.Config

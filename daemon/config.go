@@ -6,6 +6,7 @@ import (
 	"github.com/docker/docker/daemon/networkdriver"
 	"github.com/docker/docker/opts"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/registry"
 )
 
 const (
@@ -42,6 +43,8 @@ type Config struct {
 	Context                     map[string][]string
 	TrustKeyPath                string
 	Labels                      []string
+	BlockedRegistries           opts.ListOpts
+	AdditionalRegistries        opts.ListOpts
 }
 
 // InstallFlags adds command-line options to the top-level flag parser for
@@ -71,6 +74,10 @@ func (config *Config) InstallFlags() {
 	opts.IPListVar(&config.Dns, []string{"#dns", "-dns"}, "Force Docker to use specific DNS servers")
 	opts.DnsSearchListVar(&config.DnsSearch, []string{"-dns-search"}, "Force Docker to use specific DNS search domains")
 	opts.LabelListVar(&config.Labels, []string{"-label"}, "Set key=value labels to the daemon (displayed in `docker info`)")
+	config.BlockedRegistries = opts.NewListOpts(registry.ValidateIndexName)
+	flag.Var(&config.BlockedRegistries, []string{"-block-registry"}, "[EXPERIMENTAL] Prevent Docker daemon from contacting specified registries. Special keyword \"public\" represents public Docker registry.")
+	config.AdditionalRegistries = opts.NewListOpts(registry.ValidateIndexName)
+	flag.Var(&config.AdditionalRegistries, []string{"-add-registry"}, "[EXPERIMENTAL] Each given registry will be queried before a public Docker registry during image pulls or searches. They will be searched in the order given and treated as insecure.")
 }
 
 func getDefaultNetworkMtu() int {

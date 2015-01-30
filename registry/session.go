@@ -200,6 +200,15 @@ func (r *Session) GetRemoteImageLayer(imgID, registry string, token []string, im
 	return res.Body, nil
 }
 
+func isEndpointBlocked(endpoint string) bool {
+	if parsedURL, err := url.Parse(endpoint); err == nil {
+		if _, ok := BlockedRegistries[parsedURL.Host]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *Session) GetRemoteTags(registries []string, repository string, token []string) (map[string]string, error) {
 	if strings.Count(repository, "/") == 0 {
 		// This will be removed once the Registry supports auto-resolution on
@@ -207,6 +216,10 @@ func (r *Session) GetRemoteTags(registries []string, repository string, token []
 		repository = "library/" + repository
 	}
 	for _, host := range registries {
+		if isEndpointBlocked(host) {
+			log.Errorf("Cannot query blocked registry at %s for remote tags.", host)
+			continue
+		}
 		endpoint := fmt.Sprintf("%srepositories/%s/tags", host, repository)
 		req, err := r.reqFactory.NewRequest("GET", endpoint, nil)
 

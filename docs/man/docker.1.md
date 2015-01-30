@@ -34,6 +34,9 @@ unix://[/path/to/socket] to use.
    The socket(s) to bind to in daemon mode specified using one or more
    tcp://host:port, unix:///path/to/socket, fd://* or fd://socketfd.
 
+**--add-registry**=[]
+  **EXPERIMENTAL** Each given registry will be queried before a public Docker registry during image pulls or searches. They will be searched in the order given and treated as insecure. Registry mirrors won't apply to them.
+
 **--api-enable-cors**=*true*|*false*
   Enable CORS headers in the remote API. Default is false.
 
@@ -42,6 +45,9 @@ unix://[/path/to/socket] to use.
 
 **--bip**=""
   Use the provided CIDR notation address for the dynamically created bridge (docker0); Mutually exclusive of \-b
+
+**--block-registry**=[]
+  **EXPERIMENTAL** Prevent Docker daemon from contacting specified registries. Special keyword "public" represents public Docker registry.
 
 **-d**=*true*|*false*
   Enable daemon mode. Default is false.
@@ -90,12 +96,6 @@ unix://[/path/to/socket] to use.
 
 **--registry-mirror**=<scheme>://<host>
   Prepend a registry mirror to be used for image pulls from public Docker registry. May be specified multiple times.
-
-**--registry-prepend**=[]
-  Each given registry will be prepended to a list of registries queried during image pulls or searches. The last registry given will be queried first. They will be treated as insecure. Registry mirrors won't apply to them.
-
-**--registry-replace**=""
-  Registry that shall replace official Docker registry and index (e.g. 10.172.10.2:5000, private-registry.foo.bar). Additional registries added with --registry-prepend will be queried before this one. Use this option if you do not want to query official registry at all. It will be treated as insecure. Registry mirrors won't apply to given registry.
 
 **-s**=""
   Force the Docker runtime to use a specific storage driver.
