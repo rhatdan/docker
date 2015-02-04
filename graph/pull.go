@@ -151,6 +151,24 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		// Unexpected HTTP error
 		return err
 	}
+	if strings.HasPrefix(repoInfo.LocalName, registry.INDEXNAME+"/") {
+		newEndpoints := []string{}
+		unofficial := []string{}
+		for _, endpoint := range repoData.Endpoints {
+			if parsedURL, err := url.Parse(endpoint); err == nil {
+				if strings.HasSuffix(parsedURL.Host, registry.INDEXNAME) {
+					newEndpoints = append(newEndpoints, endpoint)
+				} else {
+					log.Infof("Filtering out endpoint \"%s\" pointing out to unofficial registry.", endpoint)
+					unofficial = append(unofficial, strings.Replace(repoInfo.LocalName, registry.INDEXNAME, parsedURL.Host, 1))
+				}
+			}
+		}
+		if len(newEndpoints) == 0 {
+			return fmt.Errorf("Official registry redirects to unofficial for repository \"%s\", please specify it as: %s", repoInfo.LocalName, strings.Join(unofficial, " or "))
+		}
+		repoData.Endpoints = newEndpoints
+	}
 
 	log.Debugf("Retrieving the tag list")
 	tagsList, err := r.GetRemoteTags(repoData.Endpoints, repoInfo.RemoteName, repoData.Tokens)
