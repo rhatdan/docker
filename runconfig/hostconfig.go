@@ -119,6 +119,7 @@ type HostConfig struct {
 	RestartPolicy   RestartPolicy
 	SecurityOpt     []string
 	ReadonlyRootfs  bool
+	MountRun        bool
 }
 
 // This is used by the create command when you want to set both the
