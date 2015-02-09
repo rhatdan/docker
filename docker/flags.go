@@ -39,6 +39,9 @@ var (
 	flHelp      = flag.Bool([]string{"h", "-help"}, false, "Print usage")
 	flTlsVerify = flag.Bool([]string{"-tlsverify"}, dockerTlsVerify, "Use TLS and verify the remote")
 
+	flPrependRegistry = flag.String([]string{"#registry-prepend", "-registry-prepend"}, "", "Comma separated list of registries to prepend to default registry. Registries will be searched in reverse order")
+	flDefaultRegistry = flag.String([]string{"#registry-replace", "-registry-replace"}, "", "Comma separated list of registries to replace the default registry. Registries will be searched in reverse order")
+
 	// these are initialized in init() below since their default values depend on dockerCertPath which isn't fully initialized until init() runs
 	flTrustKey *string
 	flCa       *string
