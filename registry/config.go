@@ -24,7 +24,8 @@ const (
 	// Only used for user auth + account creation
 	INDEXSERVER    = "https://index.docker.io/v1/"
 	REGISTRYSERVER = "https://registry-1.docker.io/v2/"
-	INDEXNAME      = "docker.io"
+	// The name of official index.
+	INDEXNAME = "docker.io"
 
 	// INDEXSERVER = "https://registry-stage.hub.docker.com/v1/"
 )
@@ -36,12 +37,33 @@ var (
 	validRepo                = regexp.MustCompile(`^([a-z0-9-_.]+)$`)
 )
 
-func IndexServerAddress() string {
-	return INDEXSERVER
+// IndexServerName returns the name of default index server.
+func IndexServerName() string {
+	return RegistryList[0]
 }
 
-func IndexServerName() string {
-	return INDEXNAME
+// IndexServerAddress returns an index uri for given name. Empty string is
+// treated the same as a result of IndexServerName().
+func IndexServerAddress(indexName string) string {
+	if (indexName == "" && RegistryList[0] == INDEXNAME) || indexName == INDEXNAME || indexName == INDEXSERVER {
+		return INDEXSERVER
+	} else if indexName != "" {
+		return fmt.Sprintf("http://%s/v1/", indexName)
+	} else {
+		return fmt.Sprintf("http://%s/v1/", RegistryList[0])
+	}
+}
+
+// RegistryServerAddress returns a registry uri for given index name. Empty string
+// is treated the same as a result of IndexServerName().
+func RegistryServerAddress(indexName string) string {
+	if (indexName == "" && RegistryList[0] == INDEXNAME) || indexName == INDEXNAME {
+		return REGISTRYSERVER
+	} else if indexName != "" {
+		return fmt.Sprintf("http://%s/v2/", indexName)
+	} else {
+		return fmt.Sprintf("http://%s/v2/", RegistryList[0])
+	}
 }
 
 // InstallFlags adds command-line options to the top-level flag parser for
@@ -114,12 +136,14 @@ func NewServiceConfig(options *Options) *ServiceConfig {
 		}
 	}
 
-	// Configure public registry.
-	config.IndexConfigs[IndexServerName()] = &IndexInfo{
-		Name:     IndexServerName(),
-		Mirrors:  options.Mirrors.GetAll(),
-		Secure:   true,
-		Official: true,
+	if config.IndexConfigs[IndexServerName()] == nil {
+		// Configure public registry.
+		config.IndexConfigs[IndexServerName()] = &IndexInfo{
+			Name:     IndexServerName(),
+			Mirrors:  options.Mirrors.GetAll(),
+			Secure:   IndexServerName() == INDEXNAME,
+			Official: IndexServerName() == INDEXNAME,
+		}
 	}
 
 	return config
@@ -252,11 +276,18 @@ func ValidateRepositoryName(reposName string) error {
 	if err = validateNoSchema(reposName); err != nil {
 		return err
 	}
-	indexName, remoteName := splitReposName(reposName)
+	indexName, remoteName := splitReposName(reposName, true)
 	if _, err = ValidateIndexName(indexName); err != nil {
 		return err
 	}
 	return validateRemoteName(remoteName)
+}
+
+// RepositoryNameHasIndex determines whether the given reposName has prepended
+// name of index.
+func RepositoryNameHasIndex(reposName string) bool {
+	indexName, _ := splitReposName(reposName, false)
+	return indexName != ""
 }
 
 // NewIndexInfo returns IndexInfo configuration from indexName
@@ -276,7 +307,7 @@ func (config *ServiceConfig) NewIndexInfo(indexName string) (*IndexInfo, error) 
 	index := &IndexInfo{
 		Name:     indexName,
 		Mirrors:  make([]string, 0),
-		Official: false,
+		Official: indexName == INDEXNAME,
 	}
 	index.Secure = config.isSecureIndex(indexName)
 	return index, nil
@@ -286,20 +317,24 @@ func (config *ServiceConfig) NewIndexInfo(indexName string) (*IndexInfo, error) 
 // index as the AuthConfig key, and uses the (host)name[:port] for private indexes.
 func (index *IndexInfo) GetAuthConfigKey() string {
 	if index.Official {
-		return IndexServerAddress()
+		return INDEXSERVER
 	}
 	return index.Name
 }
 
 // splitReposName breaks a reposName into an index name and remote name
-func splitReposName(reposName string) (string, string) {
+// fixMissingIndex says to return current index server name if missing in
+// reposName
+func splitReposName(reposName string, fixMissingIndex bool) (string, string) {
 	nameParts := strings.SplitN(reposName, "/", 2)
 	var indexName, remoteName string
 	if len(nameParts) == 1 || (!strings.Contains(nameParts[0], ".") &&
 		!strings.Contains(nameParts[0], ":") && nameParts[0] != "localhost") {
 		// This is a Docker Index repos (ex: samalba/hipache or ubuntu)
 		// 'docker.io'
-		indexName = IndexServerName()
+		if fixMissingIndex {
+			indexName = IndexServerName()
+		}
 		remoteName = reposName
 	} else {
 		indexName = nameParts[0]
@@ -314,7 +349,7 @@ func (config *ServiceConfig) NewRepositoryInfo(reposName string) (*RepositoryInf
 		return nil, err
 	}
 
-	indexName, remoteName := splitReposName(reposName)
+	indexName, remoteName := splitReposName(reposName, true)
 	if err := validateRemoteName(remoteName); err != nil {
 		return nil, err
 	}
