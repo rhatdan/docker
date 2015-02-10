@@ -2203,6 +2203,36 @@ func (cli *DockerCli) CmdCreate(args ...string) error {
 	return nil
 }
 
+func (cli *DockerCli) CmdMount(args ...string) error {
+	cmd := cli.Subcmd("mount", "IMAGE", "Mount a container/image", true)
+
+	cmd.Require(flag.Exact, 1)
+
+	utils.ParseFlags(cmd, args, true)
+
+	_, _, err := cli.call("MOUNT", "/containers/"+args[0]+"?", nil, false)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cli *DockerCli) CmdUnmount(args ...string) error {
+	cmd := cli.Subcmd("unmount", "IMAGE", "Unmount a container/image", true)
+
+	cmd.Require(flag.Exact, 1)
+
+	utils.ParseFlags(cmd, args, true)
+
+	_, _, err := cli.call("UNMOUNT", "/containers/"+args[0]+"?", nil, false)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (cli *DockerCli) CmdRun(args ...string) error {
 	// FIXME: just use runconfig.Parse already
 	cmd := cli.Subcmd("run", "IMAGE [COMMAND] [ARG...]", "Run a command in a new container", true)

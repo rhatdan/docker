@@ -770,6 +770,34 @@ func postContainerRename(eng *engine.Engine, version version.Version, w http.Res
 	return nil
 }
 
+func mountContainers(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	return nil
+}
+
+func unmountContainers(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+	job := eng.Job("rm", vars["name"])
+
+	job.Setenv("forceRemove", r.Form.Get("force"))
+
+	job.Setenv("removeVolume", r.Form.Get("v"))
+	job.Setenv("removeLink", r.Form.Get("link"))
+	if err := job.Run(); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func mountImages(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	return nil
+}
+
 func deleteContainers(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if err := parseForm(r); err != nil {
 		return err
@@ -1348,6 +1376,10 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion st
 		"DELETE": {
 			"/containers/{name:.*}": deleteContainers,
 			"/images/{name:.*}":     deleteImages,
+		},
+		"MOUNT": {
+			"/containers/{name:.*}": mountContainers,
+			"/images/{name:.*}":     mountImages,
 		},
 		"OPTIONS": {
 			"": optionsHandler,
