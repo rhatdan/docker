@@ -22,6 +22,7 @@ import (
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/docker/utils"
 	"github.com/docker/libcontainer/cgroups"
+	"github.com/docker/libcontainer/mount/mode"
 	"github.com/docker/libcontainer/mount/nodes"
 )
 
@@ -71,7 +72,7 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 	c.Mounts = append(c.Mounts, execdriver.Mount{
 		Source:      d.initPath,
 		Destination: c.InitPath,
-		Writable:    false,
+		Mode:        mode.ReadOnly(),
 		Private:     true,
 	})
 
@@ -449,7 +450,7 @@ func (d *driver) generateEnvConfig(c *execdriver.Command) error {
 	c.Mounts = append(c.Mounts, execdriver.Mount{
 		Source:      p,
 		Destination: "/.dockerenv",
-		Writable:    false,
+		Mode:        mode.ReadOnly(),
 		Private:     true,
 	})
 
