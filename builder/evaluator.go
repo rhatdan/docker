@@ -48,6 +48,7 @@ var (
 // Environment variable interpolation will happen on these statements only.
 var replaceEnvAllowed = map[string]struct{}{
 	command.Env:     {},
+	command.Label:   {},
 	command.Add:     {},
 	command.Copy:    {},
 	command.Workdir: {},
@@ -61,6 +62,7 @@ var evaluateTable map[string]func(*Builder, []string, map[string]bool, string) e
 func init() {
 	evaluateTable = map[string]func(*Builder, []string, map[string]bool, string) error{
 		command.Env:        env,
+		command.Label:      label,
 		command.Maintainer: maintainer,
 		command.Add:        add,
 		command.Copy:       dispatchCopy, // copy() is a go builtin
