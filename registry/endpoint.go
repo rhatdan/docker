@@ -22,9 +22,6 @@ func scanForAPIVersion(address string) (string, APIVersion) {
 		chunks        []string
 		apiVersionStr string
 	)
-	log.Debugf("endpoint.scanForAPIVersion: starting with address=%s", address)
-	defer log.Debugf("endpoint.scanForAPIVersion: terminating")
-
 	if strings.HasSuffix(address, "/") {
 		address = address[:len(address)-1]
 	}
@@ -45,8 +42,6 @@ func scanForAPIVersion(address string) (string, APIVersion) {
 // NewEndpoint parses the given address to return a registry endpoint.
 func NewEndpoint(index *IndexInfo) (*Endpoint, error) {
 	// *TODO: Allow per-registry configuration of endpoints.
-	log.Debugf("endpoint.NewEndpoint: starting with index=%v", index)
-	defer log.Debugf("endpoint.NewEndpoint: terminating")
 	endpoint, err := newEndpoint(index.GetAuthConfigKey(), index.Secure)
 	if err != nil {
 		return nil, err
@@ -91,9 +86,6 @@ func newEndpoint(address string, secure bool) (*Endpoint, error) {
 		trimmedAddress string
 		err            error
 	)
-	fmt.Printf("endpoint.newEndpoint: starting with address=%s, secure=%t\n", address, secure)
-	defer fmt.Printf("endpoint.newEndpoint: terminating\n")
-
 	if !strings.HasPrefix(address, "http") {
 		if secure {
 			address = "https://" + address
@@ -102,10 +94,8 @@ func newEndpoint(address string, secure bool) (*Endpoint, error) {
 		}
 	}
 
-	fmt.Printf("endpoint.newEndpoint: address after prefixing: %s\n", address)
 	trimmedAddress, endpoint.Version = scanForAPIVersion(address)
 
-	fmt.Printf("endpoint.newEndpoint: trimmedAddress=%s, version=%s\n", trimmedAddress, endpoint.Version)
 	if endpoint.URL, err = url.Parse(trimmedAddress); err != nil {
 		return nil, err
 	}
