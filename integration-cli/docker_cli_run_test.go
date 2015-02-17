@@ -60,6 +60,19 @@ func TestRunEchoStdoutWithMemoryLimit(t *testing.T) {
 	logDone("run - echo with memory limit")
 }
 
+// should run without memory swap
+func TestRunWithoutMemoryswapLimit(t *testing.T) {
+	runCmd := exec.Command(dockerBinary, "run", "-m", "16m", "--memory-swap", "-1", "busybox", "true")
+	out, _, err := runCommandWithOutput(runCmd)
+	if err != nil {
+		t.Fatalf("failed to run container, output: %q", out)
+	}
+
+	deleteAllContainers()
+
+	logDone("run - without memory swap limit")
+}
+
 // "test" should be printed
 func TestRunEchoStdoutWitCPULimit(t *testing.T) {
 	runCmd := exec.Command(dockerBinary, "run", "-c", "1000", "busybox", "echo", "test")
@@ -862,7 +875,8 @@ func TestRunEnvironmentErase(t *testing.T) {
 	// not set in our local env that they're removed (if present) in
 	// the container
 	cmd := exec.Command(dockerBinary, "run", "-e", "FOO", "-e", "HOSTNAME", "busybox", "env")
-	cmd.Env = []string{}
+	cmd.Env = appendDockerHostEnv([]string{})
+
 	out, _, err := runCommandWithOutput(cmd)
 	if err != nil {
 		t.Fatal(err, out)
@@ -900,7 +914,8 @@ func TestRunEnvironmentOverride(t *testing.T) {
 	// Test to make sure that when we use -e on env vars that are
 	// already in the env that we're overriding them
 	cmd := exec.Command(dockerBinary, "run", "-e", "HOSTNAME", "-e", "HOME=/root2", "busybox", "env")
-	cmd.Env = []string{"HOSTNAME=bar"}
+	cmd.Env = appendDockerHostEnv([]string{"HOSTNAME=bar"})
+
 	out, _, err := runCommandWithOutput(cmd)
 	if err != nil {
 		t.Fatal(err, out)
@@ -2476,6 +2491,41 @@ func TestRunReuseBindVolumeThatIsSymlink(t *testing.T) {
 	logDone("run - can remount old bindmount volume")
 }
 
+//test create /etc volume
+func TestRunCreateVolumeEtc(t *testing.T) {
+	cmd := exec.Command(dockerBinary, "run", "--dns=127.0.0.1", "-v", "/etc", "busybox", "cat", "/etc/resolv.conf")
+	out, _, err := runCommandWithOutput(cmd)
+	if err != nil {
+		t.Fatal("failed to run container: %v, output: %q", err, out)
+	}
+	if !strings.Contains(out, "nameserver 127.0.0.1") {
+		t.Fatal("failed: create /etc volume cover /etc/resolv.conf")
+	}
+
+	cmd = exec.Command(dockerBinary, "run", "-h=test123", "-v", "/etc", "busybox", "cat", "/etc/hostname")
+	out, _, err = runCommandWithOutput(cmd)
+	if err != nil {
+		t.Fatal("failed to run container: %v, output: %q", err, out)
+	}
+	if !strings.Contains(out, "test123") {
+		t.Fatal("failed: create /etc volume cover /etc/hostname")
+	}
+
+	cmd = exec.Command(dockerBinary, "run", "--add-host=test:192.168.0.1", "-v", "/etc", "busybox", "cat", "/etc/hosts")
+	out, _, err = runCommandWithOutput(cmd)
+	if err != nil {
+		t.Fatal("failed to run container: %v, output: %q", err, out)
+	}
+	out = strings.Replace(out, "\n", " ", -1)
+	if !strings.Contains(out, "192.168.0.1"+"\t"+"test") || !strings.Contains(out, "127.0.0.1"+"\t"+"localhost") {
+		t.Fatal("failed: create /etc volume cover /etc/hosts", out)
+	}
+
+	deleteAllContainers()
+
+	logDone("run - create /etc volume success")
+}
+
 func TestVolumesNoCopyData(t *testing.T) {
 	defer deleteImages("dataimage")
 	defer deleteAllContainers()
@@ -2617,7 +2667,7 @@ func TestRunVolumesCleanPaths(t *testing.T) {
 func TestRunSlowStdoutConsumer(t *testing.T) {
 	defer deleteAllContainers()
 
-	c := exec.Command("/bin/bash", "-c", dockerBinary+` run --rm -i busybox /bin/sh -c "dd if=/dev/zero of=/foo bs=1024 count=2000 &>/dev/null; catv /foo"`)
+	c := exec.Command(dockerBinary, "run", "--rm", "busybox", "/bin/sh", "-c", "dd if=/dev/zero of=/dev/stdout bs=1024 count=2000 | catv")
 
 	stdout, err := c.StdoutPipe()
 	if err != nil {

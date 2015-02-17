@@ -73,13 +73,13 @@ To create the Docker binary, run this command:
     $ make binary
 
 This will create the Docker binary in `./bundles/<version>-dev/binary/`. If you
-do not see files in the `./bundles` directory in your host, your `BINDDIR`
-setting is not set quite right. You want to run the following command: 
-    
-    $ make BINDDIR=. binary 
+do not see files in the `./bundles` directory in your host, your `BIND_DIR`
+setting is not set quite right. You want to run the following command:
+
+    $ make BIND_DIR=. binary
 
 If you are on a non-Linux platform, e.g., OSX, you'll want to run `make cross`
-or `make BINDDIR=. cross`.
+or `make BIND_DIR=. cross`.
 
 ### Using your built Docker binary
 
@@ -126,10 +126,12 @@ something like this
     PASS
     ok      github.com/docker/docker/utils        0.017s
 
-If $TESTFLAGS is set in the environment, it is passed as extra arguments
+If `$TESTFLAGS` is set in the environment, it will pass extra arguments
 to `go test`. You can use this to select certain tests to run, e.g.,
 
     $ TESTFLAGS='-test.run \^TestBuild\$' make test
+
+Only those test cases matching the regular expression inside quotation marks will be tested.
 
 If the output indicates "FAIL" and you see errors like this:
 

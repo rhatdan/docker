@@ -19,7 +19,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/docker/docker/builder"
+	"github.com/docker/docker/builder/command"
 	"github.com/docker/docker/pkg/archive"
 )
 
@@ -3877,7 +3877,7 @@ func TestBuildAddTarXz(t *testing.T) {
 		if err := tw.Close(); err != nil {
 			t.Fatalf("failed to close tar archive: %v", err)
 		}
-		xzCompressCmd := exec.Command("xz", "test.tar")
+		xzCompressCmd := exec.Command("xz", "-k", "test.tar")
 		xzCompressCmd.Dir = tmpDir
 		out, _, err := runCommandWithOutput(xzCompressCmd)
 		if err != nil {
@@ -3930,7 +3930,7 @@ func TestBuildAddTarXzGz(t *testing.T) {
 			t.Fatalf("failed to close tar archive: %v", err)
 		}
 
-		xzCompressCmd := exec.Command("xz", "test.tar")
+		xzCompressCmd := exec.Command("xz", "-k", "test.tar")
 		xzCompressCmd.Dir = tmpDir
 		out, _, err := runCommandWithOutput(xzCompressCmd)
 		if err != nil {
@@ -4828,7 +4828,6 @@ func TestBuildMissingArgs(t *testing.T) {
 	// Test to make sure that all Dockerfile commands (except the ones listed
 	// in skipCmds) will generate an error if no args are provided.
 	// Note: INSERT is deprecated so we exclude it because of that.
-
 	skipCmds := map[string]struct{}{
 		"CMD":        {},
 		"RUN":        {},
@@ -4838,15 +4837,13 @@ func TestBuildMissingArgs(t *testing.T) {
 
 	defer deleteAllContainers()
 
-	for cmd := range builder.EvaluateTable {
-		var dockerfile string
-
+	for _, cmd := range command.Commands {
 		cmd = strings.ToUpper(cmd)
-
 		if _, ok := skipCmds[cmd]; ok {
 			continue
 		}
 
+		var dockerfile string
 		if cmd == "FROM" {
 			dockerfile = cmd
 		} else {
@@ -4869,4 +4866,16 @@ func TestBuildMissingArgs(t *testing.T) {
 	}
 
 	logDone("build - verify missing args")
+}
+
+func TestBuildEmptyScratch(t *testing.T) {
+	defer deleteImages("sc")
+	_, out, err := buildImageWithOut("sc", "FROM scratch", true)
+	if err == nil {
+		t.Fatalf("Build was supposed to fail")
+	}
+	if !strings.Contains(out, "No image was generated") {
+		t.Fatalf("Wrong error message: %v", out)
+	}
+	logDone("build - empty scratch Dockerfile")
 }
