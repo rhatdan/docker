@@ -1637,9 +1637,18 @@ removed before the image is removed.
       --memory-swap=""           Total memory (memory + swap), '-1' to disable swap
       --name=""                  Assign a name to the container
       --net="bridge"             Set the Network mode for the container
-      -P, --publish-all=false    Publish all exposed ports to random ports
-      -p, --publish=[]           Publish a container's port(s) to the host
-      --pid=""                   PID namespace to use
+                                   'bridge': creates a new network stack for the container on the docker bridge
+                                   'none': no networking for this container
+                                   'container:<name|id>': reuses another container network stack
+                                   'host': use the host network stack inside the container.  Note: the host mode gives the container full access to local system services such as D-bus and is therefore considered insecure.
+                                   'ns:<path>': use the specified network namespace
+      -P, --publish-all=false    Publish all exposed ports to random ports on the host interfaces
+      -p, --publish=[]           Publish a container's port to the host
+                                   format: ip:hostPort:containerPort | ip::containerPort | hostPort:containerPort | containerPort
+                                   Both hostPort and containerPort can be specified as a range of ports. 
+                                   When specifying ranges for both, the number of container ports in the range must match the number of host ports in the range. (e.g., `-p 1234-1236:1234-1236/tcp`)
+                                   (use 'docker port' to see the actual mapping)
+      --pid=host		 'host': use the host PID namespace inside the container.  Note: the host mode gives the container full access to local system services such as D-bus and is therefore considered insecure.
       --privileged=false         Give extended privileges to this container
       --read-only=false          Mount the container's root filesystem as read only
       --restart=""               Restart policy to apply when a container exits
