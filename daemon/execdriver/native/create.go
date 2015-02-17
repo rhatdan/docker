@@ -130,7 +130,9 @@ func (d *driver) createNetwork(container *libcontainer.Config, c *execdriver.Com
 		nspath := filepath.Join("/proc", fmt.Sprint(cmd.Process.Pid), "ns", "net")
 		container.Namespaces.Add(libcontainer.NEWNET, nspath)
 	}
-
+	if c.Network.NetNs != "" {
+		container.Namespaces.Add(libcontainer.NEWNET, c.Network.NetNs)
+	}
 	return nil
 }
 
@@ -203,8 +205,12 @@ func (d *driver) setupCgroups(container *libcontainer.Config, c *execdriver.Comm
 
 func (d *driver) setupMounts(container *libcontainer.Config, c *execdriver.Command) error {
 	for _, m := range c.Mounts {
+		mount_type := "bind"
+		if m.Source == "tmpfs" {
+			mount_type = "tmpfs"
+		}
 		container.MountConfig.Mounts = append(container.MountConfig.Mounts, &mount.Mount{
-			Type:        "bind",
+			Type:        mount_type,
 			Source:      m.Source,
 			Destination: m.Destination,
 			Writable:    m.Writable,
