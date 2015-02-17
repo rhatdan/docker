@@ -88,9 +88,9 @@ create it for you.
 Docker defaults to a read-write volume but we can also mount a directory
 read-only.
 
-    $ sudo docker run -d -P --name web -v /src/webapp:/opt/webapp:ro training/webapp python app.py
+    $ sudo docker run -d -P --name web -v /src/webapp:/opt/webapp:r training/webapp python app.py
 
-Here we've mounted the same `/src/webapp` directory but we've added the `ro`
+Here we've mounted the same `/src/webapp` directory but we've added the `r`
 option to specify that the mount should be read-only.
 
 ### Mount a Host File as a Data Volume

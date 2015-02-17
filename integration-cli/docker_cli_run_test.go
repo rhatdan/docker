@@ -430,7 +430,7 @@ func TestRunWithRelativePath(t *testing.T) {
 }
 
 func TestRunVolumesMountedAsReadonly(t *testing.T) {
-	cmd := exec.Command(dockerBinary, "run", "-v", "/test:/test:ro", "busybox", "touch", "/test/somefile")
+	cmd := exec.Command(dockerBinary, "run", "-v", "/test:/test:r", "busybox", "touch", "/test/somefile")
 	if code, err := runCommand(cmd); err == nil || code == 0 {
 		t.Fatalf("run should fail because volume is ro: exit code %d", code)
 	}
@@ -447,7 +447,7 @@ func TestRunVolumesFromInReadonlyMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent:ro", "busybox", "touch", "/test/file")
+	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent:r", "busybox", "touch", "/test/file")
 	if code, err := runCommand(cmd); err == nil || code == 0 {
 		t.Fatalf("run should fail because volume is ro: exit code %d", code)
 	}
@@ -463,9 +463,9 @@ func TestRunVolumesFromInReadWriteMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent:rw", "busybox", "touch", "/test/file")
+	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent:W", "busybox", "touch", "/test/file")
 	if out, _, err := runCommandWithOutput(cmd); err != nil {
-		t.Fatalf("running --volumes-from parent:rw failed with output: %q\nerror: %v", out, err)
+		t.Fatalf("running --volumes-from parent:W failed with output: %q\nerror: %v", out, err)
 	}
 
 	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent:bar", "busybox", "touch", "/test/file")
@@ -483,22 +483,22 @@ func TestRunVolumesFromInReadWriteMode(t *testing.T) {
 
 func TestVolumesFromGetsProperMode(t *testing.T) {
 	defer deleteAllContainers()
-	cmd := exec.Command(dockerBinary, "run", "--name", "parent", "-v", "/test:/test:ro", "busybox", "true")
+	cmd := exec.Command(dockerBinary, "run", "--name", "parent", "-v", "/test:/test:r", "busybox", "true")
 	if _, err := runCommand(cmd); err != nil {
 		t.Fatal(err)
 	}
 	// Expect this "rw" mode to be be ignored since the inheritted volume is "ro"
-	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent:rw", "busybox", "touch", "/test/file")
+	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent:w", "busybox", "touch", "/test/file")
 	if _, err := runCommand(cmd); err == nil {
 		t.Fatal("Expected volumes-from to inherit read-only volume even when passing in `rw`")
 	}
 
-	cmd = exec.Command(dockerBinary, "run", "--name", "parent2", "-v", "/test:/test:ro", "busybox", "true")
+	cmd = exec.Command(dockerBinary, "run", "--name", "parent2", "-v", "/test:/test:r", "busybox", "true")
 	if _, err := runCommand(cmd); err != nil {
 		t.Fatal(err)
 	}
 	// Expect this to be read-only since both are "ro"
-	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent2:ro", "busybox", "touch", "/test/file")
+	cmd = exec.Command(dockerBinary, "run", "--volumes-from", "parent2:r", "busybox", "touch", "/test/file")
 	if _, err := runCommand(cmd); err == nil {
 		t.Fatal("Expected volumes-from to inherit read-only volume even when passing in `ro`")
 	}
@@ -2190,7 +2190,7 @@ func TestRunBindMounts(t *testing.T) {
 	writeFile(path.Join(tmpDir, "touch-me"), "", t)
 
 	// Test reading from a read-only bind mount
-	cmd := exec.Command(dockerBinary, "run", "-v", fmt.Sprintf("%s:/tmp:ro", tmpDir), "busybox", "ls", "/tmp")
+	cmd := exec.Command(dockerBinary, "run", "-v", fmt.Sprintf("%s:/tmp:r", tmpDir), "busybox", "ls", "/tmp")
 	out, _, err := runCommandWithOutput(cmd)
 	if err != nil {
 		t.Fatal(err, out)
@@ -2200,7 +2200,7 @@ func TestRunBindMounts(t *testing.T) {
 	}
 
 	// test writing to bind mount
-	cmd = exec.Command(dockerBinary, "run", "-v", fmt.Sprintf("%s:/tmp:rw", tmpDir), "busybox", "touch", "/tmp/holla")
+	cmd = exec.Command(dockerBinary, "run", "-v", fmt.Sprintf("%s:/tmp:W", tmpDir), "busybox", "touch", "/tmp/holla")
 	out, _, err = runCommandWithOutput(cmd)
 	if err != nil {
 		t.Fatal(err, out)
@@ -2215,7 +2215,7 @@ func TestRunBindMounts(t *testing.T) {
 	}
 
 	// test mount a file
-	cmd = exec.Command(dockerBinary, "run", "-v", fmt.Sprintf("%s/holla:/tmp/holla:rw", tmpDir), "busybox", "sh", "-c", "echo -n 'yotta' > /tmp/holla")
+	cmd = exec.Command(dockerBinary, "run", "-v", fmt.Sprintf("%s/holla:/tmp/holla:W", tmpDir), "busybox", "sh", "-c", "echo -n 'yotta' > /tmp/holla")
 	_, err = runCommand(cmd)
 	if err != nil {
 		t.Fatal(err, out)

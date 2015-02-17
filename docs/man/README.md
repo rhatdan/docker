@@ -23,7 +23,7 @@ Using this `Dockerfile`, create a Docker image tagged `docker/md2man`:
 
 Once the image is built, run a container using the image with *volumes*:
 
-    docker run -v /<path-to-git-dir>/docker/docs/man:/docs:rw \
+    docker run -v /<path-to-git-dir>/docker/docs/man:/docs:w \
     -w /docs -i docker/md2man /docs/md2man-all.sh
 
 The `md2man` Docker container will process the Markdown files and generate
