@@ -45,9 +45,6 @@ func (s *TagStore) CmdRegistryPull(job *engine.Job) engine.Status {
 		}
 		status := s.CmdPull(job)
 		if status == engine.StatusOK {
-			tagjob := job
-			tagjob.Args = append(tagjob.Args, tmp)
-			s.CmdTag(tagjob)
 			return status
 		}
 	}
