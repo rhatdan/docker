@@ -46,6 +46,16 @@ You can still call an old version of the API using
 
 ### What's new
 
+`POST /containers/create`
+
+**New!**
+You can set ulimit settings to be used within the container.
+
+`POST /containers/(id)/start`
+
+**New!**
+You can set ulimit settings to be used within the container.
+
 ## v1.17
 
 ### Full Documentation
@@ -76,12 +86,14 @@ This endpoint now returns the list current execs associated with the container (
 **New!**
 New endpoint to rename a container `id` to a new name.
 
-`POST /containers/create`
 `POST /containers/(id)/start`
 
 **New!**
 (`ReadonlyRootfs`) can be passed in the host config to mount the container's
 root filesystem as read only.
+
+**New!**
+You can set ulimit settings to be used within the container.
 
 `GET /containers/(id)/stats`
 
@@ -89,7 +101,6 @@ root filesystem as read only.
 This endpoint returns a live stream of a container's resource usage statistics.
 
 > **Note**: this functionality currently only works when using the *libcontainer* exec-driver.
-
 
 ## v1.16
 
