@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ import (
 	"github.com/docker/docker/pkg/tarsum"
 )
 
+var reURLScheme = regexp.MustCompile(`^[^:]+://`)
+
 type Session struct {
 	authConfig    *cliconfig.AuthConfig
 	reqFactory    *requestdecorator.RequestFactory
@@ -33,6 +36,17 @@ type Session struct {
 }
 
 func NewSession(authConfig *cliconfig.AuthConfig, factory *requestdecorator.RequestFactory, endpoint *Endpoint, timeout bool) (r *Session, err error) {
+	if authConfig != nil && authConfig.ServerAddress != "" {
+		serverAddress := authConfig.ServerAddress
+		if !reURLScheme.MatchString(serverAddress) {
+			serverAddress = "http://" + serverAddress
+		}
+		parsed, err := url.Parse(serverAddress)
+		if err == nil && parsed.Host != endpoint.URL.Host {
+			logrus.Infof("authConfig does not conform to given endpoint (%s != %s)", parsed.Host, endpoint.URL.Host)
+			*authConfig = cliconfig.AuthConfig{}
+		}
+	}
 	r = &Session{
 		authConfig:    authConfig,
 		indexEndpoint: endpoint,
