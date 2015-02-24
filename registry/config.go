@@ -430,7 +430,11 @@ func (config *ServiceConfig) NewRepositoryInfo(reposName string) (*RepositoryInf
 		repoInfo.LocalName = repoInfo.Index.Name + "/" + normalizedName
 	} else {
 		// *TODO: Decouple index name from hostname (via registry configuration?)
-		repoInfo.LocalName = repoInfo.Index.Name + "/" + repoInfo.RemoteName
+		if repoInfo.Index.Name != "" {
+			repoInfo.LocalName = repoInfo.Index.Name + "/" + repoInfo.RemoteName
+		} else {
+			repoInfo.LocalName = repoInfo.RemoteName
+		}
 	}
 	repoInfo.CanonicalName = repoInfo.LocalName
 	return repoInfo, nil
