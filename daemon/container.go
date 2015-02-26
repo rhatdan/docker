@@ -31,6 +31,7 @@ import (
 	"github.com/docker/docker/pkg/networkfs/resolvconf"
 	"github.com/docker/docker/pkg/promise"
 	"github.com/docker/docker/pkg/symlink"
+	"github.com/docker/docker/pkg/systemd"
 	"github.com/docker/docker/pkg/ulimit"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
@@ -410,6 +411,8 @@ func (container *Container) Start() (err error) {
 	if err := container.waitForStart(); err != nil {
 		return err
 	}
+
+	container.registerMachine()
 
 	// Now the container is running, unmount the secrets on the host
 	secretsPath, err := container.secretsPath()
@@ -1550,4 +1553,11 @@ func (container *Container) getNetNs() (string, error) {
 
 func (container *Container) Stats() (*execdriver.ResourceStats, error) {
 	return container.daemon.Stats(container)
+}
+
+func (container *Container) registerMachine() {
+	err := systemd.RegisterMachine(container.Name[1:], container.ID, container.Pid, container.root)
+	if err != nil {
+		log.Errorf("Unable to Register Machine: %s", err)
+	}
 }
