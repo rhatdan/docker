@@ -319,6 +319,16 @@ func (container *Container) applyVolumesFrom() error {
 	return nil
 }
 
+func (container *Container) setupJournal() (string, error) {
+	path := journalPath(container.ID)
+	if path != "" {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return "", err
+		}
+	}
+	return path, nil
+}
+
 func (container *Container) setupMounts() error {
 
 	mounts := []execdriver.Mount{}
@@ -334,6 +344,14 @@ func (container *Container) setupMounts() error {
 			Destination: path,
 			Mode:        container.VolumesMode[path],
 		})
+	}
+
+	if journalPath, err := container.setupJournal(); err != nil {
+		return err
+	} else {
+		if journalPath != "" {
+			mounts = append(mounts, execdriver.Mount{Source: journalPath, Destination: "/var/log/journal", Mode: mode.ReadWrite(), Private: true})
+		}
 	}
 
 	if container.ResolvConfPath != "" {
