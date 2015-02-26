@@ -51,6 +51,11 @@ You can still call an old version of the API using
 **New!**
 This endpoint now returns `Os`, `Arch` and `KernelVersion`.
 
+`POST /containers/create`
+
+**New!**
+You can set ulimit settings to be used within the container.
+
 ## v1.17
 
 ### Full Documentation
@@ -87,6 +92,9 @@ New endpoint to rename a container `id` to a new name.
 **New!**
 (`ReadonlyRootfs`) can be passed in the host config to mount the container's
 root filesystem as read only.
+
+**New!**
+You can set ulimit settings to be used within the container.
 
 `GET /containers/(id)/stats`
 
