@@ -891,14 +891,17 @@ func TestRunEnvironmentErase(t *testing.T) {
 	goodEnv := []string{
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"HOME=/root",
+		"container_uuid=ID",
 	}
 	sort.Strings(goodEnv)
 	if len(goodEnv) != len(actualEnv) {
-		t.Fatalf("Wrong environment: should be %d variables, not: %q\n", len(goodEnv), strings.Join(actualEnv, ", "))
+		t.Fatalf("Wrong environment: should be %d variables, not %d: %q\n", len(goodEnv), len(actualEnv), strings.Join(actualEnv, ", "))
 	}
 	for i := range goodEnv {
 		if actualEnv[i] != goodEnv[i] {
-			t.Fatalf("Wrong environment variable: should be %s, not %s", goodEnv[i], actualEnv[i])
+			if strings.Split(actualEnv[i], "=")[0] != "container_uuid" {
+				t.Fatalf("Wrong environment variable: should be %s, not %s", goodEnv[i], actualEnv[i])
+			}
 		}
 	}
 
@@ -938,7 +941,9 @@ func TestRunEnvironmentOverride(t *testing.T) {
 	}
 	for i := range goodEnv {
 		if actualEnv[i] != goodEnv[i] {
-			t.Fatalf("Wrong environment variable: should be %s, not %s", goodEnv[i], actualEnv[i])
+			if strings.Split(actualEnv[i], "=")[0] != "container_uuid" {
+				t.Fatalf("Wrong environment variable: should be %s, not %s", goodEnv[i], actualEnv[i])
+			}
 		}
 	}
 
