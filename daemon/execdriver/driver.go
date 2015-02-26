@@ -3,6 +3,7 @@ package execdriver
 import (
 	"errors"
 	"github.com/docker/docker/daemon/execdriver/native/template"
+	"github.com/docker/docker/pkg/ulimit"
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/mount/mode"
@@ -101,10 +102,11 @@ type NetworkInterface struct {
 }
 
 type Resources struct {
-	Memory     int64  `json:"memory"`
-	MemorySwap int64  `json:"memory_swap"`
-	CpuShares  int64  `json:"cpu_shares"`
-	Cpuset     string `json:"cpuset"`
+	Memory     int64            `json:"memory"`
+	MemorySwap int64            `json:"memory_swap"`
+	CpuShares  int64            `json:"cpu_shares"`
+	Cpuset     string           `json:"cpuset"`
+	Rlimits    []*ulimit.Rlimit `json:"rlimits"`
 }
 
 type ResourceStats struct {
