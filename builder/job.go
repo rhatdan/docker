@@ -32,6 +32,7 @@ var validCommitCommands = map[string]bool{
 	"volume":     true,
 	"expose":     true,
 	"onbuild":    true,
+	"label":      true,
 }
 
 type BuilderJob struct {
