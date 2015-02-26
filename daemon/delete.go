@@ -113,6 +113,12 @@ func (daemon *Daemon) Rm(container *Container) error {
 		return fmt.Errorf("Driver %s failed to remove init filesystem %s: %s", daemon.driver, initID, err)
 	}
 
+	if path := journalPath(container.ID); path != "" {
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("Unable to remove journal content %v: %v", container.ID, err)
+		}
+	}
+
 	if err := os.RemoveAll(container.root); err != nil {
 		return fmt.Errorf("Unable to remove filesystem for %v: %v", container.ID, err)
 	}
