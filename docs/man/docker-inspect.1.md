@@ -107,6 +107,7 @@ To get information on a container use it's ID or instance name:
         "ExecDriver": "native-0.1",
         "Volumes": {},
         "VolumesRW": {},
+        "VolumesMode": {},
         "HostConfig": {
         "Binds": null,
             "ContainerIDFile": "",

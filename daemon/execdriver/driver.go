@@ -5,6 +5,7 @@ import (
 	"github.com/docker/docker/daemon/execdriver/native/template"
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/devices"
+	"github.com/docker/libcontainer/mount/mode"
 	"io"
 	"os"
 	"os/exec"
@@ -114,11 +115,11 @@ type ResourceStats struct {
 }
 
 type Mount struct {
-	Source      string `json:"source"`
-	Destination string `json:"destination"`
-	Writable    bool   `json:"writable"`
-	Private     bool   `json:"private"`
-	Slave       bool   `json:"slave"`
+	Source      string    `json:"source"`
+	Destination string    `json:"destination"`
+	Mode        mode.Mode `json:"mode"`
+	Private     bool      `json:"private"`
+	Slave       bool      `json:"slave"`
 }
 
 // Describes a process that will be run inside a container.

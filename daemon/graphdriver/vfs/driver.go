@@ -8,6 +8,7 @@ import (
 	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/docker/docker/pkg/chrootarchive"
 	"github.com/docker/libcontainer/label"
+	"github.com/docker/libcontainer/mount/mode"
 )
 
 func init() {
@@ -47,7 +48,7 @@ func (d *Driver) Create(id, parent string) error {
 	}
 	opts := []string{"level:s0"}
 	if _, mountLabel, err := label.InitLabels(opts); err == nil {
-		label.Relabel(dir, mountLabel, "")
+		label.Relabel(dir, mountLabel, mode.Nil())
 	}
 	if parent == "" {
 		return nil
