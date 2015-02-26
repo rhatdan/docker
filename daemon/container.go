@@ -33,6 +33,7 @@ import (
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
+	"github.com/docker/libcontainer/mount/mode"
 )
 
 const DefaultPathEnv = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -91,8 +92,10 @@ type Container struct {
 	Volumes map[string]string
 	// Store rw/ro in a separate structure to preserve reverse-compatibility on-disk.
 	// Easier than migrating older container configs :)
-	VolumesRW  map[string]bool
-	hostConfig *runconfig.HostConfig
+	// VolumesRW is no longer used, but docker-py fails since it is hard coded in its tests
+	VolumesRW   map[string]bool
+	VolumesMode map[string]mode.Mode
+	hostConfig  *runconfig.HostConfig
 
 	activeLinks        map[string]*links.Link
 	monitor            *containerMonitor
