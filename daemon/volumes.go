@@ -16,13 +16,14 @@ import (
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/docker/docker/volumes"
 	"github.com/docker/libcontainer/label"
+	"github.com/docker/libcontainer/mount/mode"
 )
 
 type Mount struct {
 	MountToPath string
 	container   *Container
 	volume      *volumes.Volume
-	Writable    bool
+	Mode        mode.Mode
 	copyData    bool
 	from        *Container
 }
@@ -43,6 +44,7 @@ func (container *Container) prepareVolumes() error {
 	if container.Volumes == nil || len(container.Volumes) == 0 {
 		container.Volumes = make(map[string]string)
 		container.VolumesRW = make(map[string]bool)
+		container.VolumesMode = make(map[string]mode.Mode)
 	}
 
 	return container.createVolumes()
@@ -100,10 +102,11 @@ func (m *Mount) initialize() error {
 	if err != nil {
 		return err
 	}
-	m.container.VolumesRW[m.MountToPath] = m.Writable
+	m.container.VolumesRW[m.MountToPath] = m.Mode.Writable()
+	m.container.VolumesMode[m.MountToPath] = m.Mode
 	m.container.Volumes[m.MountToPath] = m.volume.Path
 	m.volume.AddContainer(m.container.ID)
-	if m.Writable && m.copyData {
+	if m.Mode.Writable() && m.copyData {
 		// Copy whatever is in the container at the mntToPath to the volume
 		copyExistingContents(containerMntPath, m.volume.Path)
 	}
@@ -120,6 +123,11 @@ func (container *Container) VolumePaths() map[string]struct{} {
 }
 
 func (container *Container) registerVolumes() {
+	var (
+		exists bool
+		m      mode.Mode
+	)
+
 	for path := range container.VolumePaths() {
 		if v := container.daemon.volumes.Get(path); v != nil {
 			v.AddContainer(container.ID)
@@ -127,11 +135,10 @@ func (container *Container) registerVolumes() {
 		}
 
 		// if container was created with an old daemon, this volume may not be registered so we need to make sure it gets registered
-		writable := true
-		if rw, exists := container.VolumesRW[path]; exists {
-			writable = rw
+		if m, exists = container.VolumesMode[path]; exists {
+			m = mode.ReadWrite()
 		}
-		v, err := container.daemon.volumes.FindOrCreateVolume(path, writable)
+		v, err := container.daemon.volumes.FindOrCreateVolume(path, m)
 		if err != nil {
 			log.Debugf("error registering volume %s: %v", path, err)
 			continue
@@ -155,7 +162,7 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 	var mounts = make(map[string]*Mount)
 	// Get all the bind mounts
 	for _, spec := range container.hostConfig.Binds {
-		path, mountToPath, writable, err := parseBindMountSpec(spec)
+		path, mountToPath, m, err := parseBindMountSpec(spec)
 		if err != nil {
 			return nil, err
 		}
@@ -164,7 +171,7 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 			return nil, fmt.Errorf("Duplicate volume %q: %q already in use, mounted from %q", path, mountToPath, m.volume.Path)
 		}
 		// Check if a volume already exists for this and use it
-		vol, err := container.daemon.volumes.FindOrCreateVolume(path, writable)
+		vol, err := container.daemon.volumes.FindOrCreateVolume(path, m)
 		if err != nil {
 			return nil, err
 		}
@@ -172,7 +179,7 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 			container:   container,
 			volume:      vol,
 			MountToPath: mountToPath,
-			Writable:    writable,
+			Mode:        m,
 		}
 	}
 
@@ -195,7 +202,7 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 			}
 		}
 
-		vol, err := container.daemon.volumes.FindOrCreateVolume("", true)
+		vol, err := container.daemon.volumes.FindOrCreateVolume("", mode.ReadWrite())
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +210,7 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 			container:   container,
 			MountToPath: path,
 			volume:      vol,
-			Writable:    true,
+			Mode:        mode.ReadWrite(),
 			copyData:    true,
 		}
 	}
@@ -211,10 +218,10 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 	return mounts, nil
 }
 
-func parseBindMountSpec(spec string) (string, string, bool, error) {
+func parseBindMountSpec(spec string) (string, string, mode.Mode, error) {
 	var (
 		path, mountToPath string
-		writable          bool
+		m                 mode.Mode
 		arr               = strings.Split(spec, ":")
 	)
 
@@ -222,41 +229,44 @@ func parseBindMountSpec(spec string) (string, string, bool, error) {
 	case 2:
 		path = arr[0]
 		mountToPath = arr[1]
-		writable = true
 	case 3:
+		if !mode.Valid(arr[2], true) {
+			return "", "", mode.Nil(), fmt.Errorf("Invalid volume options specification: %s", spec)
+		}
 		path = arr[0]
 		mountToPath = arr[1]
-		writable = validMountMode(arr[2]) && arr[2] == "rw"
+		m = mode.Init(arr[2])
 	default:
-		return "", "", false, fmt.Errorf("Invalid volume specification: %s", spec)
+		return "", "", mode.Nil(), fmt.Errorf("Invalid volume specification: %s", spec)
 	}
 
 	if !filepath.IsAbs(path) {
-		return "", "", false, fmt.Errorf("cannot bind mount volume: %s volume paths must be absolute.", path)
+		return "", "", mode.Nil(), fmt.Errorf("cannot bind mount volume: %s volume paths must be absolute.", path)
 	}
 
 	path = filepath.Clean(path)
 	mountToPath = filepath.Clean(mountToPath)
-	return path, mountToPath, writable, nil
+	return path, mountToPath, m, nil
 }
 
-func parseVolumesFromSpec(spec string) (string, string, error) {
+func parseVolumesFromSpec(spec string) (string, mode.Mode, error) {
 	specParts := strings.SplitN(spec, ":", 2)
 	if len(specParts) == 0 {
-		return "", "", fmt.Errorf("malformed volumes-from specification: %s", spec)
+		return "", mode.Nil(), fmt.Errorf("malformed volumes-from specification: %s", spec)
 	}
 
 	var (
-		id   = specParts[0]
-		mode = "rw"
+		id = specParts[0]
+		m  = mode.ReadWrite()
 	)
+
 	if len(specParts) == 2 {
-		mode = specParts[1]
-		if !validMountMode(mode) {
-			return "", "", fmt.Errorf("invalid mode for volumes-from: %s", mode)
+		if !mode.Valid(specParts[1], false) {
+			return "", mode.Nil(), fmt.Errorf("invalid mode for volumes-from: %s", specParts[1])
 		}
+		m = mode.Init(specParts[1])
 	}
-	return id, mode, nil
+	return id, m, nil
 }
 
 func (container *Container) applyVolumesFrom() error {
@@ -268,7 +278,7 @@ func (container *Container) applyVolumesFrom() error {
 	mountGroups := make(map[string][]*Mount)
 
 	for _, spec := range volumesFrom {
-		id, mode, err := parseVolumesFromSpec(spec)
+		id, m, err := parseVolumesFromSpec(spec)
 		if err != nil {
 			return err
 		}
@@ -288,7 +298,9 @@ func (container *Container) applyVolumesFrom() error {
 		)
 
 		for _, mnt := range fromMounts {
-			mnt.Writable = mnt.Writable && (mode == "rw")
+			if !(m.Writable() && mnt.Mode.Writable()) {
+				mnt.Mode = mnt.Mode.MakeReadOnly()
+			}
 			mounts = append(mounts, mnt)
 		}
 		mountGroups[id] = mounts
@@ -307,16 +319,8 @@ func (container *Container) applyVolumesFrom() error {
 	return nil
 }
 
-func validMountMode(mode string) bool {
-	validModes := map[string]bool{
-		"rw": true,
-		"ro": true,
-	}
-
-	return validModes[mode]
-}
-
 func (container *Container) setupMounts() error {
+
 	mounts := []execdriver.Mount{}
 
 	// Mount user specified volumes
@@ -328,20 +332,19 @@ func (container *Container) setupMounts() error {
 		mounts = append(mounts, execdriver.Mount{
 			Source:      container.Volumes[path],
 			Destination: path,
-			Writable:    container.VolumesRW[path],
+			Mode:        container.VolumesMode[path],
 		})
 	}
 
 	if container.ResolvConfPath != "" {
-		mounts = append(mounts, execdriver.Mount{Source: container.ResolvConfPath, Destination: "/etc/resolv.conf", Writable: true, Private: true})
+		mounts = append(mounts, execdriver.Mount{Source: container.ResolvConfPath, Destination: "/etc/resolv.conf", Mode: mode.ReadWrite(), Private: true})
 	}
-
 	if container.HostnamePath != "" {
-		mounts = append(mounts, execdriver.Mount{Source: container.HostnamePath, Destination: "/etc/hostname", Writable: true, Private: true})
+		mounts = append(mounts, execdriver.Mount{Source: container.HostnamePath, Destination: "/etc/hostname", Mode: mode.ReadWrite(), Private: true})
 	}
 
 	if container.HostsPath != "" {
-		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Writable: true, Private: true})
+		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Mode: mode.ReadWrite(), Private: true})
 	}
 
 	for _, m := range mounts {
@@ -351,7 +354,7 @@ func (container *Container) setupMounts() error {
 	}
 
 	if container.hostConfig.MountRun {
-		mounts = append(mounts, execdriver.Mount{Source: "tmpfs", Destination: "/run", Mode: "w", Private: true})
+		mounts = append(mounts, execdriver.Mount{Source: "tmpfs", Destination: "/run", Mode: mode.ReadWrite(), Private: true})
 	}
 
 	secretsPath, err := container.secretsPath()
@@ -362,7 +365,7 @@ func (container *Container) setupMounts() error {
 	mounts = append(mounts, execdriver.Mount{
 		Source:      secretsPath,
 		Destination: "/run/secrets",
-		Mode:        "w",
+		Mode:        mode.ReadWrite(),
 	})
 
 	container.command.Mounts = mounts
@@ -374,7 +377,7 @@ func (container *Container) VolumeMounts() map[string]*Mount {
 
 	for mountToPath, path := range container.Volumes {
 		if v := container.daemon.volumes.Get(path); v != nil {
-			mounts[mountToPath] = &Mount{volume: v, container: container, MountToPath: mountToPath, Writable: container.VolumesRW[mountToPath]}
+			mounts[mountToPath] = &Mount{volume: v, container: container, MountToPath: mountToPath, Mode: container.VolumesMode[mountToPath]}
 		}
 	}
 

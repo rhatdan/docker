@@ -1823,14 +1823,27 @@ network and environment of the `redis` container via environment variables.
 The `--name` flag will assign the name `console` to the newly created
 container.
 
-    $ sudo docker run --volumes-from 777f7dc92da7 --volumes-from ba8c0c54f0f2:ro -i -t ubuntu pwd
+    $ sudo docker run --volumes-from 777f7dc92da7 --volumes-from ba8c0c54f0f2:r -i -t ubuntu pwd
 
 The `--volumes-from` flag mounts all the defined volumes from the referenced
 containers. Containers can be specified by repetitions of the `--volumes-from`
-argument. The container ID may be optionally suffixed with `:ro` or `:rw` to
+argument. The container ID may be optionally suffixed with `:r` or `:w` to
 mount the volumes in read-only or read-write mode, respectively. By default,
 the volumes are mounted in the same mode (read write or read only) as
 the reference container.
+
+Labeling systems like SELinux require proper labels be placed on volume content
+mounted into a container, otherwise the secuirty system might prevent the
+processes running inside the container from using the content. By default,
+volumes are not relabeled.
+
+Two suffixes :z or :Z can be added to the volume mount. These suffixes tell
+Docker to relabel file objects on the shared volumes. The 'z' option tells
+Docker that the volume content will be shared between containers. Docker will
+label the content with a shared content label. Shared volumes labels allow all
+containers to read/write content. The 'Z' option tells Docker to label the
+content with a private unshared label. Private volumes can only be used by the
+current container.
 
 The `-a` flag tells `docker run` to bind to the container's `STDIN`, `STDOUT` or
 `STDERR`. This makes it possible to manipulate the output and input as needed.
@@ -1894,7 +1907,7 @@ flag:
 
     $ sudo docker run -d --name static static-web-files sh
     $ sudo docker run -d --expose=8098 --name riak riakserver
-    $ sudo docker run -d -m 100m -e DEVELOPMENT=1 -e BRANCH=example-code -v $(pwd):/app/bin:ro --name app appserver
+    $ sudo docker run -d -m 100m -e DEVELOPMENT=1 -e BRANCH=example-code -v $(pwd):/app/bin:r --name app appserver
     $ sudo docker run -d -p 1443:443 --dns=10.0.0.1 --dns-search=dev.org -v /var/log/httpd --volumes-from static --link riak --link app -h www.sven.dev.org --name web webserver
     $ sudo docker run -t -i --rm --volumes-from web -w /var/log/httpd busybox tail -f access.log
 
