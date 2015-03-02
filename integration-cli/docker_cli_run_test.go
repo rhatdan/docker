@@ -934,6 +934,7 @@ func TestRunEnvironmentOverride(t *testing.T) {
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"HOME=/root2",
 		"HOSTNAME=bar",
+		"container_uuid=ID",
 	}
 	sort.Strings(goodEnv)
 	if len(goodEnv) != len(actualEnv) {
