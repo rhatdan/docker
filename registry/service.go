@@ -111,11 +111,8 @@ func cmpSearchResults(fst, snd *engine.Env) int {
 	nameA := fst.Get("name")
 	nameB := snd.Get("name")
 	ret := cmpRepoNamesByIndexName(nameA, nameB)
-	switch {
-	case ret < 0:
-		return -1
-	case ret > 1:
-		return 1
+	if ret != 0 {
+		return ret
 	}
 	starsA := fst.Get("star_count")
 	starsB := snd.Get("star_count")
@@ -142,6 +139,39 @@ func cmpSearchResults(fst, snd *engine.Env) int {
 	return 0
 }
 
+func searchTerm(job *engine.Job, outs *engine.Table, term string) error {
+	var (
+		metaHeaders = map[string][]string{}
+		authConfig  = &AuthConfig{}
+	)
+	job.GetenvJson("authConfig", authConfig)
+	job.GetenvJson("metaHeaders", metaHeaders)
+
+	repoInfo, err := ResolveRepositoryInfo(job, term)
+	if err != nil {
+		return err
+	}
+	endpoint, err := repoInfo.GetEndpoint()
+	if err != nil {
+		return err
+	}
+	r, err := NewSession(authConfig, HTTPRequestFactory(metaHeaders), endpoint, true)
+	if err != nil {
+		return err
+	}
+	results, err := r.SearchRepositories(repoInfo.GetSearchTerm())
+	if err != nil {
+		return err
+	}
+	for _, result := range results.Results {
+		out := &engine.Env{}
+		result.Name = repoInfo.Index.Name + "/" + result.Name
+		out.Import(result)
+		outs.Add(out)
+	}
+	return nil
+}
+
 // Search queries the public registry for images matching the specified
 // search terms, and returns the results.
 //
@@ -166,42 +196,18 @@ func (s *Service) Search(job *engine.Job) engine.Status {
 		return job.Errorf("Usage: %s TERM", job.Name)
 	}
 	var (
-		term        = job.Args[0]
-		metaHeaders = map[string][]string{}
-		authConfig  = &AuthConfig{}
+		term = job.Args[0]
+		outs = engine.NewTableWithCmpFunc(cmpSearchResults, 0)
 	)
-	job.GetenvJson("authConfig", authConfig)
-	job.GetenvJson("metaHeaders", metaHeaders)
 
-	outs := engine.NewTableWithCmpFunc(cmpSearchResults, 0)
-
-	doSearch := func(term string) error {
-		repoInfo, err := ResolveRepositoryInfo(job, term)
-		if err != nil {
-			return err
-		}
-		endpoint, err := repoInfo.GetEndpoint()
-		if err != nil {
-			return err
-		}
-		r, err := NewSession(authConfig, HTTPRequestFactory(metaHeaders), endpoint, true)
-		if err != nil {
-			return err
-		}
-		results, err := r.SearchRepositories(repoInfo.GetSearchTerm())
-		if err != nil {
-			return err
-		}
-		for _, result := range results.Results {
-			out := &engine.Env{}
-			result.Name = repoInfo.Index.Name + "/" + result.Name
-			out.Import(result)
-			outs.Add(out)
-		}
-		return nil
+	// helper for concurrent queries
+	searchRoutine := func(term string, c chan<- error) {
+		err := searchTerm(job, outs, term)
+		c <- err
 	}
+
 	if RepositoryNameHasIndex(term) {
-		if err := doSearch(term); err != nil {
+		if err := searchTerm(job, outs, term); err != nil {
 			return job.Error(err)
 		}
 	} else if len(RegistryList) < 1 {
@@ -210,14 +216,19 @@ func (s *Service) Search(job *engine.Job) engine.Status {
 		var (
 			err              error
 			successfulSearch = false
+			resultChan       = make(chan error)
 		)
+		// query all registries in parallel
 		for i, r := range RegistryList {
 			if i > 0 {
 				job.Args[0] = fmt.Sprintf("%s/%s", r, term)
 			} else {
 				job.Args[0] = term
 			}
-			err = doSearch(job.Args[0])
+			go searchRoutine(job.Args[0], resultChan)
+		}
+		for _ = range RegistryList {
+			err = <-resultChan
 			if err == nil {
 				successfulSearch = true
 			} else {
