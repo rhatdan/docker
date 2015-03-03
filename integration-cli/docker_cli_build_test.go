@@ -5067,9 +5067,8 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 	}
 	d.getAndTestImageEntry(t, 0, "", "")
 
-	// Build again. It should result in exatly same image as before even though
-	// additional registry now has "library/hello-world". That's because FROM
-	// treats library/hello-world as `docker.io` repository.
+	// Build again. The result shall now be based on busybox image from
+	// additional registry.
 	_, _, err = d.buildImageWithOut(name, fmt.Sprintf(`
   FROM library/hello-world
   ENV test %s
@@ -5077,13 +5076,14 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	d.getAndTestImageEntry(t, 2, reg.url+"/library/hello-world", busyboxId)
 	d.getAndTestImageEntry(t, 2, reg.url+"/"+name, "")
 	res, err = d.inspectField(name, "Parent")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(res, helloWorldId) {
-		t.Fatal("built image %s should have docker.io/hello-world(id=%s) as a parent, not %s", name, helloWorldId, res)
+	if !strings.HasPrefix(res, busyboxId) {
+		t.Fatal("built image %s should have busybox image (id=%s) as a parent, not %s", name, busyboxId, res)
 	}
 
 	// build again with docker.io explicitly specified
@@ -5094,7 +5094,8 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.getAndTestImageEntry(t, 2, reg.url+"/"+name, "")
+	d.getAndTestImageEntry(t, 3, "docker.io/hello-world", helloWorldId)
+	d.getAndTestImageEntry(t, 3, reg.url+"/"+name, "")
 	res, err = d.inspectField(name, "Parent")
 	if err != nil {
 		t.Fatal(err)
@@ -5103,7 +5104,7 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 		t.Fatal("built image %s should have docker.io/hello-world(id=%s) as a parent, not %s", name, helloWorldId, res)
 	}
 
-	// build again from additional registry which needs to be specified explicitly - unlike with pull
+	// build again from additional registry explicitly specified
 	_, _, err = d.buildImageWithOut(name, fmt.Sprintf(`
   FROM %s/library/hello-world
   ENV test %s
@@ -5194,6 +5195,14 @@ func doTestBuildWithPublicRegistryBlocked(t *testing.T, name string, daemonArgs 
 		t.Fatal(err)
 	} else if allBlocked && err == nil {
 		t.Fatalf("the build should have failed due to all registries being blocked")
+	}
+	if !allBlocked {
+		d.getAndTestImageEntry(t, 2, name, "")
+		if res, err := d.inspectField(name, "Parent"); err != nil {
+			t.Fatal(err)
+		} else if !strings.HasPrefix(res, busyboxId) {
+			t.Fatal("built image %s should have busybox image (id=%s) as a parent, not %s", name, busyboxId, res)
+		}
 	}
 }
 
