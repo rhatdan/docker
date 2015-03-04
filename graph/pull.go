@@ -134,14 +134,16 @@ func (s *TagStore) CmdPull(job *engine.Job) engine.Status {
 }
 
 func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *registry.RepositoryInfo, askedTag string, sf *utils.StreamFormatter, parallel bool) error {
-	out.Write(sf.FormatStatus("", "Pulling repository %s", repoInfo.CanonicalName))
+	out.Write(sf.FormatStream(fmt.Sprintf("Trying to pull repository %s ...", repoInfo.CanonicalName)))
 
 	repoData, err := r.GetRepositoryData(repoInfo.RemoteName)
 	if err != nil {
 		if strings.Contains(err.Error(), "HTTP code: 404") {
+			out.Write(sf.FormatStatus("", " not found"))
 			return fmt.Errorf("Error: image %s:%s not found", repoInfo.RemoteName, askedTag)
 		}
 		// Unexpected HTTP error
+		out.Write(sf.FormatStatus("", " failed"))
 		return err
 	}
 	if strings.HasPrefix(repoInfo.LocalName, registry.INDEXNAME+"/") {
@@ -158,6 +160,7 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 			}
 		}
 		if len(newEndpoints) == 0 {
+			out.Write(sf.FormatStatus("", " failed"))
 			return fmt.Errorf("Official registry redirects to unofficial for repository \"%s\", please specify it as: %s", repoInfo.LocalName, strings.Join(unofficial, " or "))
 		}
 		repoData.Endpoints = newEndpoints
@@ -167,6 +170,7 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 	tagsList, err := r.GetRemoteTags(repoData.Endpoints, repoInfo.RemoteName, repoData.Tokens)
 	if err != nil {
 		log.Errorf("unable to get remote tags: %s", err)
+		out.Write(sf.FormatStatus("", " failed"))
 		return err
 	}
 
@@ -188,10 +192,12 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		// Otherwise, check that the tag exists and use only that one
 		id, exists := tagsList[askedTag]
 		if !exists {
+			out.Write(sf.FormatStatus("", " not found"))
 			return fmt.Errorf("Tag %s not found in repository %s", askedTag, repoInfo.CanonicalName)
 		}
 		repoData.ImgList[id].Tag = askedTag
 	}
+	out.Write(sf.FormatStatus("", ""))
 
 	errors := make(chan error)
 
