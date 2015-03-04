@@ -11,13 +11,14 @@ import (
 
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/symlink"
+	"github.com/docker/libcontainer/mount/mode"
 )
 
 type Volume struct {
 	ID          string
 	Path        string
 	IsBindMount bool
-	Writable    bool
+	Mode        mode.Mode
 	containers  map[string]struct{}
 	configPath  string
 	repository  *Repository
