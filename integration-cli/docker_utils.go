@@ -984,9 +984,9 @@ func readContainerFileWithExec(containerId, filename string) ([]byte, error) {
 	return []byte(out), err
 }
 
-func setupRegistry(t *testing.T) func() {
+func setupAndGetRegistryAt(t *testing.T, url string) *testRegistryV2 {
 	testRequires(t, RegistryHosting)
-	reg, err := newTestRegistryV2(t)
+	reg, err := newTestRegistryV2At(t, url)
 	if err != nil {
 		t.Fatal(err)
 	}
