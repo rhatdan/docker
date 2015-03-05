@@ -4,12 +4,10 @@ package native
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/docker/docker/daemon/execdriver"
-	"github.com/docker/docker/daemon/execdriver/native/template"
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/apparmor"
 	"github.com/docker/libcontainer/devices"
@@ -20,22 +18,7 @@ import (
 // createContainer populates and configures the container type with the
 // data provided by the execdriver.Command
 func (d *driver) createContainer(c *execdriver.Command) (*libcontainer.Config, error) {
-	container := template.New()
-
-	container.Hostname = getEnv("HOSTNAME", c.ProcessConfig.Env)
-	container.Tty = c.ProcessConfig.Tty
-	container.User = c.ProcessConfig.User
-	container.WorkingDir = c.WorkingDir
-	container.Env = c.ProcessConfig.Env
-	container.Cgroups.Name = c.ID
-	container.Cgroups.AllowedDevices = c.AllowedDevices
-	container.MountConfig.DeviceNodes = c.AutoCreatedDevices
-	container.RootFs = c.Rootfs
-	container.MountConfig.ReadonlyFs = c.ReadonlyRootfs
-
-	// check to see if we are running in ramdisk to disable pivot root
-	container.MountConfig.NoPivotRoot = os.Getenv("DOCKER_RAMDISK") != ""
-	container.RestrictSys = true
+	container := execdriver.InitContainer(c)
 
 	if err := d.createIpc(container, c); err != nil {
 		return nil, err
@@ -63,7 +46,7 @@ func (d *driver) createContainer(c *execdriver.Command) (*libcontainer.Config, e
 		container.AppArmorProfile = c.AppArmorProfile
 	}
 
-	if err := d.setupCgroups(container, c); err != nil {
+	if err := execdriver.SetupCgroups(container, c); err != nil {
 		return nil, err
 	}
 
@@ -74,6 +57,8 @@ func (d *driver) createContainer(c *execdriver.Command) (*libcontainer.Config, e
 	if err := d.setupLabels(container, c); err != nil {
 		return nil, err
 	}
+
+	d.setupRlimits(container, c)
 
 	cmds := make(map[string]*exec.Cmd)
 	d.Lock()
@@ -189,16 +174,14 @@ func (d *driver) setCapabilities(container *libcontainer.Config, c *execdriver.C
 	return err
 }
 
-func (d *driver) setupCgroups(container *libcontainer.Config, c *execdriver.Command) error {
-	if c.Resources != nil {
-		container.Cgroups.CpuShares = c.Resources.CpuShares
-		container.Cgroups.Memory = c.Resources.Memory
-		container.Cgroups.MemoryReservation = c.Resources.Memory
-		container.Cgroups.MemorySwap = c.Resources.MemorySwap
-		container.Cgroups.CpusetCpus = c.Resources.Cpuset
+func (d *driver) setupRlimits(container *libcontainer.Config, c *execdriver.Command) {
+	if c.Resources == nil {
+		return
 	}
 
-	return nil
+	for _, rlimit := range c.Resources.Rlimits {
+		container.Rlimits = append(container.Rlimits, libcontainer.Rlimit((*rlimit)))
+	}
 }
 
 func (d *driver) setupMounts(container *libcontainer.Config, c *execdriver.Command) error {

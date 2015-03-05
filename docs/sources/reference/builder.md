@@ -107,11 +107,11 @@ images.
 
 ### Environment Replacement
 
-**Note:** prior to 1.3, `Dockerfile` environment variables were handled
-similarly, in that they would be replaced as described below. However, there
-was no formal definition on as to which instructions handled environment
-replacement at the time. After 1.3 this behavior will be preserved and
-canonical.
+> **Note**: prior to 1.3, `Dockerfile` environment variables were handled
+> similarly, in that they would be replaced as described below. However, there
+> was no formal definition on as to which instructions handled environment
+> replacement at the time. After 1.3 this behavior will be preserved and
+> canonical.
 
 Environment variables (declared with [the `ENV` statement](#env)) can also be used in
 certain instructions as variables to be interpreted by the `Dockerfile`. Escapes
@@ -337,11 +337,12 @@ specified network ports at runtime. Docker uses this information to interconnect
 containers using links (see the [Docker User
 Guide](/userguide/dockerlinks)) and to determine which ports to expose to the
 host when [using the -P flag](/reference/run/#expose-incoming-ports).
-**Note:**
-`EXPOSE` doesn't define which ports can be exposed to the host or make ports
-accessible from the host by default. To expose ports to the host, at runtime, 
-[use the `-p` flag](/userguide/dockerlinks) or
-[the -P flag](/reference/run/#expose-incoming-ports).
+
+> **Note**:
+> `EXPOSE` doesn't define which ports can be exposed to the host or make ports
+> accessible from the host by default. To expose ports to the host, at runtime,
+> [use the `-p` flag](/userguide/dockerlinks) or
+> [the -P flag](/reference/run/#expose-incoming-ports).
 
 ## ENV
 
@@ -626,8 +627,7 @@ ENTRYPOINT ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
 
 If you need to write a starter script for a single executable, you can ensure that
 the final executable receives the Unix signals by using `exec` and `gosu`
-(see [the Dockerfile best practices](/articles/dockerfile_best-practices/#entrypoint)
-for more details):
+commands:
 
 ```bash
 #!/bin/bash

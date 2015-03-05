@@ -18,6 +18,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api"
+	"github.com/docker/docker/autogen/dockerversion"
 	"github.com/docker/docker/daemon/execdriver"
 	"github.com/docker/docker/daemon/execdriver/execdrivers"
 	"github.com/docker/docker/daemon/execdriver/lxc"
@@ -25,12 +26,12 @@ import (
 	_ "github.com/docker/docker/daemon/graphdriver/vfs"
 	_ "github.com/docker/docker/daemon/networkdriver/bridge"
 	"github.com/docker/docker/daemon/networkdriver/portallocator"
-	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/engine"
 	"github.com/docker/docker/graph"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/broadcastwriter"
+	"github.com/docker/docker/pkg/common"
 	"github.com/docker/docker/pkg/graphdb"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/namesgenerator"
@@ -440,7 +441,9 @@ func (daemon *Daemon) setupResolvconfWatcher() error {
 		for {
 			select {
 			case event := <-watcher.Events:
-				if event.Op&fsnotify.Write == fsnotify.Write {
+				if event.Name == "/etc/resolv.conf" &&
+					(event.Op&fsnotify.Write == fsnotify.Write ||
+						event.Op&fsnotify.Create == fsnotify.Create) {
 					// verify a real change happened before we go further--a file write may have happened
 					// without an actual change to the file
 					updatedResolvConf, newResolvConfHash, err := resolvconf.GetIfChanged()
@@ -473,7 +476,7 @@ func (daemon *Daemon) setupResolvconfWatcher() error {
 		}
 	}()
 
-	if err := watcher.Add("/etc/resolv.conf"); err != nil {
+	if err := watcher.Add("/etc"); err != nil {
 		return err
 	}
 	return nil
@@ -511,7 +514,7 @@ func (daemon *Daemon) mergeAndVerifyConfig(config *runconfig.Config, img *image.
 func (daemon *Daemon) generateIdAndName(name string) (string, string, error) {
 	var (
 		err error
-		id  = utils.GenerateRandomID()
+		id  = common.GenerateRandomID()
 	)
 
 	if name == "" {
@@ -556,7 +559,7 @@ func (daemon *Daemon) reserveName(id, name string) (string, error) {
 			nameAsKnownByUser := strings.TrimPrefix(name, "/")
 			return "", fmt.Errorf(
 				"Conflict. The name %q is already in use by container %s. You have to delete (or rename) that container to be able to reuse that name.", nameAsKnownByUser,
-				utils.TruncateID(conflictingContainer.ID))
+				common.TruncateID(conflictingContainer.ID))
 		}
 	}
 	return name, nil
@@ -579,7 +582,7 @@ func (daemon *Daemon) generateNewName(id string) (string, error) {
 		return name, nil
 	}
 
-	name = "/" + utils.TruncateID(id)
+	name = "/" + common.TruncateID(id)
 	if _, err := daemon.containerGraph.Set(name, id); err != nil {
 		return "", err
 	}

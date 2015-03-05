@@ -25,6 +25,7 @@ import (
 	imagepkg "github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/chrootarchive"
+	"github.com/docker/docker/pkg/common"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/parsers"
 	"github.com/docker/docker/pkg/symlink"
@@ -59,6 +60,9 @@ func (b *Builder) readContext(context io.Reader) error {
 }
 
 func (b *Builder) commit(id string, autoCmd []string, comment string) error {
+	if b.disableCommit {
+		return nil
+	}
 	if b.image == "" && !b.noBaseImage {
 		return fmt.Errorf("Please provide a source image with `from` prior to commit")
 	}
@@ -183,8 +187,8 @@ func (b *Builder) runContextCommand(args []string, allowRemote bool, allowDecomp
 	if err != nil {
 		return err
 	}
-	// If we do not have at least one hash, never use the cache
-	if hit && b.UtilizeCache {
+
+	if hit {
 		return nil
 	}
 
@@ -498,19 +502,24 @@ func (b *Builder) processImageFrom(img *imagepkg.Image) error {
 // `(true, nil)`. If no image is found, it returns `(false, nil)`. If there
 // is any error, it returns `(false, err)`.
 func (b *Builder) probeCache() (bool, error) {
-	if b.UtilizeCache {
-		if cache, err := b.Daemon.ImageGetCached(b.image, b.Config); err != nil {
-			return false, err
-		} else if cache != nil {
-			fmt.Fprintf(b.OutStream, " ---> Using cache\n")
-			log.Debugf("[BUILDER] Use cached version")
-			b.image = cache.ID
-			return true, nil
-		} else {
-			log.Debugf("[BUILDER] Cache miss")
-		}
+	if !b.UtilizeCache || b.cacheBusted {
+		return false, nil
 	}
-	return false, nil
+
+	cache, err := b.Daemon.ImageGetCached(b.image, b.Config)
+	if err != nil {
+		return false, err
+	}
+	if cache == nil {
+		log.Debugf("[BUILDER] Cache miss")
+		b.cacheBusted = true
+		return false, nil
+	}
+
+	fmt.Fprintf(b.OutStream, " ---> Using cache\n")
+	log.Debugf("[BUILDER] Use cached version")
+	b.image = cache.ID
+	return true, nil
 }
 
 func (b *Builder) create() (*daemon.Container, error) {
@@ -531,7 +540,7 @@ func (b *Builder) create() (*daemon.Container, error) {
 	}
 
 	b.TmpContainers[c.ID] = struct{}{}
-	fmt.Fprintf(b.OutStream, " ---> Running in %s\n", utils.TruncateID(c.ID))
+	fmt.Fprintf(b.OutStream, " ---> Running in %s\n", common.TruncateID(c.ID))
 
 	if len(config.Cmd) > 0 {
 		// override the entry point that may have been picked up from the base image
@@ -555,8 +564,11 @@ func (b *Builder) run(c *daemon.Container) error {
 		return err
 	}
 
-	if err := <-errCh; err != nil {
-		return err
+	if b.Verbose {
+		// Block on reading output from container, stop on err or chan closed
+		if err := <-errCh; err != nil {
+			return err
+		}
 	}
 
 	// Wait for it to finish
@@ -712,12 +724,12 @@ func (b *Builder) clearTmp() {
 			fmt.Fprint(b.OutStream, err.Error())
 		}
 
-		if err := b.Daemon.Destroy(tmp); err != nil {
-			fmt.Fprintf(b.OutStream, "Error removing intermediate container %s: %s\n", utils.TruncateID(c), err.Error())
+		if err := b.Daemon.Rm(tmp); err != nil {
+			fmt.Fprintf(b.OutStream, "Error removing intermediate container %s: %s\n", common.TruncateID(c), err.Error())
 			return
 		}
 		b.Daemon.DeleteVolumes(tmp.VolumePaths())
 		delete(b.TmpContainers, c)
-		fmt.Fprintf(b.OutStream, "Removing intermediate container %s\n", utils.TruncateID(c))
+		fmt.Fprintf(b.OutStream, "Removing intermediate container %s\n", common.TruncateID(c))
 	}
 }

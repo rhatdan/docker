@@ -137,6 +137,8 @@ func TestDaemonStartBridgeWithoutIPAssociation(t *testing.T) {
 }
 
 func TestDaemonIptablesClean(t *testing.T) {
+	defer deleteAllContainers()
+
 	d := NewDaemon(t)
 	if err := d.StartWithBusybox(); err != nil {
 		t.Fatalf("Could not start daemon with busybox: %v", err)
@@ -174,12 +176,12 @@ func TestDaemonIptablesClean(t *testing.T) {
 		t.Fatalf("iptables output should not have contained %q, but was %q", ipTablesSearchString, out)
 	}
 
-	deleteAllContainers()
-
 	logDone("daemon - run,iptables - iptables rules cleaned after daemon restart")
 }
 
 func TestDaemonIptablesCreate(t *testing.T) {
+	defer deleteAllContainers()
+
 	d := NewDaemon(t)
 	if err := d.StartWithBusybox(); err != nil {
 		t.Fatalf("Could not start daemon with busybox: %v", err)
@@ -225,8 +227,6 @@ func TestDaemonIptablesCreate(t *testing.T) {
 	if !strings.Contains(out, ipTablesSearchString) {
 		t.Fatalf("iptables output after restart should have contained %q, but was %q", ipTablesSearchString, out)
 	}
-
-	deleteAllContainers()
 
 	logDone("daemon - run,iptables - iptables rules for always restarted container created after daemon restart")
 }
@@ -479,4 +479,57 @@ func TestDaemonUpgradeWithVolumes(t *testing.T) {
 	}
 
 	logDone("daemon - volumes from old(pre 1.3) daemon work")
+}
+
+func TestDaemonUlimitDefaults(t *testing.T) {
+	d := NewDaemon(t)
+
+	if err := d.StartWithBusybox("--default-ulimit", "nofile=42:42", "--default-ulimit", "nproc=1024:1024"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := d.Cmd("run", "--ulimit", "nproc=2048", "--name=test", "busybox", "/bin/sh", "-c", "echo $(ulimit -n); echo $(ulimit -p)")
+	if err != nil {
+		t.Fatal(out, err)
+	}
+
+	outArr := strings.Split(out, "\n")
+	if len(outArr) < 2 {
+		t.Fatal("got unexpected output: %s", out)
+	}
+	nofile := strings.TrimSpace(outArr[0])
+	nproc := strings.TrimSpace(outArr[1])
+
+	if nofile != "42" {
+		t.Fatalf("expected `ulimit -n` to be `42`, got: %s", nofile)
+	}
+	if nproc != "2048" {
+		t.Fatalf("exepcted `ulimit -p` to be 2048, got: %s", nproc)
+	}
+
+	// Now restart daemon with a new default
+	if err := d.Restart("--default-ulimit", "nofile=43"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err = d.Cmd("start", "-a", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	outArr = strings.Split(out, "\n")
+	if len(outArr) < 2 {
+		t.Fatal("got unexpected output: %s", out)
+	}
+	nofile = strings.TrimSpace(outArr[0])
+	nproc = strings.TrimSpace(outArr[1])
+
+	if nofile != "43" {
+		t.Fatalf("expected `ulimit -n` to be `43`, got: %s", nofile)
+	}
+	if nproc != "2048" {
+		t.Fatalf("exepcted `ulimit -p` to be 2048, got: %s", nproc)
+	}
+
+	logDone("daemon - default ulimits are applied")
 }

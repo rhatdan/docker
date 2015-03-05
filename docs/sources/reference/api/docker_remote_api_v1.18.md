@@ -155,7 +155,8 @@ Create a container
                "CapDrop": ["MKNOD"],
                "RestartPolicy": { "Name": "", "MaximumRetryCount": 0 },
                "NetworkMode": "bridge",
-               "Devices": []
+               "Devices": [],
+               "Ulimits": [{}]
             }
         }
 
@@ -244,6 +245,9 @@ Json Parameters:
   -   **Devices** - A list of devices to add to the container specified in the
         form
         `{ "PathOnHost": "/dev/deviceName", "PathInContainer": "/dev/deviceName", "CgroupPermissions": "mrw"}`
+  -   **Ulimits** - A list of ulimits to be set in the container, specified as
+        `{ "Name": <name>, "Soft": <soft limit>, "Hard": <hard limit> }`, for example:
+        `Ulimits: { "Name": "nofile", "Soft": 1024, "Hard", 2048 }}`
 
 Query Parameters:
 
@@ -337,10 +341,12 @@ Return low-level information on the container `id`
 				"Name": "on-failure"
 			},
 			"SecurityOpt": null,
-			"VolumesFrom": null
+			"VolumesFrom": null,
+			"Ulimits": [{}]
 		},
 		"HostnamePath": "/var/lib/docker/containers/ba033ac4401106a3b513bc9d639eee123ad78ca3616b921167cd74b20e25ed39/hostname",
 		"HostsPath": "/var/lib/docker/containers/ba033ac4401106a3b513bc9d639eee123ad78ca3616b921167cd74b20e25ed39/hosts",
+		"LogPath": "/var/lib/docker/containers/1eb5fabf5a03807136561b3c00adcd2992b535d624d5e18b6cdc6a6844d9767b/1eb5fabf5a03807136561b3c00adcd2992b535d624d5e18b6cdc6a6844d9767b-json.log",
 		"Id": "ba033ac4401106a3b513bc9d639eee123ad78ca3616b921167cd74b20e25ed39",
 		"Image": "04c5d3b7b0656168630d3ba35d8889bd0e9caafcaeb3004d2bfbc47e7c5d35d2",
 		"MountLabel": "",
@@ -1072,10 +1078,13 @@ command*](/reference/builder/#dockerbuilder)).
 
 Query Parameters:
 
--   **dockerfile** - path within the build context to the Dockerfile
+-   **dockerfile** - path within the build context to the Dockerfile. This is 
+        ignored if `remote` is specified and points to an individual filename.
 -   **t** – repository name (and optionally a tag) to be applied to
         the resulting image in case of success
--   **remote** – git or HTTP/HTTPS URI build source
+-   **remote** – A Git repository URI or HTTP/HTTPS URI build source. If the 
+        URI specifies a filename, the file's contents are placed into a file 
+		called `Dockerfile`.
 -   **q** – suppress verbose build output
 -   **nocache** – do not use the cache when building the image
 -   **pull** - attempt to pull the image even if an older image exists locally
@@ -1470,10 +1479,13 @@ Show the docker version information
         Content-Type: application/json
 
         {
-             "ApiVersion": "1.12",
-             "Version": "0.2.2",
-             "GitCommit": "5a2a5cc+CHANGES",
-             "GoVersion": "go1.0.3"
+             "Version": "1.5.0",
+             "Os": "linux",
+             "KernelVersion": "3.18.5-tinycore64",
+             "GoVersion": "go1.4.1",
+             "GitCommit": "a8a31ef",
+             "Arch": "amd64",
+             "ApiVersion": "1.18"
         }
 
 Status Codes:
@@ -1913,6 +1925,7 @@ Return low-level information about the exec command `id`.
             "ResolvConfPath" : "/var/lib/docker/containers/8f177a186b977fb451136e0fdf182abff5599a08b3c7f6ef0d36a55aaf89634c/resolv.conf",
             "HostnamePath" : "/var/lib/docker/containers/8f177a186b977fb451136e0fdf182abff5599a08b3c7f6ef0d36a55aaf89634c/hostname",
             "HostsPath" : "/var/lib/docker/containers/8f177a186b977fb451136e0fdf182abff5599a08b3c7f6ef0d36a55aaf89634c/hosts",
+            "LogPath": "/var/lib/docker/containers/1eb5fabf5a03807136561b3c00adcd2992b535d624d5e18b6cdc6a6844d9767b/1eb5fabf5a03807136561b3c00adcd2992b535d624d5e18b6cdc6a6844d9767b-json.log",
             "Name" : "/test",
             "Driver" : "aufs",
             "ExecDriver" : "native-0.2",
@@ -1970,7 +1983,8 @@ This might change in the future.
 
 ## 3.3 CORS Requests
 
-To enable cross origin requests to the remote api add the flag
-"--api-enable-cors" when running docker in daemon mode.
+To set cross origin requests to the remote api please give values to 
+"--api-cors-header" when running docker in daemon mode. Set * will allow all,
+default or blank means CORS disabled
 
-    $ docker -d -H="192.168.1.9:2375" --api-enable-cors
+    $ docker -d -H="192.168.1.9:2375" --api-cors-header="http://foo.bar"

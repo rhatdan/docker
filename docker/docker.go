@@ -11,7 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/api/client"
-	"github.com/docker/docker/dockerversion"
+	"github.com/docker/docker/autogen/dockerversion"
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/docker/utils"
@@ -70,6 +70,10 @@ func main() {
 	setDefaultConfFlag(flTrustKey, defaultTrustKeyFile)
 
 	if *flDaemon {
+		if *flHelp {
+			flag.Usage()
+			return
+		}
 		mainDaemon()
 		return
 	}
@@ -111,7 +115,7 @@ func main() {
 			*flTls = true
 			cert, err := tls.LoadX509KeyPair(*flCert, *flKey)
 			if err != nil {
-				log.Fatalf("Couldn't load X509 key pair: %s. Key encrypted?", err)
+				log.Fatalf("Couldn't load X509 key pair: %q. Make sure the key is encrypted", err)
 			}
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}

@@ -6,6 +6,7 @@ import (
 	"github.com/docker/docker/daemon/networkdriver"
 	"github.com/docker/docker/opts"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/pkg/ulimit"
 )
 
 const (
@@ -39,11 +40,13 @@ type Config struct {
 	Mtu                         int
 	SocketGroup                 string
 	EnableCors                  bool
+	CorsHeaders                 string
 	DisableNetwork              bool
 	EnableSelinuxSupport        bool
 	Context                     map[string][]string
 	TrustKeyPath                string
 	Labels                      []string
+	Ulimits                     map[string]*ulimit.Ulimit
 }
 
 // InstallFlags adds command-line options to the top-level flag parser for
@@ -68,13 +71,16 @@ func (config *Config) InstallFlags() {
 	flag.BoolVar(&config.EnableSelinuxSupport, []string{"-selinux-enabled"}, false, "Enable selinux support")
 	flag.IntVar(&config.Mtu, []string{"#mtu", "-mtu"}, 0, "Set the containers network MTU")
 	flag.StringVar(&config.SocketGroup, []string{"G", "-group"}, "docker", "Group for the unix socket")
-	flag.BoolVar(&config.EnableCors, []string{"#api-enable-cors", "-api-enable-cors"}, false, "Enable CORS headers in the remote API")
+	flag.BoolVar(&config.EnableCors, []string{"#api-enable-cors", "#-api-enable-cors"}, false, "Enable CORS headers in the remote API, this is deprecated by --api-cors-header")
+	flag.StringVar(&config.CorsHeaders, []string{"-api-cors-header"}, "", "Set CORS headers in the remote API")
 	opts.IPVar(&config.DefaultIp, []string{"#ip", "-ip"}, "0.0.0.0", "Default IP when binding container ports")
 	opts.ListVar(&config.GraphOptions, []string{"-storage-opt"}, "Set storage driver options")
 	// FIXME: why the inconsistency between "hosts" and "sockets"?
 	opts.IPListVar(&config.Dns, []string{"#dns", "-dns"}, "DNS server to use")
 	opts.DnsSearchListVar(&config.DnsSearch, []string{"-dns-search"}, "DNS search domains to use")
 	opts.LabelListVar(&config.Labels, []string{"-label"}, "Set key=value labels to the daemon")
+	config.Ulimits = make(map[string]*ulimit.Ulimit)
+	opts.UlimitMapVar(config.Ulimits, []string{"-default-ulimit"}, "Set default ulimits for containers")
 }
 
 func getDefaultNetworkMtu() int {

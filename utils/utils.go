@@ -3,7 +3,6 @@ package utils
 import (
 	"bufio"
 	"bytes"
-	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,13 +15,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/docker/docker/dockerversion"
+	"github.com/docker/docker/autogen/dockerversion"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/docker/docker/pkg/common"
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/ioutils"
 )
@@ -162,36 +161,6 @@ func GetTotalUsedFds() int {
 		return len(fds)
 	}
 	return -1
-}
-
-// TruncateID returns a shorthand version of a string identifier for convenience.
-// A collision with other shorthands is very unlikely, but possible.
-// In case of a collision a lookup with TruncIndex.Get() will fail, and the caller
-// will need to use a langer prefix, or the full-length Id.
-func TruncateID(id string) string {
-	shortLen := 12
-	if len(id) < shortLen {
-		shortLen = len(id)
-	}
-	return id[:shortLen]
-}
-
-// GenerateRandomID returns an unique id
-func GenerateRandomID() string {
-	for {
-		id := make([]byte, 32)
-		if _, err := io.ReadFull(rand.Reader, id); err != nil {
-			panic(err) // This shouldn't happen
-		}
-		value := hex.EncodeToString(id)
-		// if we try to parse the truncated for as an int and we don't have
-		// an error then the value is all numberic and causes issues when
-		// used as a hostname. ref #3869
-		if _, err := strconv.ParseInt(TruncateID(value), 10, 64); err == nil {
-			continue
-		}
-		return value
-	}
 }
 
 func ValidateID(id string) error {
@@ -343,7 +312,7 @@ var globalTestID string
 // new directory.
 func TestDirectory(templateDir string) (dir string, err error) {
 	if globalTestID == "" {
-		globalTestID = RandomString()[:4]
+		globalTestID = common.RandomString()[:4]
 	}
 	prefix := fmt.Sprintf("docker-test%s-%s-", globalTestID, GetCallerName(2))
 	if prefix == "" {

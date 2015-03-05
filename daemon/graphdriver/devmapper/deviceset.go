@@ -392,7 +392,7 @@ func (devices *DeviceSet) unregisterDevice(id int, hash string) error {
 	devices.devicesLock.Unlock()
 
 	if err := devices.removeMetadata(info); err != nil {
-		log.Debugf("Error removing meta data: %s", err)
+		log.Debugf("Error removing metadata: %s", err)
 		return err
 	}
 
@@ -469,7 +469,7 @@ func (devices *DeviceSet) createFilesystem(info *DevInfo) error {
 }
 
 func (devices *DeviceSet) migrateOldMetaData() error {
-	// Migrate old metadatafile
+	// Migrate old metadata file
 	jsonData, err := ioutil.ReadFile(devices.oldMetadataFile())
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -857,7 +857,7 @@ func (devices *DeviceSet) rollbackTransaction() error {
 
 	dinfo := &DevInfo{Hash: devices.DeviceIdHash}
 	if err := devices.removeMetadata(dinfo); err != nil {
-		log.Errorf("Warning: Unable to remove meta data: %s", err)
+		log.Errorf("Warning: Unable to remove metadata: %s", err)
 	} else {
 		devices.markDeviceIdFree(devices.DeviceId)
 	}
@@ -925,7 +925,7 @@ func (devices *DeviceSet) openTransaction(hash string, DeviceId int) error {
 	devices.DeviceIdHash = hash
 	devices.DeviceId = DeviceId
 	if err := devices.saveTransactionMetaData(); err != nil {
-		return fmt.Errorf("Error saving transaction meta data: %s", err)
+		return fmt.Errorf("Error saving transaction metadata: %s", err)
 	}
 	return nil
 }
@@ -933,7 +933,7 @@ func (devices *DeviceSet) openTransaction(hash string, DeviceId int) error {
 func (devices *DeviceSet) refreshTransaction(DeviceId int) error {
 	devices.DeviceId = DeviceId
 	if err := devices.saveTransactionMetaData(); err != nil {
-		return fmt.Errorf("Error saving transaction meta data: %s", err)
+		return fmt.Errorf("Error saving transaction metadata: %s", err)
 	}
 	return nil
 }
@@ -1093,7 +1093,7 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 		}
 	}
 
-	// Right now this loads only NextDeviceId. If there is more metatadata
+	// Right now this loads only NextDeviceId. If there is more metadata
 	// down the line, we might have to move it earlier.
 	if err = devices.loadDeviceSetMetaData(); err != nil {
 		return err
@@ -1111,7 +1111,7 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 }
 
 func (devices *DeviceSet) AddDevice(hash, baseHash string) error {
-	log.Debugf("[deviceset] AddDevice() hash=%s basehash=%s", hash, baseHash)
+	log.Debugf("[deviceset] AddDevice(hash=%s basehash=%s)", hash, baseHash)
 	defer log.Debugf("[deviceset] AddDevice(hash=%s basehash=%s) END", hash, baseHash)
 
 	baseInfo, err := devices.lookupDevice(baseHash)
@@ -1325,9 +1325,9 @@ func (devices *DeviceSet) waitClose(info *DevInfo) error {
 }
 
 func (devices *DeviceSet) Shutdown() error {
-	log.Debugf("[deviceset %s] shutdown()", devices.devicePrefix)
+	log.Debugf("[deviceset %s] Shutdown()", devices.devicePrefix)
 	log.Debugf("[devmapper] Shutting down DeviceSet: %s", devices.root)
-	defer log.Debugf("[deviceset %s] shutdown END", devices.devicePrefix)
+	defer log.Debugf("[deviceset %s] Shutdown() END", devices.devicePrefix)
 
 	var devs []*DevInfo
 
@@ -1394,7 +1394,7 @@ func (devices *DeviceSet) MountDevice(hash, path, mountLabel string) error {
 
 	if info.mountCount > 0 {
 		if path != info.mountPath {
-			return fmt.Errorf("Trying to mount devmapper device in multple places (%s, %s)", info.mountPath, path)
+			return fmt.Errorf("Trying to mount devmapper device in multiple places (%s, %s)", info.mountPath, path)
 		}
 
 		info.mountCount++
@@ -1568,7 +1568,7 @@ func (devices *DeviceSet) poolStatus() (totalSizeInSectors, transactionId, dataU
 	return
 }
 
-// MetadataDevicePath returns the path to the metadata storage for this deviceset,
+// DataDevicePath returns the path to the data storage for this deviceset,
 // regardless of loopback or block device
 func (devices *DeviceSet) DataDevicePath() string {
 	return devices.dataDevice

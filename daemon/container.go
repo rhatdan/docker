@@ -25,11 +25,13 @@ import (
 	"github.com/docker/docker/nat"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/broadcastwriter"
+	"github.com/docker/docker/pkg/common"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/networkfs/etchosts"
 	"github.com/docker/docker/pkg/networkfs/resolvconf"
 	"github.com/docker/docker/pkg/promise"
 	"github.com/docker/docker/pkg/symlink"
+	"github.com/docker/docker/pkg/ulimit"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
 )
@@ -70,6 +72,7 @@ type Container struct {
 	ResolvConfPath string
 	HostnamePath   string
 	HostsPath      string
+	LogPath        string
 	Name           string
 	Driver         string
 	ExecDriver     string
@@ -274,11 +277,34 @@ func populateCommand(c *Container, env []string) error {
 		return err
 	}
 
+	var rlimits []*ulimit.Rlimit
+	ulimits := c.hostConfig.Ulimits
+
+	// Merge ulimits with daemon defaults
+	ulIdx := make(map[string]*ulimit.Ulimit)
+	for _, ul := range ulimits {
+		ulIdx[ul.Name] = ul
+	}
+	for name, ul := range c.daemon.config.Ulimits {
+		if _, exists := ulIdx[name]; !exists {
+			ulimits = append(ulimits, ul)
+		}
+	}
+
+	for _, limit := range ulimits {
+		rl, err := limit.GetRlimit()
+		if err != nil {
+			return err
+		}
+		rlimits = append(rlimits, rl)
+	}
+
 	resources := &execdriver.Resources{
 		Memory:     c.Config.Memory,
 		MemorySwap: c.Config.MemorySwap,
 		CpuShares:  c.Config.CpuShares,
 		Cpuset:     c.Config.Cpuset,
+		Rlimits:    rlimits,
 	}
 
 	processConfig := execdriver.ProcessConfig{
@@ -457,7 +483,13 @@ func (container *Container) buildHostsFiles(IP string) error {
 
 	for linkAlias, child := range children {
 		_, alias := path.Split(linkAlias)
-		extraContent = append(extraContent, etchosts.Record{Hosts: alias, IP: child.NetworkSettings.IPAddress})
+		// allow access to the linked container via the alias, real name, and container hostname
+		aliasList := alias + " " + child.Config.Hostname
+		// only add the name if alias isn't equal to the name
+		if alias != child.Name[1:] {
+			aliasList = aliasList + " " + child.Name[1:]
+		}
+		extraContent = append(extraContent, etchosts.Record{Hosts: aliasList, IP: child.NetworkSettings.IPAddress})
 	}
 
 	for _, extraHost := range container.hostConfig.ExtraHosts {
@@ -697,7 +729,7 @@ func (container *Container) Kill() error {
 	if _, err := container.WaitStop(10 * time.Second); err != nil {
 		// Ensure that we don't kill ourselves
 		if pid := container.GetPid(); pid != 0 {
-			log.Infof("Container %s failed to exit within 10 seconds of kill - trying direct SIGKILL", utils.TruncateID(container.ID))
+			log.Infof("Container %s failed to exit within 10 seconds of kill - trying direct SIGKILL", common.TruncateID(container.ID))
 			if err := syscall.Kill(pid, 9); err != nil {
 				if err != syscall.ESRCH {
 					return err
@@ -1227,7 +1259,7 @@ func (container *Container) setupLinkedContainers() ([]string, error) {
 		container.activeLinks = make(map[string]*links.Link, len(children))
 
 		// If we encounter an error make sure that we rollback any network
-		// config and ip table changes
+		// config and iptables changes
 		rollback := func() {
 			for _, link := range container.activeLinks {
 				link.Disable()
@@ -1322,16 +1354,17 @@ func (container *Container) setupWorkingDirectory() error {
 
 func (container *Container) startLoggingToDisk() error {
 	// Setup logging of stdout and stderr to disk
-	pth, err := container.logPath("json")
+	logPath, err := container.logPath("json")
 	if err != nil {
 		return err
 	}
+	container.LogPath = logPath
 
-	if err := container.daemon.LogToDisk(container.stdout, pth, "stdout"); err != nil {
+	if err := container.daemon.LogToDisk(container.stdout, container.LogPath, "stdout"); err != nil {
 		return err
 	}
 
-	if err := container.daemon.LogToDisk(container.stderr, pth, "stderr"); err != nil {
+	if err := container.daemon.LogToDisk(container.stderr, container.LogPath, "stderr"); err != nil {
 		return err
 	}
 

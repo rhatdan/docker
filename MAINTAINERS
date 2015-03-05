@@ -12,9 +12,9 @@
 
 	[Rules.maintainers]
 
-	title = "What is a maintainer?"
+		title = "What is a maintainer?"
 
-	text = """
+		text = """
 There are different types of maintainers, with different responsibilities, but
 all maintainers have 3 things in common:
 
@@ -337,6 +337,7 @@ made through a pull request.
 			"unclejack",
 			"crosbymichael",
 			"erikh",
+			"estesp",
 			"icecrime",
 			"jfrazelle",
 			"lk4d4",
@@ -403,6 +404,8 @@ made through a pull request.
 				"fredlf",
 				"james",
 				"sven",
+				"spf13",
+				"mary"
 			]
 
 		[Org.Subsystems.libcontainer]
@@ -514,6 +517,11 @@ made through a pull request.
 	Email = "eric@windisch.us"
 	GitHub = "ewindisch"
 
+	[people.estesp]
+	Name = "Phil Estes"
+	Email = "estesp@linux.vnet.ibm.com"
+	GitHub = "estesp"
+
 	[people.icecrime]
 	Name = "Arnaud Porterie"
 	Email = "arnaud@docker.com"
@@ -528,6 +536,11 @@ made through a pull request.
 	Name = "Alexander Morozov"
 	Email = "lk4d4@docker.com"
 	GitHub = "lk4d4"
+
+	[people.mary]
+	Name = "Mary Anthony"
+	Email = "mary.anthony@docker.com"
+	GitHub = "moxiegirl"
 
 	[people.shykes]
 	Name = "Solomon Hykes"

@@ -56,6 +56,8 @@ func TestRunRedirectStdout(t *testing.T) {
 
 // Test recursive bind mount works by default
 func TestRunWithVolumesIsRecursive(t *testing.T) {
+	defer deleteAllContainers()
+
 	tmpDir, err := ioutil.TempDir("", "docker_recursive_mount_test")
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +89,20 @@ func TestRunWithVolumesIsRecursive(t *testing.T) {
 		t.Fatal("Recursive bind mount test failed. Expected file not found")
 	}
 
-	deleteAllContainers()
-
 	logDone("run - volumes are bind mounted recursively")
+}
+
+func TestRunWithUlimits(t *testing.T) {
+	defer deleteAllContainers()
+	out, _, err := runCommandWithOutput(exec.Command(dockerBinary, "run", "--name=testulimits", "--ulimit", "nofile=42", "busybox", "/bin/sh", "-c", "ulimit -n"))
+	if err != nil {
+		t.Fatal(err, out)
+	}
+
+	ul := strings.TrimSpace(out)
+	if ul != "42" {
+		t.Fatalf("expected `ulimit -n` to be 42, got %s", ul)
+	}
+
+	logDone("run - ulimits are set")
 }

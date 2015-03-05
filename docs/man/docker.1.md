@@ -37,6 +37,9 @@ unix://[/path/to/socket] to use.
 **--api-enable-cors**=*true*|*false*
   Enable CORS headers in the remote API. Default is false.
 
+**--api-cors-header**=""
+  Set CORS headers in the remote API. Default is cors disabled. Give urls like "http://foo, http://bar, ...". Give "*" to allow all.
+
 **-b**=""
   Attach containers to a pre\-existing network bridge; use 'none' to disable container networking
 
@@ -296,7 +299,7 @@ for data and metadata:
 For specific client examples please see the man page for the specific Docker
 command. For example:
 
-    man docker run
+    man docker-run
 
 # HISTORY
 April 2014, Originally compiled by William Henry (whenry at redhat dot com) based on docker.com source material and internal work.
