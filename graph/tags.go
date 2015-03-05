@@ -186,30 +186,52 @@ func (store *TagStore) DeleteAll(id string) error {
 func (store *TagStore) Delete(repoName, tag string) (bool, error) {
 	store.Lock()
 	defer store.Unlock()
-	deleted := false
-	if err := store.reload(); err != nil {
+	err := store.reload()
+	if err != nil {
 		return false, err
 	}
-	repoName = store.NormalizeLocalName(repoName)
-	if r, exists := store.Repositories[repoName]; exists {
+
+	doDelete := func(repo Repository, repoName string) error {
 		if tag != "" {
-			if _, exists2 := r[tag]; exists2 {
-				delete(r, tag)
-				if len(r) == 0 {
+			if _, exists2 := repo[tag]; exists2 {
+				delete(repo, tag)
+				if len(repo) == 0 {
 					delete(store.Repositories, repoName)
 				}
-				deleted = true
 			} else {
-				return false, fmt.Errorf("No such tag: %s:%s", repoName, tag)
+				return fmt.Errorf("No such tag: %s:%s", repoName, tag)
 			}
 		} else {
 			delete(store.Repositories, repoName)
-			deleted = true
 		}
-	} else {
-		return false, fmt.Errorf("No such repository: %s", repoName)
+		return nil
 	}
-	return deleted, store.save()
+
+	if repo, exists := store.Repositories[repoName]; exists {
+		if err = doDelete(repo, repoName); err == nil {
+			return true, store.save()
+		}
+	}
+	if repo, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
+		if err = doDelete(repo, registry.NormalizeLocalName(repoName)); err == nil {
+			return true, store.save()
+		}
+	}
+	if !registry.RepositoryNameHasIndex(repoName) {
+		for i := 1; i < len(registry.RegistryList); i++ {
+			fqn := registry.NormalizeLocalName(registry.RegistryList[i] + "/" + repoName)
+			if repo, exists := store.Repositories[fqn]; exists {
+				if err = doDelete(repo, repoName); err == nil {
+					return true, store.save()
+				}
+			}
+		}
+	}
+
+	if err != nil {
+		return false, err
+	}
+	return false, fmt.Errorf("No such repository: %s", repoName)
 }
 
 func (store *TagStore) Set(repoName, tag, imageName string, force bool) error {
@@ -257,6 +279,14 @@ func (store *TagStore) Get(repoName string) (Repository, error) {
 	}
 	if r, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
 		return r, nil
+	}
+	if !registry.RepositoryNameHasIndex(repoName) {
+		for i := 1; i < len(registry.RegistryList); i++ {
+			fqn := registry.NormalizeLocalName(registry.RegistryList[i] + "/" + repoName)
+			if r, exists := store.Repositories[fqn]; exists {
+				return r, nil
+			}
+		}
 	}
 	return nil, nil
 }
