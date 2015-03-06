@@ -5176,7 +5176,7 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 		t.Fatalf("we should have been able to start the daemon with passing add-registry=%s: %v", reg.url, err)
 	}
 	defer d.Stop()
-	busyboxId := d.getAndTestImageEntry(t, 1, reg.url+"/busybox", "").id
+	busyboxId := d.getAndTestImageEntry(t, 1, "busybox", "").id
 
 	// build image based on hello-world from docker.io
 	_, _, err := d.buildImageWithOut(name, fmt.Sprintf(`
@@ -5190,9 +5190,9 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 	if helloWorldId == busyboxId {
 		t.Fatalf("docker.io/hello-world must have different ID than busybox image")
 	}
-	buildId := d.getAndTestImageEntry(t, 3, reg.url+"/"+name, "").id
+	buildId := d.getAndTestImageEntry(t, 3, name, "").id
 	if buildId == helloWorldId || buildId == busyboxId {
-		t.Fatalf("built image %s must have different ID than other images", reg.url+"/"+name)
+		t.Fatalf("built image %s must have different ID than other images", name)
 	}
 	res, err := d.inspectField(name, "Parent")
 	if err != nil {
@@ -5203,13 +5203,13 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 	}
 
 	// push busybox to additional registry as "library/hello-world" and remove all local images
-	if out, err := d.Cmd("tag", reg.url+"/busybox", reg.url+"/library/hello-world"); err != nil {
-		t.Fatalf("failed to tag image %s: error %v, output %q", reg.url+"/busybox", err, out)
+	if out, err := d.Cmd("tag", "busybox", reg.url+"/library/hello-world"); err != nil {
+		t.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
 	}
 	if out, err := d.Cmd("push", reg.url+"/library/hello-world"); err != nil {
 		t.Fatalf("failed to push image %s: error %v, output %q", reg.url+"/library/hello-world", err, out)
 	}
-	toRemove := []string{reg.url + "/library/hello-world", reg.url + "/busybox", "docker.io/hello-world", reg.url + "/" + name}
+	toRemove := []string{reg.url + "/library/hello-world", "busybox", "hello-world", name}
 	if out, err := d.Cmd("rmi", toRemove...); err != nil {
 		t.Fatalf("failed to remove images %v: %v, output: %s", toRemove, err, out)
 	}
@@ -5225,7 +5225,7 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.getAndTestImageEntry(t, 2, reg.url+"/library/hello-world", busyboxId)
-	d.getAndTestImageEntry(t, 2, reg.url+"/"+name, "")
+	d.getAndTestImageEntry(t, 2, name, "")
 	res, err = d.inspectField(name, "Parent")
 	if err != nil {
 		t.Fatal(err)
@@ -5243,7 +5243,7 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.getAndTestImageEntry(t, 3, "docker.io/hello-world", helloWorldId)
-	d.getAndTestImageEntry(t, 3, reg.url+"/"+name, "")
+	d.getAndTestImageEntry(t, 3, name, "")
 	res, err = d.inspectField(name, "Parent")
 	if err != nil {
 		t.Fatal(err)
@@ -5261,7 +5261,7 @@ func TestBuildWithAdditionalRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.getAndTestImageEntry(t, 3, reg.url+"/library/hello-world", busyboxId)
-	tmpId := d.getAndTestImageEntry(t, 3, reg.url+"/"+name, "").id
+	tmpId := d.getAndTestImageEntry(t, 3, name, "").id
 	if tmpId == buildId || tmpId == busyboxId || tmpId == helloWorldId {
 		t.Fatalf("built image must have unique ID")
 	}
