@@ -153,7 +153,7 @@ func (b *BuilderJob) CmdBuild(job *engine.Job) engine.Status {
 	}
 
 	if repoName != "" {
-		b.Daemon.Repositories().Set(repoName, tag, id, true)
+		b.Daemon.Repositories().Set(repoName, tag, id, true, true)
 	}
 	return engine.StatusOK
 }
