@@ -3304,7 +3304,16 @@ func TestRunWithAdditionalRegistry(t *testing.T) {
 	}
 	defer d.Stop()
 
-	busyboxId := d.getAndTestImageEntry(t, 1, reg.url+"/busybox", "").id
+	busyboxId := d.getAndTestImageEntry(t, 1, "busybox", "").id
+
+	// push busybox to additional registry as "library/hello-world" and remove all local images
+	if out, err := d.Cmd("tag", "busybox", reg.url+"/busybox"); err != nil {
+		t.Fatalf("failed to tag image busybox: error %v, output %q", err, out)
+	}
+	if out, err := d.Cmd("rmi", "busybox"); err != nil {
+		t.Fatalf("failed to remove image busybox: %v, output: %s", err, out)
+	}
+	d.getAndTestImageEntry(t, 1, reg.url+"/busybox", busyboxId)
 
 	// try to run fully qualified image
 	if out, err := d.Cmd("run", "-t", reg.url+"/busybox", "sh", "-c", "echo foo"); err != nil {
@@ -3342,7 +3351,6 @@ func TestRunWithAdditionalRegistry(t *testing.T) {
 	}
 	args := []string{"-f", "busybox", "hello-world", "library/hello-world"}
 	if out, err := d.Cmd("rmi", args...); err != nil {
-		time.Sleep(10000 * time.Minute)
 		t.Fatalf("failed to remove images %v: %v, output: %s", args[1:], err, out)
 	}
 	d.getAndTestImageEntry(t, 0, "", "")

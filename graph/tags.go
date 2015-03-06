@@ -184,6 +184,7 @@ func (store *TagStore) DeleteAll(id string) error {
 }
 
 func (store *TagStore) Delete(repoName, tag string) (bool, error) {
+	deleted := false
 	store.Lock()
 	defer store.Unlock()
 	err := store.reload()
@@ -191,40 +192,28 @@ func (store *TagStore) Delete(repoName, tag string) (bool, error) {
 		return false, err
 	}
 
-	doDelete := func(repo Repository, repoName string) error {
-		if tag != "" {
-			if _, exists2 := repo[tag]; exists2 {
-				delete(repo, tag)
-				if len(repo) == 0 {
-					delete(store.Repositories, repoName)
+	matching := store.getRepositoryList(repoName)
+	for _, namedRepo := range matching {
+		for _, repo := range namedRepo {
+			if tag != "" {
+				if _, exists2 := repo[tag]; exists2 {
+					delete(repo, tag)
+					if len(repo) == 0 {
+						delete(store.Repositories, repoName)
+					}
+					deleted = true
+					break
+				} else {
+					err = fmt.Errorf("No such tag: %s:%s", repoName, tag)
 				}
 			} else {
-				return fmt.Errorf("No such tag: %s:%s", repoName, tag)
+				delete(store.Repositories, repoName)
+				deleted = true
+				break
 			}
-		} else {
-			delete(store.Repositories, repoName)
 		}
-		return nil
-	}
-
-	if repo, exists := store.Repositories[repoName]; exists {
-		if err = doDelete(repo, repoName); err == nil {
+		if deleted == true {
 			return true, store.save()
-		}
-	}
-	if repo, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
-		if err = doDelete(repo, registry.NormalizeLocalName(repoName)); err == nil {
-			return true, store.save()
-		}
-	}
-	if !registry.RepositoryNameHasIndex(repoName) {
-		for i := 1; i < len(registry.RegistryList); i++ {
-			fqn := registry.NormalizeLocalName(registry.RegistryList[i] + "/" + repoName)
-			if repo, exists := store.Repositories[fqn]; exists {
-				if err = doDelete(repo, repoName); err == nil {
-					return true, store.save()
-				}
-			}
 		}
 	}
 
@@ -234,7 +223,7 @@ func (store *TagStore) Delete(repoName, tag string) (bool, error) {
 	return false, fmt.Errorf("No such repository: %s", repoName)
 }
 
-func (store *TagStore) Set(repoName, tag, imageName string, force bool) error {
+func (store *TagStore) Set(repoName, tag, imageName string, force, preserveName bool) error {
 	img, err := store.LookupImage(imageName)
 	store.Lock()
 	defer store.Unlock()
@@ -254,7 +243,9 @@ func (store *TagStore) Set(repoName, tag, imageName string, force bool) error {
 		return err
 	}
 	var repo Repository
-	repoName = registry.NormalizeLocalName(repoName)
+	if !preserveName {
+		repoName = registry.NormalizeLocalName(repoName)
+	}
 	if r, exists := store.Repositories[repoName]; exists {
 		repo = r
 		if old, exists := store.Repositories[repoName][tag]; exists && !force {
@@ -268,45 +259,82 @@ func (store *TagStore) Set(repoName, tag, imageName string, force bool) error {
 	return store.save()
 }
 
+// Get a list of local repositories matching given repository name. If
+// repository is fully qualified, there will be one match at the most.
+// Otherwise results will be sorted in following way:
+//   1. precise match
+//   2. precise match after normalization
+//   3. match after prefixing with default registry name and normalization
+//   4. match against remote name of repository prefixed with non-default registry
+// *Default registry* here means any registry in registry.RegistryList.
+// Returned is a list of maps with just one entry {"repositoryName": Repository}
+func (store *TagStore) getRepositoryList(repoName string) (result []map[string]Repository) {
+	if r, exists := store.Repositories[repoName]; exists {
+		result = []map[string]Repository{
+			map[string]Repository{repoName: r},
+		}
+	}
+	if r, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
+		result = append(result, map[string]Repository{registry.NormalizeLocalName(repoName): r})
+	}
+	if !registry.RepositoryNameHasIndex(repoName) {
+		defaultRegistries := make(map[string]struct{}, len(registry.RegistryList))
+		for i := 0; i < len(registry.RegistryList); i++ {
+			defaultRegistries[registry.RegistryList[i]] = struct{}{}
+			if i < 1 {
+				continue
+			}
+			fqn := registry.NormalizeLocalName(registry.RegistryList[i] + "/" + repoName)
+			if r, exists := store.Repositories[fqn]; exists {
+				result = append(result, map[string]Repository{fqn: r})
+			}
+		}
+		for name, r := range store.Repositories {
+			indexName, remoteName := registry.SplitReposName(name, false)
+			if indexName != "" && remoteName == repoName {
+				if _, exists := defaultRegistries[indexName]; !exists {
+					result = append(result, map[string]Repository{name: r})
+				}
+			}
+		}
+	}
+	return
+}
+
 func (store *TagStore) Get(repoName string) (Repository, error) {
 	store.Lock()
 	defer store.Unlock()
 	if err := store.reload(); err != nil {
 		return nil, err
 	}
-	if r, exists := store.Repositories[repoName]; exists {
-		return r, nil
-	}
-	if r, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
-		return r, nil
-	}
-	if !registry.RepositoryNameHasIndex(repoName) {
-		for i := 1; i < len(registry.RegistryList); i++ {
-			fqn := registry.NormalizeLocalName(registry.RegistryList[i] + "/" + repoName)
-			if r, exists := store.Repositories[fqn]; exists {
-				return r, nil
-			}
+	matching := store.getRepositoryList(repoName)
+	if len(matching) > 0 {
+		for _, repo := range matching[0] {
+			return repo, nil
 		}
 	}
 	return nil, nil
 }
 
 func (store *TagStore) GetImage(repoName, tagOrID string) (*image.Image, error) {
-	repo, err := store.Get(repoName)
 	store.Lock()
 	defer store.Unlock()
-	if err != nil {
-		return nil, err
-	} else if repo == nil {
-		return nil, nil
-	}
-	if revision, exists := repo[tagOrID]; exists {
-		return store.graph.Get(revision)
+	repos := store.getRepositoryList(repoName)
+	for _, namedRepo := range repos {
+		for _, repo := range namedRepo {
+			if revision, exists := repo[tagOrID]; exists {
+				return store.graph.Get(revision)
+			}
+		}
 	}
 	// If no matching tag is found, search through images for a matching image id
-	for _, revision := range repo {
-		if strings.HasPrefix(revision, tagOrID) {
-			return store.graph.Get(revision)
+	for _, namedRepo := range repos {
+		for _, repo := range namedRepo {
+			for _, revision := range repo {
+				if strings.HasPrefix(revision, tagOrID) {
+					return store.graph.Get(revision)
+				}
+			}
 		}
 	}
 	return nil, nil
