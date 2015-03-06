@@ -8,6 +8,7 @@ import (
 
 	"github.com/docker/docker/daemon/graphdriver"
 	_ "github.com/docker/docker/daemon/graphdriver/vfs"
+	"github.com/docker/libcontainer/mount/mode"
 )
 
 func TestRepositoryFindOrCreate(t *testing.T) {
@@ -22,7 +23,7 @@ func TestRepositoryFindOrCreate(t *testing.T) {
 	}
 
 	// no path
-	v, err := repo.FindOrCreateVolume("", true)
+	v, err := repo.FindOrCreateVolume("", mode.ReadWrite())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +36,7 @@ func TestRepositoryFindOrCreate(t *testing.T) {
 
 	// with a non-existant path
 	dir := filepath.Join(root, "doesntexist")
-	v, err = repo.FindOrCreateVolume(dir, true)
+	v, err = repo.FindOrCreateVolume(dir, mode.ReadWrite())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +51,7 @@ func TestRepositoryFindOrCreate(t *testing.T) {
 
 	// with a pre-existing path
 	// can just use the same path from above since it now exists
-	v, err = repo.FindOrCreateVolume(dir, true)
+	v, err = repo.FindOrCreateVolume(dir, mode.ReadWrite())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +72,7 @@ func TestRepositoryGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	v, err := repo.FindOrCreateVolume("", true)
+	v, err := repo.FindOrCreateVolume("", mode.ReadWrite())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func TestRepositoryDelete(t *testing.T) {
 	}
 
 	// with a normal volume
-	v, err := repo.FindOrCreateVolume("", true)
+	v, err := repo.FindOrCreateVolume("", mode.ReadWrite())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +117,7 @@ func TestRepositoryDelete(t *testing.T) {
 
 	// with a bind mount
 	dir := filepath.Join(root, "test")
-	v, err = repo.FindOrCreateVolume(dir, true)
+	v, err = repo.FindOrCreateVolume(dir, mode.ReadWrite())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +136,7 @@ func TestRepositoryDelete(t *testing.T) {
 
 	// with container refs
 	dir = filepath.Join(root, "test")
-	v, err = repo.FindOrCreateVolume(dir, true)
+	v, err = repo.FindOrCreateVolume(dir, mode.ReadWrite())
 	if err != nil {
 		t.Fatal(err)
 	}

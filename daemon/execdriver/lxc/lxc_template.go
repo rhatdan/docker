@@ -89,7 +89,7 @@ lxc.mount.entry = shm {{escapeFstabSpaces $ROOTFS}}/dev/shm tmpfs {{formatMountL
 
 {{range $value := .Mounts}}
 {{$createVal := isDirectory $value.Source}}
-{{if $value.Writable}}
+{{if writable $value }}
 lxc.mount.entry = {{$value.Source}} {{escapeFstabSpaces $ROOTFS}}/{{escapeFstabSpaces $value.Destination}} none rbind,rw,create={{$createVal}} 0 0
 {{else}}
 lxc.mount.entry = {{$value.Source}} {{escapeFstabSpaces $ROOTFS}}/{{escapeFstabSpaces $value.Destination}} none rbind,ro,create={{$createVal}} 0 0
@@ -239,6 +239,10 @@ func getHostname(env []string) string {
 	return ""
 }
 
+func writable(m *execdriver.Mount) bool {
+	return m.Mode.Writable()
+}
+
 func init() {
 	var err error
 	funcMap := template.FuncMap{
@@ -249,6 +253,7 @@ func init() {
 		"keepCapabilities":  keepCapabilities,
 		"dropList":          dropList,
 		"getHostname":       getHostname,
+		"writable":          writable,
 	}
 	LxcTemplateCompiled, err = template.New("lxc").Funcs(funcMap).Parse(LxcTemplate)
 	if err != nil {
