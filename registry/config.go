@@ -305,7 +305,7 @@ func ValidateRepositoryName(reposName string) error {
 	if err = validateNoSchema(reposName); err != nil {
 		return err
 	}
-	indexName, remoteName := splitReposName(reposName, true)
+	indexName, remoteName := SplitReposName(reposName, true)
 	if _, err = ValidateIndexName(indexName); err != nil {
 		return err
 	}
@@ -315,7 +315,7 @@ func ValidateRepositoryName(reposName string) error {
 // RepositoryNameHasIndex determines whether the given reposName has prepended
 // name of index.
 func RepositoryNameHasIndex(reposName string) bool {
-	indexName, _ := splitReposName(reposName, false)
+	indexName, _ := SplitReposName(reposName, false)
 	return indexName != ""
 }
 
@@ -351,10 +351,10 @@ func (index *IndexInfo) GetAuthConfigKey() string {
 	return index.Name
 }
 
-// splitReposName breaks a reposName into an index name and remote name
+// SplitReposName breaks a reposName into an index name and remote name
 // fixMissingIndex says to return current index server name if missing in
 // reposName
-func splitReposName(reposName string, fixMissingIndex bool) (string, string) {
+func SplitReposName(reposName string, fixMissingIndex bool) (string, string) {
 	nameParts := strings.SplitN(reposName, "/", 2)
 	var indexName, remoteName string
 	if len(nameParts) == 1 || (!strings.Contains(nameParts[0], ".") &&
@@ -393,7 +393,7 @@ func (config *ServiceConfig) NewRepositoryInfo(reposName string) (*RepositoryInf
 		return nil, err
 	}
 
-	indexName, remoteName := splitReposName(reposName, true)
+	indexName, remoteName := SplitReposName(reposName, true)
 	if err := validateRemoteName(remoteName); err != nil {
 		return nil, err
 	}
