@@ -121,6 +121,7 @@ type HostConfig struct {
 	SecurityOpt     []string
 	ReadonlyRootfs  bool
 	Ulimits         []*ulimit.Ulimit
+	MountRun        bool
 }
 
 // This is used by the create command when you want to set both the
