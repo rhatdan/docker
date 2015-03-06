@@ -343,6 +343,10 @@ func (container *Container) setupMounts() error {
 		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Writable: true, Private: true})
 	}
 
+	if container.hostConfig.MountRun {
+		mounts = append(mounts, execdriver.Mount{Source: "tmpfs", Destination: "/run", Mode: "w", Private: true})
+	}
+
 	container.command.Mounts = mounts
 	return nil
 }
