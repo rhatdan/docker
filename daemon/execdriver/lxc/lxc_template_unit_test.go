@@ -8,6 +8,7 @@ import (
 	"github.com/docker/docker/daemon/execdriver"
 	nativeTemplate "github.com/docker/docker/daemon/execdriver/native/template"
 	"github.com/docker/libcontainer/devices"
+	"github.com/docker/libcontainer/mount/mode"
 	"github.com/docker/libcontainer/security/capabilities"
 	"github.com/syndtr/gocapability/capability"
 	"io/ioutil"
@@ -205,13 +206,13 @@ func TestCustomLxcConfigMounts(t *testing.T) {
 		{
 			Source:      tempDir,
 			Destination: tempDir,
-			Writable:    false,
+			Mode:        mode.ReadOnly(),
 			Private:     true,
 		},
 		{
 			Source:      tempFile.Name(),
 			Destination: tempFile.Name(),
-			Writable:    true,
+			Mode:        mode.ReadWrite(),
 			Private:     true,
 		},
 	}

@@ -10,6 +10,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/docker/docker/pkg/common"
+	"github.com/docker/libcontainer/mount/mode"
 )
 
 type Repository struct {
@@ -39,7 +40,7 @@ func NewRepository(configPath string, driver graphdriver.Driver) (*Repository, e
 	return repo, repo.restore()
 }
 
-func (r *Repository) newVolume(path string, writable bool) (*Volume, error) {
+func (r *Repository) newVolume(path string, mode mode.Mode) (*Volume, error) {
 	var (
 		isBindMount bool
 		err         error
@@ -67,7 +68,7 @@ func (r *Repository) newVolume(path string, writable bool) (*Volume, error) {
 		ID:          id,
 		Path:        path,
 		repository:  r,
-		Writable:    writable,
+		Mode:        mode,
 		containers:  make(map[string]struct{}),
 		configPath:  r.configPath + "/" + id,
 		IsBindMount: isBindMount,
@@ -179,17 +180,17 @@ func (r *Repository) createNewVolumePath(id string) (string, error) {
 	return path, nil
 }
 
-func (r *Repository) FindOrCreateVolume(path string, writable bool) (*Volume, error) {
+func (r *Repository) FindOrCreateVolume(path string, m mode.Mode) (*Volume, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	if path == "" {
-		return r.newVolume(path, writable)
+		return r.newVolume(path, m)
 	}
 
 	if v := r.get(path); v != nil {
 		return v, nil
 	}
 
-	return r.newVolume(path, writable)
+	return r.newVolume(path, m)
 }
