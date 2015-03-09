@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -372,16 +373,6 @@ func (cli *DockerCli) CmdLogin(args ...string) error {
 		} else {
 			fmt.Fprintf(cli.out, "%s (%s): ", prompt, configDefault)
 		}
-	}
-
-	readInput := func(in io.Reader, out io.Writer) string {
-		reader := bufio.NewReader(in)
-		line, _, err := reader.ReadLine()
-		if err != nil {
-			fmt.Fprintln(out, err.Error())
-			os.Exit(1)
-		}
-		return string(line)
 	}
 
 	cli.LoadConfigFile()
@@ -1285,8 +1276,26 @@ func (cli *DockerCli) CmdImport(args ...string) error {
 	return cli.stream("POST", "/images/create?"+v.Encode(), in, cli.out, nil)
 }
 
+func (cli *DockerCli) confirmPush() bool {
+	const prompt = "Do you really want to push to public registry? [Y/n]: "
+	answer := ""
+	fmt.Fprintln(cli.out, "")
+
+	for answer = ""; answer != "Y" && answer != "n"; {
+		fmt.Fprint(cli.out, prompt)
+		answer = strings.TrimSpace(readInput(cli.in, cli.out))
+	}
+
+	if answer == "n" {
+		fmt.Fprintln(cli.out, "Nothing pushed.")
+	}
+
+	return answer == "Y"
+}
+
 func (cli *DockerCli) CmdPush(args ...string) error {
 	cmd := cli.Subcmd("push", "NAME[:TAG]", "Push an image or a repository to the registry", true)
+	force := cmd.Bool([]string{"f", "-force"}, false, "Push to public registry without confirmation")
 	cmd.Require(flag.Exact, 1)
 
 	utils.ParseFlags(cmd, args, true)
@@ -1318,8 +1327,27 @@ func (cli *DockerCli) CmdPush(args ...string) error {
 
 	v := url.Values{}
 	v.Set("tag", tag)
+	v.Set("tag", tag)
+	if *force {
+		v.Set("force", "1")
+	}
 
-	_, _, err = cli.clientRequestAttemptLogin("POST", "/images/"+remote+"/push?"+v.Encode(), nil, cli.out, repoInfo.Index, "push")
+	push := func(v url.Values) error {
+		_, _, err := cli.clientRequestAttemptLogin("POST", "/images/"+remote+"/push?"+v.Encode(), nil, cli.out, repoInfo.Index, "push")
+		return err
+	}
+	if err := push(v); err != nil {
+		if v.Get("force") != "1" && strings.Contains(err.Error(), "Status 403") {
+			if !cli.confirmPush() {
+				return nil
+			}
+			v.Set("force", "1")
+			if err = push(v); err == nil {
+				return nil
+			}
+		}
+		return err
+	}
 	return err
 }
 
@@ -2077,7 +2105,7 @@ func (cli *DockerCli) CmdSearch(args ...string) error {
 
 	utils.ParseFlags(cmd, args, true)
 
-	name = cmd.Arg(0)
+	name := cmd.Arg(0)
 	v := url.Values{}
 	v.Set("term", name)
 	if *noIndex {
