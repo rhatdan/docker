@@ -505,6 +505,13 @@ func (s *TagStore) CmdPush(job *engine.Job) engine.Status {
 	tag := job.Getenv("tag")
 	job.GetenvJson("authConfig", authConfig)
 	job.GetenvJson("metaHeaders", &metaHeaders)
+	force := job.GetenvBool("force")
+
+	if repoInfo.Index.Official && !force {
+		return job.Errorf("Error: Status 403 trying to push repository %s to official registry: needs to be forced", localName)
+	} else if repoInfo.Index.Official && force {
+		log.Infof("Push of %s to official registry has been forced", localName)
+	}
 
 	if _, err := s.poolAdd("push", repoInfo.LocalName); err != nil {
 		return job.Error(err)
