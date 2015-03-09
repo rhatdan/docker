@@ -166,10 +166,13 @@ func searchTerm(job *engine.Job, outs *engine.Table, term string) error {
 	}
 	for _, result := range results.Results {
 		out := &engine.Env{}
-		indexName, remoteName := SplitReposName(result.Name, false)
-		if indexName == "" {
-			indexName = repoInfo.Index.Name
+		// Check if search result has is fully qualified with registry
+		// If not, assume REGISTRY = INDEX
+		if !RepositoryNameHasIndex(result.Name) {
+			result.Name = repoInfo.Index.Name + "/" + result.Name
 		}
+		// Now prepend 'INDEX: ' to the result to identify in which INDEX the result was found.
+		indexName := repoInfo.Index.Name
 		if host, _, err := net.SplitHostPort(indexName); err == nil {
 			indexName = host
 		}
@@ -182,7 +185,7 @@ func searchTerm(job *engine.Job, outs *engine.Table, term string) error {
 			}
 		}
 		if indexName != "" {
-			result.Name = indexName + ": " + remoteName
+			result.Name = indexName + ": " + result.Name
 		}
 		out.Import(result)
 		outs.Add(out)
