@@ -299,6 +299,16 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	return err
 }
 
+func readInput(in io.Reader, out io.Writer) string {
+	reader := bufio.NewReader(in)
+	line, _, err := reader.ReadLine()
+	if err != nil {
+		fmt.Fprintln(out, err.Error())
+		os.Exit(1)
+	}
+	return string(line)
+}
+
 // 'docker login': login / register a user to registry service.
 func (cli *DockerCli) CmdLogin(args ...string) error {
 	cmd := cli.Subcmd("login", "[SERVER]", "Register or log in to a Docker registry server, if no server is\nspecified \""+registry.IndexServerAddress("")+"\" is the default.", true)
@@ -323,16 +333,6 @@ func (cli *DockerCli) CmdLogin(args ...string) error {
 		} else {
 			fmt.Fprintf(cli.out, "%s (%s): ", prompt, configDefault)
 		}
-	}
-
-	readInput := func(in io.Reader, out io.Writer) string {
-		reader := bufio.NewReader(in)
-		line, _, err := reader.ReadLine()
-		if err != nil {
-			fmt.Fprintln(out, err.Error())
-			os.Exit(1)
-		}
-		return string(line)
 	}
 
 	cli.LoadConfigFile()
@@ -1221,8 +1221,26 @@ func (cli *DockerCli) CmdImport(args ...string) error {
 	return cli.stream("POST", "/images/create?"+v.Encode(), in, cli.out, nil)
 }
 
+func (cli *DockerCli) confirmPush() bool {
+	const prompt = "Do you really want to push to public registry? [Y/n]: "
+	answer := ""
+	fmt.Fprintln(cli.out, "")
+
+	for answer = ""; answer != "Y" && answer != "n"; {
+		fmt.Fprint(cli.out, prompt)
+		answer = strings.TrimSpace(readInput(cli.in, cli.out))
+	}
+
+	if answer == "n" {
+		fmt.Fprintln(cli.out, "Nothing pushed.")
+	}
+
+	return answer == "Y"
+}
+
 func (cli *DockerCli) CmdPush(args ...string) error {
 	cmd := cli.Subcmd("push", "NAME[:TAG]", "Push an image or a repository to the registry", true)
+	force := cmd.Bool([]string{"f", "-force"}, false, "Push to public registry without confirmation")
 	cmd.Require(flag.Exact, 1)
 
 	utils.ParseFlags(cmd, args, true)
@@ -1254,6 +1272,9 @@ func (cli *DockerCli) CmdPush(args ...string) error {
 
 	v := url.Values{}
 	v.Set("tag", tag)
+	if *force {
+		v.Set("force", "1")
+	}
 
 	push := func(authConfig registry.AuthConfig) error {
 		buf, err := json.Marshal(authConfig)
@@ -1270,6 +1291,15 @@ func (cli *DockerCli) CmdPush(args ...string) error {
 	}
 
 	if err := push(authConfig); err != nil {
+		if v.Get("force") != "1" && strings.Contains(err.Error(), "Status 403") {
+			if !cli.confirmPush() {
+				return nil
+			}
+			v.Set("force", "1")
+			if err = push(authConfig); err == nil {
+				return nil
+			}
+		}
 		if strings.Contains(err.Error(), "Status 401") {
 			fmt.Fprintln(cli.out, "\nPlease login prior to push:")
 			if err := cli.CmdLogin(repoInfo.Index.GetAuthConfigKey()); err != nil {
