@@ -160,6 +160,7 @@ type Daemon struct {
 	gidMaps                   []idtools.IDMap
 	layerStore                layer.Store
 	imageStore                image.Store
+	confirmDefPush            bool
 }
 
 // GetContainer looks for a container using the provided information, which could be
@@ -861,6 +862,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 	d.root = config.Root
 	d.uidMaps = uidMaps
 	d.gidMaps = gidMaps
+	d.confirmDefPush = config.ConfirmDefPush
 
 	if err := d.cleanupMounts(); err != nil {
 		return nil, err
@@ -1111,7 +1113,7 @@ func (daemon *Daemon) ExportImage(names []string, outStream io.Writer) error {
 }
 
 // PushImage initiates a push operation on the repository named localName.
-func (daemon *Daemon) PushImage(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error {
+func (daemon *Daemon) PushImage(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig, force bool, outStream io.Writer) error {
 	// Include a buffer so that slow client connections don't affect
 	// transfer performance.
 	progressChan := make(chan progress.Progress, 100)
@@ -1137,6 +1139,8 @@ func (daemon *Daemon) PushImage(ref reference.Named, metaHeaders map[string][]st
 		TagStore:        daemon.tagStore,
 		TrustKey:        daemon.trustKey,
 		UploadManager:   daemon.uploadManager,
+		ConfirmDefPush:  daemon.confirmDefPush,
+		Force:           force,
 	}
 
 	err := distribution.Push(ctx, ref, imagePushConfig)
