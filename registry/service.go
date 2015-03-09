@@ -165,7 +165,11 @@ func searchTerm(job *engine.Job, outs *engine.Table, term string) error {
 	}
 	for _, result := range results.Results {
 		out := &engine.Env{}
-		result.Name = repoInfo.Index.Name + "/" + result.Name
+		if ! RepositoryNameHasIndex(result.Name) {
+			result.Name = repoInfo.Index.Name + "/" + result.Name
+		}
+		IndexNameSubStrings := strings.Split(strings.Split(repoInfo.Index.Name,":")[0],".")
+		result.Name = IndexNameSubStrings[len(IndexNameSubStrings)-2] + "." + IndexNameSubStrings[len(IndexNameSubStrings)-1] + ": " + result.Name
 		out.Import(result)
 		outs.Add(out)
 	}
