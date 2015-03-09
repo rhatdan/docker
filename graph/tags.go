@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/events"
 	"github.com/docker/docker/graph/tags"
 	"github.com/docker/docker/image"
@@ -44,6 +45,7 @@ type TagStore struct {
 	registryService *registry.Service
 	eventsService   *events.Events
 	trustService    *trust.TrustStore
+	ConfirmDefPush  bool
 }
 
 type Repository map[string]string
@@ -67,11 +69,12 @@ func (r Repository) Contains(u Repository) bool {
 }
 
 type TagStoreConfig struct {
-	Graph    *Graph
-	Key      libtrust.PrivateKey
-	Registry *registry.Service
-	Events   *events.Events
-	Trust    *trust.TrustStore
+	Graph          *Graph
+	Key            libtrust.PrivateKey
+	Registry       *registry.Service
+	Events         *events.Events
+	Trust          *trust.TrustStore
+	ConfirmDefPush bool
 }
 
 func NewTagStore(path string, cfg *TagStoreConfig) (*TagStore, error) {
@@ -90,6 +93,7 @@ func NewTagStore(path string, cfg *TagStoreConfig) (*TagStore, error) {
 		registryService: cfg.Registry,
 		eventsService:   cfg.Events,
 		trustService:    cfg.Trust,
+		ConfirmDefPush:  cfg.ConfirmDefPush,
 	}
 	// Load the json file if it exists, otherwise create it.
 	if err := store.reload(); os.IsNotExist(err) {
@@ -98,6 +102,12 @@ func NewTagStore(path string, cfg *TagStoreConfig) (*TagStore, error) {
 		}
 	} else if err != nil {
 		return nil, err
+	}
+	if store.ConfirmDefPush != cfg.ConfirmDefPush {
+		store.ConfirmDefPush = cfg.ConfirmDefPush
+		if err := store.save(); err != nil {
+			logrus.Warnf("Failed to write TagStore configuration to %s: %v", abspath, err)
+		}
 	}
 	return store, nil
 }
