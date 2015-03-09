@@ -2,6 +2,7 @@ package registry
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -165,7 +166,24 @@ func searchTerm(job *engine.Job, outs *engine.Table, term string) error {
 	}
 	for _, result := range results.Results {
 		out := &engine.Env{}
-		result.Name = repoInfo.Index.Name + "/" + result.Name
+		indexName, remoteName := splitReposName(result.Name, false)
+		if indexName == "" {
+			indexName = repoInfo.Index.Name
+		}
+		if host, _, err := net.SplitHostPort(indexName); err == nil {
+			indexName = host
+		}
+		// do not shorten ip address
+		if net.ParseIP(indexName) == nil {
+			// shorten index name just to the last 2 components (`DOMAIN.TLD`)
+			indexNameSubStrings := strings.Split(indexName, ".")
+			if len(indexNameSubStrings) > 2 {
+				indexName = strings.Join(indexNameSubStrings[len(indexNameSubStrings)-2:], ".")
+			}
+		}
+		if indexName != "" {
+			result.Name = indexName + ": " + remoteName
+		}
 		out.Import(result)
 		outs.Add(out)
 	}
