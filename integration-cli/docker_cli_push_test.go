@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -137,4 +139,126 @@ func (s *DockerRegistrySuite) TestPushEmptyLayer(c *check.C) {
 	if out, _, err := runCommandWithOutput(pushCmd); err != nil {
 		c.Fatalf("pushing the image to the private registry has failed: %s, %v", out, err)
 	}
+}
+
+func (s *DockerSuite) TestPushToPublicRegistry(c *check.C) {
+	const (
+		confirmText  = "want to push to public registry? [y/n]"
+		farewellText = "nothing pushed."
+	)
+	repoName := "docker.io/dockercli/busybox"
+	// tag the image to upload it to the private registry
+	tagCmd := exec.Command(dockerBinary, "tag", "busybox", repoName)
+	if out, _, err := runCommandWithOutput(tagCmd); err != nil {
+		c.Fatalf("image tagging failed: %s, %v", out, err)
+	}
+	defer deleteImages(repoName)
+
+	// `sayNo` says whether to terminate communication with negative answer or
+	// by closing input stream
+	runTest := func(pushCmd *exec.Cmd, sayNo bool) {
+		stdin, err := pushCmd.StdinPipe()
+		if err != nil {
+			c.Fatalf("Failed to get stdin pipe for process: %v", err)
+		}
+		stdout, err := pushCmd.StdoutPipe()
+		if err != nil {
+			c.Fatalf("Failed to get stdout pipe for process: %v", err)
+		}
+		stderr, err := pushCmd.StderrPipe()
+		if err != nil {
+			c.Fatalf("Failed to get stderr pipe for process: %v", err)
+		}
+		if err := pushCmd.Start(); err != nil {
+			c.Fatalf("Failed to start pushing to private registry: %v", err)
+		}
+
+		outReader := bufio.NewReader(stdout)
+
+		readConfirmText := func(out *bufio.Reader) {
+			line, err := out.ReadBytes(']')
+			if err != nil {
+				c.Fatalf("Failed to read a confirmation text for a push: %v", err)
+			}
+			if !strings.HasSuffix(strings.ToLower(string(line)), confirmText) {
+				c.Fatalf("Expected confirmation text %q, not: %q", confirmText, line)
+			}
+			buf := make([]byte, 4)
+			n, err := out.Read(buf)
+			if err != nil {
+				c.Fatalf("Failed to read confirmation text for a push: %v", err)
+			}
+			if n > 2 || n < 1 || buf[0] != ':' {
+				c.Fatalf("Got unexpected line ending: %q", string(buf))
+			}
+		}
+		readConfirmText(outReader)
+
+		stdin.Write([]byte("\n"))
+		readConfirmText(outReader)
+		stdin.Write([]byte("  \n"))
+		readConfirmText(outReader)
+		stdin.Write([]byte("foo\n"))
+		readConfirmText(outReader)
+		stdin.Write([]byte("no\n"))
+		readConfirmText(outReader)
+		if sayNo {
+			stdin.Write([]byte(" n \n"))
+		} else {
+			stdin.Close()
+		}
+
+		line, isPrefix, err := outReader.ReadLine()
+		if err != nil {
+			c.Fatalf("Failed to read farewell: %v", err)
+		}
+		if isPrefix {
+			c.Errorf("Got unexpectedly long output.")
+		}
+		lowered := strings.ToLower(string(line))
+		if sayNo {
+			if !strings.HasSuffix(lowered, farewellText) {
+				c.Errorf("Expected farewell %q, not: %q", farewellText, string(line))
+			}
+			if strings.Contains(lowered, confirmText) {
+				c.Errorf("God unexpected confirmation text: %q", string(line))
+			}
+		} else {
+			if lowered != "eof" {
+				c.Errorf("Expected \"EOF\" not: %q", string(line))
+			}
+			if line, _, err = outReader.ReadLine(); err != io.EOF {
+				c.Errorf("Expected EOF, not: %q", line)
+			}
+		}
+		if line, _, err = outReader.ReadLine(); err != io.EOF {
+			c.Errorf("Expected EOF, not: %q", line)
+		}
+		errReader := bufio.NewReader(stderr)
+		for ; err != io.EOF; line, _, err = errReader.ReadLine() {
+			c.Errorf("Expected no message on stderr, got: %q", string(line))
+		}
+
+		// Wait for command to finish with short timeout.
+		finish := make(chan struct{})
+		go func() {
+			if err := pushCmd.Wait(); err != nil && sayNo {
+				c.Error(err)
+			} else if err == nil && !sayNo {
+				c.Errorf("Process should have failed after closing input stream.")
+			}
+			close(finish)
+		}()
+		select {
+		case <-finish:
+		case <-time.After(500 * time.Millisecond):
+			cause := "standard input close"
+			if sayNo {
+				cause = "negative answer"
+			}
+			c.Fatalf("Docker push failed to exit on %s.", cause)
+		}
+	}
+	runTest(exec.Command(dockerBinary, "push", repoName), false)
+	runTest(exec.Command(dockerBinary, "push", repoName), true)
 }

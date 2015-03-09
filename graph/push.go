@@ -29,6 +29,7 @@ type ImagePushConfig struct {
 	MetaHeaders map[string][]string
 	AuthConfig  *cliconfig.AuthConfig
 	Tag         string
+	Force       bool
 	Json        bool
 	OutStream   io.Writer
 }
@@ -502,6 +503,12 @@ func (s *TagStore) Push(localName string, imagePushConfig *ImagePushConfig) erro
 	repoInfo, err := s.registryService.ResolveRepository(localName)
 	if err != nil {
 		return err
+	}
+
+	if repoInfo.Index.Official && !imagePushConfig.Force {
+		return fmt.Errorf("Error: Status 403 trying to push repository %s to official registry: needs to be forced", localName)
+	} else if repoInfo.Index.Official && imagePushConfig.Force {
+		logrus.Infof("Push of %s to official registry has been forced", localName)
 	}
 
 	if _, err := s.poolAdd("push", repoInfo.LocalName); err != nil {
