@@ -184,7 +184,6 @@ func (store *TagStore) DeleteAll(id string) error {
 }
 
 func (store *TagStore) Delete(repoName, tag string) (bool, error) {
-	deleted := false
 	store.Lock()
 	defer store.Unlock()
 	err := store.reload()
@@ -194,12 +193,13 @@ func (store *TagStore) Delete(repoName, tag string) (bool, error) {
 
 	matching := store.getRepositoryList(repoName)
 	for _, namedRepo := range matching {
-		for _, repo := range namedRepo {
+		deleted := false
+		for name, repo := range namedRepo {
 			if tag != "" {
 				if _, exists2 := repo[tag]; exists2 {
 					delete(repo, tag)
 					if len(repo) == 0 {
-						delete(store.Repositories, repoName)
+						delete(store.Repositories, name)
 					}
 					deleted = true
 					break
@@ -207,12 +207,12 @@ func (store *TagStore) Delete(repoName, tag string) (bool, error) {
 					err = fmt.Errorf("No such tag: %s:%s", repoName, tag)
 				}
 			} else {
-				delete(store.Repositories, repoName)
+				delete(store.Repositories, name)
 				deleted = true
 				break
 			}
 		}
-		if deleted == true {
+		if deleted {
 			return true, store.save()
 		}
 	}
