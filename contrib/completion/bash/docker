@@ -131,6 +131,7 @@ __docker_capabilities() {
 		ALL
 		AUDIT_CONTROL
 		AUDIT_WRITE
+		AUDIT_READ
 		BLOCK_SUSPEND
 		CHOWN
 		DAC_OVERRIDE
@@ -255,11 +256,15 @@ _docker_build() {
 			__docker_image_repos_and_tags
 			return
 			;;
+		--file|-f)
+			_filedir
+			return	
+			;;	
 	esac
 
 	case "$cur" in
 		-*)
-			COMPREPLY=( $( compgen -W "--force-rm --no-cache --quiet -q --rm --tag -t" -- "$cur" ) )
+			COMPREPLY=( $( compgen -W "--file -f --force-rm --no-cache --quiet -q --rm --tag -t" -- "$cur" ) )
 			;;
 		*)
 			local counter="$(__docker_pos_first_nonflag '--tag|-t')"
@@ -334,14 +339,38 @@ _docker_diff() {
 
 _docker_events() {
 	case "$prev" in
-		--since)
+		--filter|-f)
+			COMPREPLY=( $( compgen -S = -W "container event image" -- "$cur" ) )
+			compopt -o nospace
+			return
+			;;
+		--since|--until)
+			return
+			;;
+	esac
+
+	# "=" gets parsed to a word and assigned to either $cur or $prev depending on whether
+	# it is the last character or not. So we search for "xxx=" in the the last two words.
+	case "${words[$cword-2]}$prev=" in
+		*container=*)
+			cur="${cur#=}"
+			__docker_containers_all
+			return
+			;;
+		*event=*)
+			COMPREPLY=( $( compgen -W "create destroy die export kill pause restart start stop unpause" -- "${cur#=}" ) )
+			return
+			;;
+		*image=*)
+			cur="${cur#=}"
+			__docker_image_repos_and_tags_and_ids
 			return
 			;;
 	esac
 
 	case "$cur" in
 		-*)
-			COMPREPLY=( $( compgen -W "--since" -- "$cur" ) )
+			COMPREPLY=( $( compgen -W "--filter -f --since --until" -- "$cur" ) )
 			;;
 	esac
 }
@@ -623,21 +652,26 @@ _docker_run() {
 		--lxc-conf
 		--mac-address
 		--memory -m
+		--memory-swap
 		--name
 		--net
+		--pid
 		--publish -p
 		--restart
 		--security-opt
 		--user -u
+		--ulimit
 		--volumes-from
 		--volume -v
 		--workdir -w
 	"
 
 	local all_options="$options_with_args
+		--help
 		--interactive -i
 		--privileged
 		--publish-all -P
+		--read-only
 		--tty -t
 	"
 
@@ -941,6 +975,7 @@ _docker() {
 	local main_options_with_args="
 		--bip
 		--bridge -b
+		--default-ulimit
 		--dns
 		--dns-search
 		--exec-driver -e

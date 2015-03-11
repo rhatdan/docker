@@ -757,12 +757,15 @@ Supported `Dockerfile` instructions: `CMD`, `ENTRYPOINT`, `ENV`, `EXPOSE`,
 
 ## cp
 
-Copy files/folders from a container's filesystem to the host
-path.  Paths are relative to the root of the filesystem.
+Copy files/folders from a container's filesystem to the
+path.  Use '-' to write the data as a tar file to STDOUT.
+Paths are relative to the root of the filesystem.
 
-    Usage: docker cp CONTAINER:PATH HOSTPATH
+    Usage: docker cp CONTAINER:PATH HOSTPATH|-
 
-    Copy files/folders from the PATH to the HOSTPATH
+    Copy files/folders from the PATH to the HOSTPATH. Use '-' to write the data
+	as a tar file to STDOUT.
+
 
 ## create
 
@@ -799,7 +802,7 @@ Creates a new container.
       -p, --publish=[]           Publish a container's port(s) to the host
       --privileged=false         Give extended privileges to this container
       --read-only=false          Mount the container's root filesystem as read only
-      --restart=""               Restart policy to apply when a container exits
+      --restart="no"             Restart policy to apply when a container exits
       --security-opt=[]          Security Options
       -t, --tty=false            Allocate a pseudo-TTY
       -u, --user=""              Username or UID
@@ -817,7 +820,8 @@ container at any point.
 This is useful when you want to set up a container configuration ahead
 of time so that it is ready to start when you need it.
 
-Please see the [run command](#run) section for more details.
+Please see the [run command](#run) section and the [Docker run reference](
+/reference/run/) for more details.
 
 #### Examples
 
@@ -986,6 +990,12 @@ You'll need two shells for this example.
     2014-09-03T15:49:29.999999999Z07:00 7805c1d35632: (from redis:2.8) stop
 
     $ sudo docker events --filter 'container=7805c1d35632' --filter 'event=stop'
+    2014-09-03T15:49:29.999999999Z07:00 7805c1d35632: (from redis:2.8) stop
+
+    $ sudo docker events --filter 'container=container_1' --filter 'container=container_2'
+    2014-09-03T15:49:29.999999999Z07:00 4386fb97867d: (from ubuntu-1:14.04) die
+    2014-05-10T17:42:14.999999999Z07:00 4386fb97867d: (from ubuntu-1:14.04) stop
+    2014-05-10T17:42:14.999999999Z07:00 7805c1d35632: (from redis:2.8) die
     2014-09-03T15:49:29.999999999Z07:00 7805c1d35632: (from redis:2.8) stop
 
 ## exec
@@ -1241,6 +1251,9 @@ For example:
     EventsListeners: 0
     Init Path: /usr/bin/docker
     Docker Root Dir: /var/lib/docker
+    Http Proxy: http://test:test@localhost:8080
+    Https Proxy: https://test:test@localhost:8080
+    No Proxy: 9.81.1.160
     Username: svendowideit
     Registry: [https://index.docker.io/v1/]
     Labels:
@@ -1928,41 +1941,56 @@ application change:
 
 #### Restart Policies
 
-Using the `--restart` flag on Docker run you can specify a restart policy for
-how a container should or should not be restarted on exit.
+Use Docker's `--restart` to specify a container's *restart policy*. A restart 
+policy controls whether the Docker daemon restarts a container after exit.
+Docker supports the following restart policies:
 
-An ever increasing delay (double the previous delay, starting at 100 milliseconds)
-is added before each restart to prevent flooding the server. This means the daemaon
-will wait for 100 mS, then 200 mS, 400, 800, 1600, and so on until either the
-`on-failure` limit is hit, or when you `docker stop` or even `docker rm -f`
-the container.
-
-When a restart policy is active on a container, it will be shown in `docker ps`
-as either `Up` or `Restarting` in `docker ps`. It can also be useful to use
-`docker events` to see the restart policy in effect.
-
-** no ** - Do not restart the container when it exits.
-
-** on-failure ** - Restart the container only if it exits with a non zero exit status.
-
-** always ** - Always restart the container regardless of the exit status.
-
-You can also specify the maximum amount of times Docker will try to
-restart the container when using the ** on-failure ** policy.  The
-default is that Docker will try forever to restart the container.
+<table>
+  <thead>
+    <tr>
+      <th>Policy</th>
+      <th>Result</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>no</strong></td>
+      <td>
+        Do not automatically restart the container when it exits. This is the 
+        default.
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <span style="white-space: nowrap">
+          <strong>on-failure</strong>[:max-retries]
+        </span>
+      </td>
+      <td>
+        Restart only if the container exits with a non-zero exit status.
+        Optionally, limit the number of restart retries the Docker 
+        daemon attempts.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>always</strong></td>
+      <td>
+        Always restart the container regardless of the exit status.
+        When you specify always, the Docker daemon will try to restart
+        the container indefinitely.
+      </td>
+    </tr>
+  </tbody>
+</table>
 
     $ sudo docker run --restart=always redis
 
-This will run the `redis` container with a restart policy of ** always ** so that if
-the container exits, Docker will restart it.
+This will run the `redis` container with a restart policy of **always**
+so that if the container exits, Docker will restart it.
 
-    $ sudo docker run --restart=on-failure:10 redis
-
-This will run the `redis` container with a restart policy of **
-on-failure ** and a maximum restart count of 10.  If the `redis`
-container exits with a non-zero exit status more than 10 times in a row
-Docker will abort trying to restart the container.  Providing a maximum
-restart limit is only valid for the ** on-failure ** policy.
+More detailed information on restart policies can be found in the 
+[Restart Policies (--restart)](/reference/run/#restart-policies-restart) section
+of the Docker run reference page.
 
 ### Adding entries to a container hosts file
 
@@ -2063,7 +2091,7 @@ more details on finding shared images from the command line.
 
     Usage: docker start [OPTIONS] CONTAINER [CONTAINER...]
 
-    Restart a stopped container
+    Start one or more stopped containers
 
       -a, --attach=false         Attach STDOUT/STDERR and forward signals
       -i, --interactive=false    Attach container's STDIN

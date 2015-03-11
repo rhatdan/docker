@@ -495,6 +495,12 @@ Inspect changes on container `id`'s filesystem
              }
         ]
 
+Values for `Kind`:
+
+- `0`: Modify
+- `1`: Add
+- `2`: Delete
+
 Status Codes:
 
 -   **200** – no error
@@ -1455,6 +1461,9 @@ Display system-wide information
              "IPv4Forwarding":true,
              "Labels":["storage=ssd"],
              "DockerRootDir": "/var/lib/docker",
+             "HttpProxy": "http://test:test@localhost:8080"
+             "HttpsProxy": "https://test:test@localhost:8080"
+             "NoProxy": "9.81.1.160"
              "OperatingSystem": "Boot2Docker",
         }
 

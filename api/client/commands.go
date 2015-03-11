@@ -37,6 +37,7 @@ import (
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/homedir"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/pkg/networkfs/resolvconf"
 	"github.com/docker/docker/pkg/parsers"
 	"github.com/docker/docker/pkg/parsers/filters"
 	"github.com/docker/docker/pkg/promise"
@@ -344,6 +345,7 @@ func (cli *DockerCli) CmdLogin(args ...string) error {
 	if username == "" {
 		promptDefault("Username", authconfig.Username)
 		username = readInput(cli.in, cli.out)
+		username = strings.Trim(username, " ")
 		if username == "" {
 			username = authconfig.Username
 		}
@@ -590,7 +592,15 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 			fmt.Fprintf(cli.out, "Docker Root Dir: %s\n", root)
 		}
 	}
-
+	if remoteInfo.Exists("HttpProxy") {
+		fmt.Fprintf(cli.out, "Http Proxy: %s\n", remoteInfo.Get("HttpProxy"))
+	}
+	if remoteInfo.Exists("HttpsProxy") {
+		fmt.Fprintf(cli.out, "Https Proxy: %s\n", remoteInfo.Get("HttpsProxy"))
+	}
+	if remoteInfo.Exists("NoProxy") {
+		fmt.Fprintf(cli.out, "No Proxy: %s\n", remoteInfo.Get("NoProxy"))
+	}
 	if len(remoteInfo.GetList("IndexServerAddress")) != 0 {
 		cli.LoadConfigFile()
 		u := cli.configFile.Configs[remoteInfo.Get("IndexServerAddress")].Username
@@ -695,7 +705,7 @@ func (cli *DockerCli) CmdStart(args ...string) error {
 		cErr chan error
 		tty  bool
 
-		cmd       = cli.Subcmd("start", "CONTAINER [CONTAINER...]", "Restart a stopped container", true)
+		cmd       = cli.Subcmd("start", "CONTAINER [CONTAINER...]", "Start one or more stopped containers", true)
 		attach    = cmd.Bool([]string{"a", "-attach"}, false, "Attach STDOUT/STDERR and forward signals")
 		openStdin = cmd.Bool([]string{"i", "-interactive"}, false, "Attach container's STDIN")
 	)
@@ -704,6 +714,16 @@ func (cli *DockerCli) CmdStart(args ...string) error {
 	utils.ParseFlags(cmd, args, true)
 
 	hijacked := make(chan io.Closer)
+	// Block the return until the chan gets closed
+	defer func() {
+		log.Debugf("CmdStart() returned, defer waiting for hijack to finish.")
+		if _, ok := <-hijacked; ok {
+			log.Errorf("Hijack did not finish (chan still open)")
+		}
+		if *openStdin || *attach {
+			cli.in.Close()
+		}
+	}()
 
 	if *attach || *openStdin {
 		if cmd.NArg() > 1 {
@@ -760,25 +780,26 @@ func (cli *DockerCli) CmdStart(args ...string) error {
 			return err
 		}
 	}
-
 	var encounteredError error
 	for _, name := range cmd.Args() {
 		_, _, err := readBody(cli.call("POST", "/containers/"+name+"/start", nil, false))
 		if err != nil {
 			if !*attach && !*openStdin {
+				// attach and openStdin is false means it could be starting multiple containers
+				// when a container start failed, show the error message and start next
 				fmt.Fprintf(cli.err, "%s\n", err)
+				encounteredError = fmt.Errorf("Error: failed to start one or more containers")
+			} else {
+				encounteredError = err
 			}
-			encounteredError = fmt.Errorf("Error: failed to start one or more containers")
 		} else {
 			if !*attach && !*openStdin {
 				fmt.Fprintf(cli.out, "%s\n", name)
 			}
 		}
 	}
+
 	if encounteredError != nil {
-		if *openStdin || *attach {
-			cli.in.Close()
-		}
 		return encounteredError
 	}
 
@@ -2244,6 +2265,18 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 	if err != nil {
 		utils.ReportError(cmd, err.Error(), true)
 	}
+
+	if len(hostConfig.Dns) > 0 {
+		// check the DNS settings passed via --dns against
+		// localhost regexp to warn if they are trying to
+		// set a DNS to a localhost address
+		for _, dnsIP := range hostConfig.Dns {
+			if resolvconf.IsLocalhost(dnsIP) {
+				fmt.Fprintf(cli.err, "WARNING: Localhost DNS setting (--dns=%s) may fail in containers.\n", dnsIP)
+				break
+			}
+		}
+	}
 	if config.Image == "" {
 		cmd.Usage()
 		return nil
@@ -2415,7 +2448,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 }
 
 func (cli *DockerCli) CmdCp(args ...string) error {
-	cmd := cli.Subcmd("cp", "CONTAINER:PATH HOSTPATH", "Copy files/folders from the PATH to the HOSTPATH", true)
+	cmd := cli.Subcmd("cp", "CONTAINER:PATH HOSTPATH|-", "Copy files/folders from the PATH to the HOSTPATH. Use '-' to write the data\nas a tar file to STDOUT.", true)
 	cmd.Require(flag.Exact, 2)
 
 	utils.ParseFlags(cmd, args, true)
@@ -2442,7 +2475,14 @@ func (cli *DockerCli) CmdCp(args ...string) error {
 	}
 
 	if statusCode == 200 {
-		if err := archive.Untar(stream, copyData.Get("HostPath"), &archive.TarOptions{NoLchown: true}); err != nil {
+		dest := copyData.Get("HostPath")
+
+		if dest == "-" {
+			_, err = io.Copy(cli.out, stream)
+		} else {
+			err = archive.Untar(stream, dest, &archive.TarOptions{NoLchown: true})
+		}
+		if err != nil {
 			return err
 		}
 	}

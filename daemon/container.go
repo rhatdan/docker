@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/docker/libcontainer"
+	"github.com/docker/libcontainer/configs"
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/label"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/broadcastwriter"
 	"github.com/docker/docker/pkg/common"
+	"github.com/docker/docker/pkg/directory"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/networkfs/etchosts"
 	"github.com/docker/docker/pkg/networkfs/resolvconf"
@@ -258,18 +261,18 @@ func populateCommand(c *Container, env []string) error {
 	pid.HostPid = c.hostConfig.PidMode.IsHost()
 
 	// Build lists of devices allowed and created within the container.
-	userSpecifiedDevices := make([]*devices.Device, len(c.hostConfig.Devices))
+	userSpecifiedDevices := make([]*configs.Device, len(c.hostConfig.Devices))
 	for i, deviceMapping := range c.hostConfig.Devices {
-		device, err := devices.GetDevice(deviceMapping.PathOnHost, deviceMapping.CgroupPermissions)
+		device, err := devices.DeviceFromPath(deviceMapping.PathOnHost, deviceMapping.CgroupPermissions)
 		if err != nil {
 			return fmt.Errorf("error gathering device information while adding custom device %q: %s", deviceMapping.PathOnHost, err)
 		}
 		device.Path = deviceMapping.PathInContainer
 		userSpecifiedDevices[i] = device
 	}
-	allowedDevices := append(devices.DefaultAllowedDevices, userSpecifiedDevices...)
+	allowedDevices := append(configs.DefaultAllowedDevices, userSpecifiedDevices...)
 
-	autoCreatedDevices := append(devices.DefaultAutoCreatedDevices, userSpecifiedDevices...)
+	autoCreatedDevices := append(configs.DefaultAutoCreatedDevices, userSpecifiedDevices...)
 
 	// TODO: this can be removed after lxc-conf is fully deprecated
 	lxcConfig, err := mergeLxcConfIntoOptions(c.hostConfig)
@@ -909,7 +912,7 @@ func (container *Container) GetSize() (int64, int64) {
 	}
 
 	if _, err = os.Stat(container.basefs); err != nil {
-		if sizeRootfs, err = utils.TreeSize(container.basefs); err != nil {
+		if sizeRootfs, err = directory.Size(container.basefs); err != nil {
 			sizeRootfs = -1
 		}
 	}
@@ -971,7 +974,7 @@ func (container *Container) Exposes(p nat.Port) bool {
 	return exists
 }
 
-func (container *Container) GetPtyMaster() (*os.File, error) {
+func (container *Container) GetPtyMaster() (libcontainer.Console, error) {
 	ttyConsole, ok := container.command.ProcessConfig.Terminal.(execdriver.TtyTerminal)
 	if !ok {
 		return nil, ErrNoTTY
