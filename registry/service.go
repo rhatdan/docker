@@ -2,9 +2,7 @@ package registry
 
 import (
 	"fmt"
-	"net"
 	"strconv"
-	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/engine"
@@ -85,38 +83,21 @@ func (s *Service) Auth(job *engine.Job) engine.Status {
 	return engine.StatusOK
 }
 
-// Compare two registries taking into consideration just their index names.
-func cmpRepoNamesByIndexName(fst, snd string) int {
-	ia := strings.Index(fst, "/")
-	ib := strings.Index(snd, "/")
-	if ia >= 0 && ib >= 0 {
-		switch {
-		case fst[:ia] < snd[:ib]:
-			return -1
-		case fst[:ia] > snd[:ib]:
-			return 1
-		}
-	}
+// Compare two items in the result table of search command.
+// First compare the index we found the result in. Second compare their rating. Then compare their fully qualified name (registry/name).
+func cmpSearchResults(fst, snd *engine.Env) int {
+	indA := fst.Get("index_name")
+	indB := snd.Get("index_name")
 	switch {
-	case ia < ib:
+	case indA < indB:
 		return -1
-	case ia > ib:
+	case indA > indB:
 		return 1
 	}
-	return 0
-}
 
-// Compare two items in the result table of search command.
-// First compare the index name name. Second compare their rating. Then compare their name.
-func cmpSearchResults(fst, snd *engine.Env) int {
-	nameA := fst.Get("name")
-	nameB := snd.Get("name")
-	ret := cmpRepoNamesByIndexName(nameA, nameB)
-	if ret != 0 {
-		return ret
-	}
 	starsA := fst.Get("star_count")
 	starsB := snd.Get("star_count")
+
 	intA, errA := strconv.ParseInt(starsA, 10, 64)
 	intB, errB := strconv.ParseInt(starsB, 10, 64)
 	if errA == nil && errB == nil {
@@ -132,6 +113,20 @@ func cmpSearchResults(fst, snd *engine.Env) int {
 		return -1
 	case starsA < starsB:
 		return 1
+	}
+
+	regA := fst.Get("registry_name")
+	regB := snd.Get("registry_name")
+	switch {
+	case regA < regB:
+		return -1
+	case regA > regB:
+		return 1
+	}
+
+	nameA := fst.Get("name")
+	nameB := snd.Get("name")
+	switch {
 	case nameA < nameB:
 		return -1
 	case nameA > nameB:
@@ -168,26 +163,14 @@ func searchTerm(job *engine.Job, outs *engine.Table, term string) error {
 		out := &engine.Env{}
 		// Check if search result has is fully qualified with registry
 		// If not, assume REGISTRY = INDEX
-		if !RepositoryNameHasIndex(result.Name) {
-			result.Name = repoInfo.Index.Name + "/" + result.Name
-		}
-		// Now prepend 'INDEX: ' to the result to identify in which INDEX the result was found.
-		indexName := repoInfo.Index.Name
-		if host, _, err := net.SplitHostPort(indexName); err == nil {
-			indexName = host
-		}
-		// do not shorten ip address
-		if net.ParseIP(indexName) == nil {
-			// shorten index name just to the last 2 components (`DOMAIN.TLD`)
-			indexNameSubStrings := strings.Split(indexName, ".")
-			if len(indexNameSubStrings) > 2 {
-				indexName = strings.Join(indexNameSubStrings[len(indexNameSubStrings)-2:], ".")
-			}
-		}
-		if indexName != "" {
-			result.Name = indexName + ": " + result.Name
+		registryName := repoInfo.Index.Name
+		if RepositoryNameHasIndex(result.Name) {
+			registryName, result.Name = splitReposName(result.Name, false)
 		}
 		out.Import(result)
+		// Now add the index in which we found the result to the json. (not sure this is really the right place for this)
+		out.Set("registry_name", registryName)
+		out.Set("index_name", repoInfo.Index.Name)
 		outs.Add(out)
 	}
 	return nil
