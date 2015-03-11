@@ -338,6 +338,9 @@ func (container *Container) setupMounts() error {
 	// want this new mount in the container
 	// These mounts must be ordered based on the length of the path that it is being mounted to (lexicographic)
 	for _, path := range container.sortedVolumeMounts() {
+		if path == "/run" {
+			container.hostConfig.MountRun = false
+		}
 		mounts = append(mounts, execdriver.Mount{
 			Source:      container.Volumes[path],
 			Destination: path,
