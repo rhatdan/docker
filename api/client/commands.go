@@ -2049,13 +2049,16 @@ func (cli *DockerCli) CmdSearch(args ...string) error {
 
 	v := url.Values{}
 	v.Set("term", cmd.Arg(0))
+	if *noIndex {
+		v.Set("noIndex", "1")
+	}
 
 	body, _, err := readBody(cli.call("GET", "/images/search?"+v.Encode(), nil, true))
 
 	if err != nil {
 		return err
 	}
-	outs := engine.NewTable("star_count", 0)
+	outs := engine.NewTable("index_name", 0)
 	if _, err := outs.ReadListFrom(body); err != nil {
 		return err
 	}
