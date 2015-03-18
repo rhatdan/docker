@@ -74,6 +74,13 @@ func New() *configs.Config {
 				Flags:       defaultMountFlags,
 			},
 			{
+				Device:      "tmpfs",
+				Source:      "tmpfs",
+				Destination: "/tmp",
+				Data:        "mode=1777,size=65536k",
+				Flags:       defaultMountFlags,
+			},
+			{
 				Source:      "sysfs",
 				Destination: "/sys",
 				Device:      "sysfs",
