@@ -138,7 +138,9 @@ func (d *driver) createNetwork(container *configs.Config, c *execdriver.Command)
 
 		container.Namespaces.Add(configs.NEWNET, state.NamespacePaths[configs.NEWNET])
 	}
-
+	if c.Network.NetNs != "" {
+		container.Namespaces.Add(configs.NEWNET, c.Network.NetNs)
+	}
 	return nil
 }
 
