@@ -57,3 +57,9 @@ func TestNetHostname(t *testing.T) {
 		t.Fatalf("Expected error ErrConflictNetworkHostname, got: %s", err)
 	}
 }
+
+func TestNetNs(t *testing.T) {
+	if _, _, _, err := parseRun([]string{"--net=ns:mynetns", "img", "cmd"}); err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+}
