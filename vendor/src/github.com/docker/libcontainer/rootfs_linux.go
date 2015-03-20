@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/libcontainer/configs"
 	"github.com/docker/libcontainer/label"
 )
@@ -78,9 +79,16 @@ func mountToRootfs(m *configs.Mount, rootfs, mountLabel string) error {
 		}
 		return syscall.Mount(m.Source, dest, m.Device, uintptr(m.Flags), "")
 	case "tmpfs":
+		var (
+			backup_dest = filepath.Join(rootfs, ".tmpfs"+m.Destination[1:])
+		)
 		stat, err := os.Stat(dest)
-		if err != nil {
+		if stat == nil {
 			if err := os.MkdirAll(dest, 0755); err != nil && !os.IsExist(err) {
+				return err
+			}
+		} else {
+			if err := archive.CopyWithTar(dest, backup_dest); err != nil {
 				return err
 			}
 		}
@@ -89,6 +97,9 @@ func mountToRootfs(m *configs.Mount, rootfs, mountLabel string) error {
 		}
 		if stat != nil {
 			if err = os.Chmod(dest, stat.Mode()); err != nil {
+				return err
+			}
+			if err := archive.CopyWithTar(backup_dest, dest); err != nil {
 				return err
 			}
 		}

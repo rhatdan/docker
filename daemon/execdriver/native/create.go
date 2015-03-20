@@ -236,21 +236,32 @@ func (d *driver) setupMounts(container *configs.Config, c *execdriver.Command) e
 		if err != nil {
 			return err
 		}
-		flags := syscall.MS_BIND | syscall.MS_REC
-		if !m.Writable {
-			flags |= syscall.MS_RDONLY
+		if m.Source == "tmpfs" {
+			flags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+			container.Mounts = append(container.Mounts, &configs.Mount{
+				Source:      m.Source,
+				Relabel:     m.Relabel,
+				Destination: dest,
+				Device:      "tmpfs",
+				Data:        "mode=755,size=65536k",
+				Flags:       flags,
+			})
+		} else {
+			flags := syscall.MS_BIND | syscall.MS_REC
+			if !m.Writable {
+				flags |= syscall.MS_RDONLY
+			}
+			if m.Slave {
+				flags |= syscall.MS_SLAVE
+			}
+			container.Mounts = append(container.Mounts, &configs.Mount{
+				Source:      m.Source,
+				Relabel:     m.Relabel,
+				Destination: dest,
+				Device:      "bind",
+				Flags:       flags,
+			})
 		}
-		if m.Slave {
-			flags |= syscall.MS_SLAVE
-		}
-
-		container.Mounts = append(container.Mounts, &configs.Mount{
-			Source:      m.Source,
-			Relabel:     m.Relabel,
-			Destination: dest,
-			Device:      "bind",
-			Flags:       flags,
-		})
 	}
 	return nil
 }
