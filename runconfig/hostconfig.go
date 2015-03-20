@@ -132,6 +132,7 @@ type HostConfig struct {
 	Ulimits         []*ulimit.Ulimit
 	LogConfig       LogConfig
 	CgroupParent    string // Parent cgroup.
+	MountRun        bool
 }
 
 // This is used by the create command when you want to set both the
