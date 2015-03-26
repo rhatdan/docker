@@ -124,6 +124,7 @@ type Mount struct {
 	Source      string `json:"source"`
 	Destination string `json:"destination"`
 	Writable    bool   `json:"writable"`
+	Relabel     string `json:"relabel"`
 	Private     bool   `json:"private"`
 	Slave       bool   `json:"slave"`
 }

@@ -53,6 +53,7 @@ func (daemon *Daemon) ContainerInspect(job *engine.Job) error {
 	out.Set("ProcessLabel", container.ProcessLabel)
 	out.SetJson("Volumes", container.Volumes)
 	out.SetJson("VolumesRW", container.VolumesRW)
+	out.SetJson("VolumesRelabel", container.VolumesRelabel)
 	out.SetJson("AppArmorProfile", container.AppArmorProfile)
 
 	out.SetList("ExecIDs", container.GetExecIDs())
