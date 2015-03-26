@@ -604,6 +604,8 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 			if _, exists := repo[tag]; !exists {
 				tagUpdated = true
 			}
+		} else {
+			tagUpdated = true
 		}
 	}
 
