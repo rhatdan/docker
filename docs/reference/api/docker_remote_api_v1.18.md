@@ -1524,23 +1524,29 @@ Search for an image on [Docker Hub](https://hub.docker.com).
         [
                 {
                     "description": "",
+                    "index_name" : "docker.io"
                     "is_official": false,
                     "is_automated": false,
                     "name": "wma55/u1210sshd",
+                    "registry_name" : "docker.io",
                     "star_count": 0
                 },
                 {
                     "description": "",
+                    "index_name" : "docker.io"
                     "is_official": false,
                     "is_automated": false,
                     "name": "jdswinbank/sshd",
+                    "registry_name" : "docker.io",
                     "star_count": 0
                 },
                 {
                     "description": "",
+                    "index_name" : "docker.io"
                     "is_official": false,
                     "is_automated": false,
                     "name": "vgauthier/sshd",
+                    "registry_name" : "docker.io",
                     "star_count": 0
                 }
         ...
@@ -1549,6 +1555,7 @@ Search for an image on [Docker Hub](https://hub.docker.com).
 Query Parameters:
 
 -   **term** – term to search
+-   **noIndex** - whether to include `index_name` in result respons and sort results with it
 
 Status Codes:
 
