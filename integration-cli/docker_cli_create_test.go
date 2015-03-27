@@ -307,7 +307,7 @@ func (s *DockerTrustSuite) TestTrustedCreate(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestUntrustedCreate(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 	dockerCmd(c, "push", repoName)
@@ -381,7 +381,7 @@ func (s *DockerTrustSuite) TestCreateWhenCertExpired(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedCreateFromBadTrustServer(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockerclievilcreate/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockerclievilcreate/trusted:latest", s.reg.url)
 	evilLocalConfigDir, err := ioutil.TempDir("", "evil-local-config-dir")
 	if err != nil {
 		c.Fatalf("Failed to create local temp dir")
