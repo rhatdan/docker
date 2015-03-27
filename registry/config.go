@@ -460,7 +460,7 @@ func ParseRepositoryInfo(reposName reference.Named) (*RepositoryInfo, error) {
 
 // ParseSearchIndexInfo will use repository name to get back an indexInfo.
 func ParseSearchIndexInfo(reposName string) (*IndexInfo, error) {
-	indexName, _ := splitReposSearchTerm(reposName)
+	indexName, _ := splitReposSearchTerm(reposName, true)
 
 	indexInfo, err := emptyServiceConfig.NewIndexInfo(indexName)
 	if err != nil {
