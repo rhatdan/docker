@@ -1624,6 +1624,7 @@ use `docker pull`:
 
     $ docker pull debian
     # will pull the debian:latest image and its intermediate layers
+    # and any aliases of the same id
     $ docker pull debian:testing
     # will pull the image named debian:testing and any intermediate
     # layers it is based on.
