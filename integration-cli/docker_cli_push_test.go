@@ -2,10 +2,13 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,7 +17,7 @@ import (
 
 // Pushing an image to a private registry.
 func (s *DockerRegistrySuite) TestPushBusyboxImage(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
 	// tag the image to upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 	// push the image to the registry
@@ -29,7 +32,7 @@ func (s *DockerSuite) TestPushUnprefixedRepo(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushUntagged(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
 
 	expected := "Repository does not exist"
 	if out, _, err := dockerCmdWithError("push", repoName); err == nil {
@@ -40,7 +43,7 @@ func (s *DockerRegistrySuite) TestPushUntagged(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushBadTag(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox:latest", s.reg.url)
 
 	expected := "does not exist"
 
@@ -52,9 +55,9 @@ func (s *DockerRegistrySuite) TestPushBadTag(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushMultipleTags(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
-	repoTag1 := fmt.Sprintf("%v/dockercli/busybox:t1", privateRegistryURL)
-	repoTag2 := fmt.Sprintf("%v/dockercli/busybox:t2", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
+	repoTag1 := fmt.Sprintf("%v/dockercli/busybox:t1", s.reg.url)
+	repoTag2 := fmt.Sprintf("%v/dockercli/busybox:t2", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoTag1)
 
@@ -89,7 +92,7 @@ func (s *DockerRegistrySuite) TestPushMultipleTags(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushInterrupt(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -116,7 +119,7 @@ func (s *DockerRegistrySuite) TestPushInterrupt(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushEmptyLayer(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/emptylayer", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/emptylayer", s.reg.url)
 	emptyTarball, err := ioutil.TempFile("", "empty_tarball")
 	if err != nil {
 		c.Fatalf("Unable to create test file: %v", err)
@@ -145,7 +148,7 @@ func (s *DockerRegistrySuite) TestPushEmptyLayer(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPush(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -161,7 +164,7 @@ func (s *DockerTrustSuite) TestTrustedPush(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithFaillingServer(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -178,7 +181,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithFaillingServer(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithoutServerAndUntrusted(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -195,7 +198,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithoutServerAndUntrusted(c *check.C) 
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithExistingTag(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 	dockerCmd(c, "push", repoName)
@@ -213,7 +216,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithExistingTag(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithExistingSignedTag(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockerclipushpush/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockerclipushpush/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -257,7 +260,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithExistingSignedTag(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithIncorrectPassphraseForNonRoot(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercliincorretpwd/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercliincorretpwd/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -288,7 +291,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithIncorrectPassphraseForNonRoot(c *c
 
 func (s *DockerTrustSuite) TestTrustedPushWithExpiredSnapshot(c *check.C) {
 	c.Skip("Currently changes system time, causing instability")
-	repoName := fmt.Sprintf("%v/dockercliexpiredsnapshot/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercliexpiredsnapshot/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -324,7 +327,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithExpiredSnapshot(c *check.C) {
 
 func (s *DockerTrustSuite) TestTrustedPushWithExpiredTimestamp(c *check.C) {
 	c.Skip("Currently changes system time, causing instability")
-	repoName := fmt.Sprintf("%v/dockercliexpiredtimestamppush/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercliexpiredtimestamppush/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -355,4 +358,54 @@ func (s *DockerTrustSuite) TestTrustedPushWithExpiredTimestamp(c *check.C) {
 			c.Fatalf("Missing expected output on trusted push with expired timestamp:\n%s", out)
 		}
 	})
+}
+
+func (s *DockerSuite) TestPushOfficialImage(c *check.C) {
+	var reErr = regexp.MustCompile(`rename your repository to[^:]*:\s*<user>/busybox\b`)
+
+	// push busybox to public registry as "library/busybox"
+	cmd := exec.Command(dockerBinary, "push", "library/busybox")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		c.Fatalf("Failed to get stdout pipe for process: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		c.Fatalf("Failed to get stderr pipe for process: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		c.Fatalf("Failed to start pushing to public registry: %v", err)
+	}
+	outReader := bufio.NewReader(stdout)
+	errReader := bufio.NewReader(stderr)
+	line, isPrefix, err := errReader.ReadLine()
+	if err != nil {
+		c.Fatalf("Failed to read farewell: %v", err)
+	}
+	if isPrefix {
+		c.Errorf("Got unexpectedly long output.")
+	}
+	if !reErr.Match(line) {
+		c.Errorf("Got unexpected output %q", line)
+	}
+	if line, _, err = outReader.ReadLine(); err != io.EOF {
+		c.Errorf("Expected EOF, not: %q", line)
+	}
+	for ; err != io.EOF; line, _, err = errReader.ReadLine() {
+		c.Errorf("Expected no message on stderr, got: %q", string(line))
+	}
+
+	// Wait for command to finish with short timeout.
+	finish := make(chan struct{})
+	go func() {
+		if err := cmd.Wait(); err == nil {
+			c.Error("Push command should have failed.")
+		}
+		close(finish)
+	}()
+	select {
+	case <-finish:
+	case <-time.After(1 * time.Second):
+		c.Fatalf("Docker push failed to exit.")
+	}
 }
