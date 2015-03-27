@@ -615,6 +615,8 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 			if err != nil {
 				return false, err
 			}
+		} else {
+			tagUpdated = true
 		}
 		if d.downloaded {
 			// if tmpFile is empty assume download and extracted elsewhere
