@@ -620,7 +620,7 @@ func postImagesTag(eng *engine.Engine, version version.Version, w http.ResponseW
 	repo := r.Form.Get("repo")
 	tag := r.Form.Get("tag")
 	force := toBool(r.Form.Get("force"))
-	if err := d.Repositories().Tag(repo, tag, vars["name"], force); err != nil {
+	if err := d.Repositories().Tag(repo, tag, vars["name"], force, true); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusCreated)
