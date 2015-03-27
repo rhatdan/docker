@@ -10,7 +10,6 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/parsers"
-	"github.com/docker/docker/registry"
 )
 
 // CmdImageExport exports all images with the given tag. All versions
@@ -42,7 +41,7 @@ func (s *TagStore) ImageExport(imageExportConfig *ImageExportConfig) error {
 		}
 	}
 	for _, name := range imageExportConfig.Names {
-		name = registry.NormalizeLocalName(name)
+		name = s.NormalizeLocalName(name)
 		logrus.Debugf("Serializing %s", name)
 		rootRepo := s.Repositories[name]
 		if rootRepo != nil {
