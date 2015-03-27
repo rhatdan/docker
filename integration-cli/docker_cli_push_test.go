@@ -2,10 +2,13 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -355,4 +358,54 @@ func (s *DockerTrustSuite) TestTrustedPushWithExpiredTimestamp(c *check.C) {
 			c.Fatalf("Missing expected output on trusted push with expired timestamp:\n%s", out)
 		}
 	})
+}
+
+func (s *DockerSuite) TestPushOfficialImage(c *check.C) {
+	var reErr = regexp.MustCompile(`rename your repository to[^:]*:\s*<user>/busybox\b`)
+
+	// push busybox to public registry as "library/busybox"
+	cmd := exec.Command(dockerBinary, "push", "library/busybox")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		c.Fatalf("Failed to get stdout pipe for process: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		c.Fatalf("Failed to get stderr pipe for process: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		c.Fatalf("Failed to start pushing to public registry: %v", err)
+	}
+	outReader := bufio.NewReader(stdout)
+	errReader := bufio.NewReader(stderr)
+	line, isPrefix, err := errReader.ReadLine()
+	if err != nil {
+		c.Fatalf("Failed to read farewell: %v", err)
+	}
+	if isPrefix {
+		c.Errorf("Got unexpectedly long output.")
+	}
+	if !reErr.Match(line) {
+		c.Errorf("Got unexpected output %q", line)
+	}
+	if line, _, err = outReader.ReadLine(); err != io.EOF {
+		c.Errorf("Expected EOF, not: %q", line)
+	}
+	for ; err != io.EOF; line, _, err = errReader.ReadLine() {
+		c.Errorf("Expected no message on stderr, got: %q", string(line))
+	}
+
+	// Wait for command to finish with short timeout.
+	finish := make(chan struct{})
+	go func() {
+		if err := cmd.Wait(); err == nil {
+			c.Error("Push command should have failed.")
+		}
+		close(finish)
+	}()
+	select {
+	case <-finish:
+	case <-time.After(1 * time.Second):
+		c.Fatalf("Docker push failed to exit.")
+	}
 }
