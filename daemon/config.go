@@ -5,6 +5,7 @@ import (
 
 	"github.com/docker/docker/opts"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/registry"
 	"github.com/docker/docker/runconfig"
 )
 
@@ -18,22 +19,24 @@ const (
 type CommonConfig struct {
 	AutoRestart bool
 	// Bridge holds bridge network specific configuration.
-	Bridge         bridgeConfig
-	Context        map[string][]string
-	CorsHeaders    string
-	DisableNetwork bool
-	Dns            []string
-	DnsSearch      []string
-	EnableCors     bool
-	ExecDriver     string
-	ExecRoot       string
-	GraphDriver    string
-	Labels         []string
-	LogConfig      runconfig.LogConfig
-	Mtu            int
-	Pidfile        string
-	Root           string
-	TrustKeyPath   string
+	Bridge               bridgeConfig
+	Context              map[string][]string
+	CorsHeaders          string
+	DisableNetwork       bool
+	Dns                  []string
+	DnsSearch            []string
+	EnableCors           bool
+	ExecDriver           string
+	ExecRoot             string
+	GraphDriver          string
+	Labels               []string
+	LogConfig            runconfig.LogConfig
+	Mtu                  int
+	Pidfile              string
+	Root                 string
+	TrustKeyPath         string
+	BlockedRegistries    opts.ListOpts
+	AdditionalRegistries opts.ListOpts
 }
 
 // bridgeConfig stores all the bridge driver specific
@@ -88,5 +91,8 @@ func (config *Config) InstallCommonFlags() {
 	flag.StringVar(&config.LogConfig.Type, []string{"-log-driver"}, "json-file", "Default driver for container logs")
 	opts.LogOptsVar(config.LogConfig.Config, []string{"-log-opt"}, "Set log driver options")
 	flag.BoolVar(&config.Bridge.EnableUserlandProxy, []string{"-userland-proxy"}, true, "Use userland proxy for loopback traffic")
-
+	config.BlockedRegistries = opts.NewListOpts(registry.ValidateIndexName)
+	flag.Var(&config.BlockedRegistries, []string{"-block-registry"}, "Don't contact given registry")
+	config.AdditionalRegistries = opts.NewListOpts(registry.ValidateIndexName)
+	flag.Var(&config.AdditionalRegistries, []string{"-add-registry"}, "Registry to query before a public one")
 }
