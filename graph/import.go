@@ -63,7 +63,7 @@ func (s *TagStore) Import(src string, repo string, tag string, imageImportConfig
 	}
 	// Optionally register the image at REPO/TAG
 	if repo != "" {
-		if err := s.Tag(repo, tag, img.ID, true); err != nil {
+		if err := s.Tag(repo, tag, img.ID, true, true); err != nil {
 			return err
 		}
 	}
