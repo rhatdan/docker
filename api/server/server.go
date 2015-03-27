@@ -767,11 +767,11 @@ func getImagesSearch(eng *engine.Engine, version version.Version, w http.Respons
 		}
 	}
 	d := getDaemon(eng)
-	query, err := d.RegistryService.Search(r.Form.Get("term"), config, headers)
+	results, err := d.RegistryService.Search(r.Form.Get("term"), config, headers, r.Form.Get("noIndex") == "1")
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(w).Encode(query.Results)
+	return json.NewEncoder(w).Encode(results)
 }
 
 func postImagesPush(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
