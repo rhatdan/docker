@@ -14,7 +14,8 @@ var (
 	registryImageName = "registry"
 
 	// the private registry to use for tests
-	privateRegistryURL = "127.0.0.1:5000"
+	privateRegistryURL  = "127.0.0.1:5000"
+	privateRegistryURL2 = "127.0.0.1:5001"
 
 	dockerBasePath       = "/var/lib/docker"
 	volumesConfigPath    = dockerBasePath + "/volumes"

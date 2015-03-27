@@ -399,7 +399,7 @@ func (s *router) postImagesTag(ctx context.Context, w http.ResponseWriter, r *ht
 	tag := r.Form.Get("tag")
 	force := httputils.BoolValue(r, "force")
 	name := vars["name"]
-	if err := s.daemon.Repositories().Tag(repo, tag, name, force); err != nil {
+	if err := s.daemon.Repositories().Tag(repo, tag, name, force, true); err != nil {
 		return err
 	}
 	s.daemon.EventsService.Log("tag", utils.ImageReference(repo, tag), "")

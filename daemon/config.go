@@ -14,25 +14,27 @@ const (
 // CommonConfig defines the configuration of a docker daemon which are
 // common across platforms.
 type CommonConfig struct {
-	AutoRestart    bool
-	Bridge         bridgeConfig // Bridge holds bridge network specific configuration.
-	Context        map[string][]string
-	DisableBridge  bool
-	DNS            []string
-	DNSOptions     []string
-	DNSSearch      []string
-	ExecDriver     string
-	ExecOptions    []string
-	ExecRoot       string
-	GraphDriver    string
-	GraphOptions   []string
-	Labels         []string
-	LogConfig      runconfig.LogConfig
-	Mtu            int
-	Pidfile        string
-	Root           string
-	TrustKeyPath   string
-	DefaultNetwork string
+	AutoRestart          bool
+	Bridge               bridgeConfig // Bridge holds bridge network specific configuration.
+	Context              map[string][]string
+	DisableBridge        bool
+	DNS                  []string
+	DNSOptions           []string
+	DNSSearch            []string
+	ExecDriver           string
+	ExecOptions          []string
+	ExecRoot             string
+	GraphDriver          string
+	GraphOptions         []string
+	Labels               []string
+	LogConfig            runconfig.LogConfig
+	Mtu                  int
+	Pidfile              string
+	Root                 string
+	TrustKeyPath         string
+	DefaultNetwork       string
+	BlockedRegistries    []string
+	AdditionalRegistries []string
 
 	// ClusterStore is the storage backend used for the cluster information. It is used by both
 	// multihost networking (to store networks and endpoints information) and by the node discovery
@@ -68,4 +70,6 @@ func (config *Config) InstallCommonFlags(cmd *flag.FlagSet, usageFn func(string)
 	cmd.Var(opts.NewMapOpts(config.LogConfig.Config, nil), []string{"-log-opt"}, usageFn("Set log driver options"))
 	cmd.StringVar(&config.ClusterAdvertise, []string{"-cluster-advertise"}, "", usageFn("Address of the daemon instance to advertise"))
 	cmd.StringVar(&config.ClusterStore, []string{"-cluster-store"}, "", usageFn("Set the cluster store"))
+	cmd.Var(opts.NewListOptsRef(&config.BlockedRegistries, nil), []string{"-block-registry"}, usageFn("Don't contact given registry"))
+	cmd.Var(opts.NewListOptsRef(&config.AdditionalRegistries, nil), []string{"-add-registry"}, usageFn("Registry to query before a public one"))
 }
