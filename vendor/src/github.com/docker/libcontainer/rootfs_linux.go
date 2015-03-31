@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -24,7 +25,13 @@ func setupRootfs(config *configs.Config, console *linuxConsole) (err error) {
 		return newSystemError(err)
 	}
 	for _, m := range config.Mounts {
+		if err := mountCmd(m.PremountCmd); err != nil {
+			return newSystemError(err)
+		}
 		if err := mountToRootfs(m, config.Rootfs, config.MountLabel); err != nil {
+			return newSystemError(err)
+		}
+		if err := mountCmd(m.PostmountCmd); err != nil {
 			return newSystemError(err)
 		}
 	}
@@ -59,6 +66,17 @@ func setupRootfs(config *configs.Config, console *linuxConsole) (err error) {
 		}
 	}
 	syscall.Umask(0022)
+	return nil
+}
+
+func mountCmd(cmd string) error {
+	if cmd != "" {
+		args := strings.Split(cmd, " ")
+		out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%s failed: %s", cmd, string(out))
+		}
+	}
 	return nil
 }
 
