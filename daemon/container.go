@@ -694,7 +694,7 @@ func (container *Container) cleanup() {
 	if container.hostConfig.MountRun {
 		path, err := container.runPath()
 		if err != nil {
-			log.Errorf("%v: Failed to umount /run filesystem: %v", container.ID, err)
+			logrus.Errorf("%v: Failed to umount /run filesystem: %v", container.ID, err)
 		}
 		syscall.Unmount(path, syscall.MNT_DETACH)
 	}
