@@ -32,7 +32,7 @@ type Session struct {
 	timeout       TimeoutType
 }
 
-func NewSession(authConfig *AuthConfig, factory *utils.HTTPRequestFactory, endpoint *Endpoint, timeout bool) (r *Session, err error) {
+func NewSession(authConfig *AuthConfig, factory *requestdecorator.RequestFactory, endpoint *Endpoint, timeout bool) (r *Session, err error) {
 	if authConfig.ServerAddress != "" {
 		parsed, err := url.Parse(authConfig.ServerAddress)
 		if err == nil && parsed.Host != endpoint.URL.Host {
