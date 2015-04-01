@@ -25,14 +25,19 @@ func setupRootfs(config *configs.Config, console *linuxConsole) (err error) {
 		return newSystemError(err)
 	}
 	for _, m := range config.Mounts {
-		if err := mountCmd(m.PremountCmd); err != nil {
-			return newSystemError(err)
+		for _, precmd := range m.PremountCmd {
+			if err := mountCmd(precmd); err != nil {
+				return newSystemError(err)
+			}
 		}
 		if err := mountToRootfs(m, config.Rootfs, config.MountLabel); err != nil {
 			return newSystemError(err)
 		}
-		if err := mountCmd(m.PostmountCmd); err != nil {
-			return newSystemError(err)
+
+		for _, postcmd := range m.PostmountCmd {
+			if err := mountCmd(postcmd); err != nil {
+				return newSystemError(err)
+			}
 		}
 	}
 	if err := createDevices(config); err != nil {
@@ -69,13 +74,10 @@ func setupRootfs(config *configs.Config, console *linuxConsole) (err error) {
 	return nil
 }
 
-func mountCmd(cmd string) error {
-	if cmd != "" {
-		args := strings.Split(cmd, " ")
-		out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("%s failed: %s", cmd, string(out))
-		}
+func mountCmd(cmd []string) error {
+	out, err := exec.Command(cmd[0], cmd[1:]...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s failed: %s: %v", cmd, string(out), err)
 	}
 	return nil
 }

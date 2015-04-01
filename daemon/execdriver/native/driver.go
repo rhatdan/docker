@@ -90,6 +90,7 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 	if err != nil {
 		return execdriver.ExitStatus{ExitCode: -1}, err
 	}
+
 	defer os.RemoveAll(c.TmpDir)
 
 	container, err := d.createContainer(c)

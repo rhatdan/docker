@@ -212,14 +212,18 @@ func (d *driver) setupRlimits(container *configs.Config, c *execdriver.Command) 
 	}
 }
 
-func (d *driver) genPremountCmd(c *execdriver.Command, fullDest string, dest string) string {
+func (d *driver) genPremountCmd(c *execdriver.Command, fullDest string, dest string) [][]string {
+	var premount [][]string
 	tarFile := fmt.Sprintf("%s/%s.tar", c.TmpDir, strings.Replace(dest, "/", "_", -1))
-	return fmt.Sprintf("/usr/bin/tar -cf %s -C %s .", tarFile, fullDest)
+	return append(premount, strings.Split(fmt.Sprintf("/usr/bin/tar -cf %s -C %s .", tarFile, fullDest), " "))
 }
 
-func (d *driver) genPostmountCmd(c *execdriver.Command, fullDest string, dest string) string {
+func (d *driver) genPostmountCmd(c *execdriver.Command, fullDest string, dest string) [][]string {
+	var postmount [][]string
 	tarFile := fmt.Sprintf("%s/%s.tar", c.TmpDir, strings.Replace(dest, "/", "_", -1))
-	return fmt.Sprintf("/usr/bin/tar -xf %s -C %s .", tarFile, fullDest)
+	postmount = append(postmount, strings.Split(fmt.Sprintf("/usr/bin/tar -xf %s -C %s .", tarFile, fullDest), " "))
+	postmount = append(postmount, strings.Split(fmt.Sprintf("rm -f %s", tarFile), " "))
+	return postmount
 }
 
 func (d *driver) setupMounts(container *configs.Config, c *execdriver.Command) error {
@@ -247,6 +251,7 @@ func (d *driver) setupMounts(container *configs.Config, c *execdriver.Command) e
 			return err
 		}
 		if m.Source == "tmpfs" {
+
 			flags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
 			container.Mounts = append(container.Mounts, &configs.Mount{
 				Source:       m.Source,
