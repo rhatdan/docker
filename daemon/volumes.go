@@ -320,6 +320,16 @@ func validMountMode(mode string) bool {
 	return validModes[mode]
 }
 
+func (container *Container) setupJournal() (string, error) {
+	path := journalPath(container.ID)
+	if path != "" {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return "", err
+		}
+	}
+	return path, nil
+}
+
 func (container *Container) setupMounts() error {
 	mounts := []execdriver.Mount{}
 
@@ -334,6 +344,18 @@ func (container *Container) setupMounts() error {
 			Destination: path,
 			Writable:    container.VolumesRW[path],
 		})
+	}
+
+	if container.Volumes["/var"] == "" &&
+		container.Volumes["/var/log"] == "" &&
+		container.Volumes["/var/log/journal"] == "" {
+		if journalPath, err := container.setupJournal(); err != nil {
+			return err
+		} else {
+			if journalPath != "" {
+				mounts = append(mounts, execdriver.Mount{Source: journalPath, Destination: "/var/log/journal", Writable: true, Private: true})
+			}
+		}
 	}
 
 	if container.ResolvConfPath != "" {
