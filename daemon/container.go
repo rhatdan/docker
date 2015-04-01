@@ -1542,6 +1542,6 @@ rather then fail the container
 func (container *Container) registerMachine() {
 	err := systemd.RegisterMachine(container.Name[1:], container.ID, container.Pid, container.root)
 	if err != nil {
-		log.Errorf("Unable to RegisterMachine %s for %s: %s", container.Name[1:], container.ID, err)
+		logrus.Errorf("Unable to RegisterMachine %s for %s: %s", container.Name[1:], container.ID, err)
 	}
 }
