@@ -189,10 +189,13 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 		if _, exists := container.Volumes[path]; exists {
 			continue
 		}
-
-		if stat, err := os.Stat(filepath.Join(container.basefs, path)); err == nil {
+		realPath, err := container.getResourcePath(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate the absolute path of symlink")
+		}
+		if stat, err := os.Stat(realPath); err == nil {
 			if !stat.IsDir() {
-				return nil, fmt.Errorf("file exists at %s, can't create volume there")
+				return nil, fmt.Errorf("file exists at %s, can't create volume there", realPath)
 			}
 		}
 
@@ -320,15 +323,16 @@ func validMountMode(mode string) bool {
 func (container *Container) setupMounts() error {
 	mounts := []execdriver.Mount{}
 
+	if container.hostConfig.MountRun && container.Volumes["/run"] == "" {
+		mounts = append(mounts, execdriver.Mount{Source: "tmpfs", Destination: "/run", Writable: true, Private: true})
+	}
+
 	// Mount user specified volumes
 	// Note, these are not private because you may want propagation of (un)mounts from host
 	// volumes. For instance if you use -v /usr:/usr and the host later mounts /usr/share you
 	// want this new mount in the container
 	// These mounts must be ordered based on the length of the path that it is being mounted to (lexicographic)
 	for _, path := range container.sortedVolumeMounts() {
-		if path == "/run" {
-			container.hostConfig.MountRun = false
-		}
 		mounts = append(mounts, execdriver.Mount{
 			Source:      container.Volumes[path],
 			Destination: path,
@@ -346,10 +350,6 @@ func (container *Container) setupMounts() error {
 
 	if container.HostsPath != "" {
 		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Writable: true, Private: true})
-	}
-
-	if container.hostConfig.MountRun {
-		mounts = append(mounts, execdriver.Mount{Source: "tmpfs", Destination: "/run", Writable: true, Private: true})
 	}
 
 	container.command.Mounts = mounts
