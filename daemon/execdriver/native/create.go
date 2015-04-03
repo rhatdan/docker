@@ -212,6 +212,20 @@ func (d *driver) setupRlimits(container *configs.Config, c *execdriver.Command) 
 	}
 }
 
+func (d *driver) genPremountCmd(c *execdriver.Command, fullDest string, dest string) [][]string {
+	var premount [][]string
+	tarFile := fmt.Sprintf("%s/%s.tar", c.TmpDir, strings.Replace(dest, "/", "_", -1))
+	return append(premount, strings.Split(fmt.Sprintf("/usr/bin/tar -cf %s -C %s .", tarFile, fullDest), " "))
+}
+
+func (d *driver) genPostmountCmd(c *execdriver.Command, fullDest string, dest string) [][]string {
+	var postmount [][]string
+	tarFile := fmt.Sprintf("%s/%s.tar", c.TmpDir, strings.Replace(dest, "/", "_", -1))
+	postmount = append(postmount, strings.Split(fmt.Sprintf("/usr/bin/tar -xf %s -C %s .", tarFile, fullDest), " "))
+	postmount = append(postmount, strings.Split(fmt.Sprintf("rm -f %s", tarFile), " "))
+	return postmount
+}
+
 func (d *driver) setupMounts(container *configs.Config, c *execdriver.Command) error {
 	userMounts := make(map[string]struct{})
 	for _, m := range c.Mounts {
@@ -236,21 +250,33 @@ func (d *driver) setupMounts(container *configs.Config, c *execdriver.Command) e
 		if err != nil {
 			return err
 		}
-		flags := syscall.MS_BIND | syscall.MS_REC
-		if !m.Writable {
-			flags |= syscall.MS_RDONLY
+		if m.Source == "tmpfs" {
+			flags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+			container.Mounts = append(container.Mounts, &configs.Mount{
+				Source:        m.Source,
+				Destination:   dest,
+				Device:        "tmpfs",
+				Data:          "mode=755,size=65536k",
+				Flags:         flags,
+				PremountCmds:  d.genPremountCmd(c, dest, m.Destination),
+				PostmountCmds: d.genPostmountCmd(c, dest, m.Destination),
+			})
+		} else {
+			flags := syscall.MS_BIND | syscall.MS_REC
+			if !m.Writable {
+				flags |= syscall.MS_RDONLY
+			}
+			if m.Slave {
+				flags |= syscall.MS_SLAVE
+			}
+			container.Mounts = append(container.Mounts, &configs.Mount{
+				Source:      m.Source,
+				Relabel:     m.Relabel,
+				Destination: dest,
+				Device:      "bind",
+				Flags:       flags,
+			})
 		}
-		if m.Slave {
-			flags |= syscall.MS_SLAVE
-		}
-
-		container.Mounts = append(container.Mounts, &configs.Mount{
-			Source:      m.Source,
-			Relabel:     m.Relabel,
-			Destination: dest,
-			Device:      "bind",
-			Flags:       flags,
-		})
 	}
 	return nil
 }
