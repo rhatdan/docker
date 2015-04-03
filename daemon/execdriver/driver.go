@@ -166,6 +166,7 @@ type Command struct {
 	LxcConfig          []string          `json:"lxc_config"`
 	AppArmorProfile    string            `json:"apparmor_profile"`
 	CgroupParent       string            `json:"cgroup_parent"` // The parent cgroup for this command.
+	TmpDir             string            `json:"tmpdir"`        // Directory used to store docker tmpdirs.
 }
 
 func InitContainer(c *Command) *configs.Config {
