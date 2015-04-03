@@ -355,6 +355,10 @@ func (container *Container) setupJournal() (string, error) {
 func (container *Container) setupMounts() error {
 	mounts := []execdriver.Mount{}
 
+	if container.hostConfig.MountRun && container.Volumes["/run"] == "" {
+		mounts = append(mounts, execdriver.Mount{Source: "tmpfs", Destination: "/run", Writable: true, Private: true})
+	}
+
 	// Mount user specified volumes
 	// Note, these are not private because you may want propagation of (un)mounts from host
 	// volumes. For instance if you use -v /usr:/usr and the host later mounts /usr/share you
