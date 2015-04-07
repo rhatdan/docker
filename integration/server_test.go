@@ -7,7 +7,6 @@ import (
 
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/engine"
-	"github.com/docker/docker/registry"
 )
 
 func TestCreateNumberHostname(t *testing.T) {
@@ -275,43 +274,27 @@ func TestImagesFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	images := getImages(eng, t, false, "*utest*/*")
-	repoTags := images[0].RepoTags
-	if len(images[0].RepoTags) != 1 {
-		t.Fatal("incorrect number of matches returned")
-	}
-	expected := "utest:5000/docker:tag3"
-	if repoTags[0] != expected {
-		t.Fatal("got unexpected repo tag (%s != %s)", repoTags[0], "utest:5000/docker:tag3")
-	}
+	images := getImages(eng, t, false, "utest*/*")
 
-	images = getImages(eng, t, false, registry.INDEXNAME+"/utest*/*")
-	repoTags = images[0].RepoTags
-	if len(repoTags) != 1 {
-		t.Fatal("incorrect number of matches returned")
-	}
-	expected = registry.INDEXNAME + "/utest/docker:tag2"
-	if repoTags[0] != expected {
-		t.Fatal("got unexpected repo tag (%s != %s)", repoTags[0], expected)
-	}
-
-	images = getImages(eng, t, false, registry.INDEXNAME+"/*test*")
-	if len(images[0].RepoTags) != 2 {
+	if len(images.Data[0].GetList("RepoTags")) != 2 {
 		t.Fatal("incorrect number of matches returned")
 	}
 
-	images = getImages(eng, t, false, registry.INDEXNAME+"/utest")
-	if len(images[0].RepoTags) != 1 {
+	images = getImages(eng, t, false, "utest")
+
+	if len(images.Data[0].GetList("RepoTags")) != 1 {
 		t.Fatal("incorrect number of matches returned")
 	}
 
-	images = getImages(eng, t, false, registry.INDEXNAME+"/utest*")
-	if len(images[0].RepoTags) != 1 {
+	images = getImages(eng, t, false, "utest*")
+
+	if len(images.Data[0].GetList("RepoTags")) != 1 {
 		t.Fatal("incorrect number of matches returned")
 	}
 
 	images = getImages(eng, t, false, "*5000*/*")
-	if len(images[0].RepoTags) != 1 {
+
+	if len(images.Data[0].GetList("RepoTags")) != 1 {
 		t.Fatal("incorrect number of matches returned")
 	}
 }
