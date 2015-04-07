@@ -3,6 +3,7 @@ package registry
 import (
 	"bytes"
 	"crypto/sha256"
+	"regexp"
 	// this is required for some certificates
 	_ "crypto/sha512"
 	"encoding/hex"
@@ -24,6 +25,8 @@ import (
 	"github.com/docker/docker/utils"
 )
 
+var reURLScheme = regexp.MustCompile(`^[^:]+://`)
+
 type Session struct {
 	authConfig    *AuthConfig
 	reqFactory    *requestdecorator.RequestFactory
@@ -33,6 +36,17 @@ type Session struct {
 }
 
 func NewSession(authConfig *AuthConfig, factory *requestdecorator.RequestFactory, endpoint *Endpoint, timeout bool) (r *Session, err error) {
+	if authConfig.ServerAddress != "" {
+		serverAddress := authConfig.ServerAddress
+		if !reURLScheme.MatchString(serverAddress) {
+			serverAddress = "http://" + serverAddress
+		}
+		parsed, err := url.Parse(serverAddress)
+		if err == nil && parsed.Host != endpoint.URL.Host {
+			logrus.Infof("authConfig does not conform to given endpoint (%s != %s)", parsed.Host, endpoint.URL.Host)
+			*authConfig = AuthConfig{}
+		}
+	}
 	r = &Session{
 		authConfig:    authConfig,
 		indexEndpoint: endpoint,
@@ -49,7 +63,7 @@ func NewSession(authConfig *AuthConfig, factory *requestdecorator.RequestFactory
 
 	// If we're working with a standalone private registry over HTTPS, send Basic Auth headers
 	// alongside our requests.
-	if r.indexEndpoint.VersionString(1) != IndexServerAddress() && r.indexEndpoint.URL.Scheme == "https" {
+	if r.indexEndpoint.VersionString(1) != INDEXSERVER && r.indexEndpoint.URL.Scheme == "https" {
 		info, err := r.indexEndpoint.Ping()
 		if err != nil {
 			return nil, err
@@ -201,14 +215,29 @@ func (r *Session) GetRemoteImageLayer(imgID, registry string, token []string, im
 	return res.Body, nil
 }
 
-func (r *Session) GetRemoteTags(registries []string, repository string, token []string) (map[string]string, error) {
-	if strings.Count(repository, "/") == 0 {
-		// This will be removed once the Registry supports auto-resolution on
-		// the "library" namespace
-		repository = "library/" + repository
+func isEndpointBlocked(endpoint string) bool {
+	if parsedURL, err := url.Parse(endpoint); err == nil {
+		if !IsIndexBlocked(parsedURL.Host) {
+			return false
+		}
 	}
+	return true
+}
+
+func (r *Session) GetRemoteTags(registries []string, repository string, token []string) (map[string]string, error) {
 	for _, host := range registries {
-		endpoint := fmt.Sprintf("%srepositories/%s/tags", host, repository)
+		var repo = repository
+
+		if host == INDEXSERVER && strings.Count(repo, "/") == 0 {
+			// This will be removed once the Registry supports auto-resolution on
+			// the "library" namespace
+			repo = "library/" + repo
+		}
+		if isEndpointBlocked(host) {
+			logrus.Errorf("Cannot query blocked registry at %s for remote tags.", host)
+			continue
+		}
+		endpoint := fmt.Sprintf("%srepositories/%s/tags", host, repo)
 		req, err := r.reqFactory.NewRequest("GET", endpoint, nil)
 
 		if err != nil {
