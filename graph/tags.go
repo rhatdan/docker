@@ -244,11 +244,11 @@ func (store *TagStore) Delete(repoName, ref string) (bool, error) {
 	return false, fmt.Errorf("No such repository: %s", repoName)
 }
 
-func (store *TagStore) Set(repoName, tag, imageName string, force, preserveName bool) error {
-	return store.SetLoad(repoName, tag, imageName, force, preserveName, nil)
+func (store *TagStore) Set(repoName, tag, imageName string, force, keepUnqualified bool) error {
+	return store.SetLoad(repoName, tag, imageName, force, keepUnqualified, nil)
 }
 
-func (store *TagStore) SetLoad(repoName, tag, imageName string, force, preserveName bool, out io.Writer) error {
+func (store *TagStore) SetLoad(repoName, tag, imageName string, force, keepUnqualified bool, out io.Writer) error {
 	img, err := store.LookupImage(imageName)
 	store.Lock()
 	defer store.Unlock()
@@ -268,12 +268,13 @@ func (store *TagStore) SetLoad(repoName, tag, imageName string, force, preserveN
 		return err
 	}
 	var repo Repository
-	if !preserveName {
-		repoName = registry.NormalizeLocalName(repoName)
+	normalized := registry.NormalizeLocalName(repoName)
+	if keepUnqualified && !registry.RepositoryNameHasIndex(repoName) {
+		_, normalized = registry.SplitReposName(normalized, false)
 	}
-	if r, exists := store.Repositories[repoName]; exists {
+	if r, exists := store.Repositories[normalized]; exists {
 		repo = r
-		if old, exists := store.Repositories[repoName][tag]; exists {
+		if old, exists := store.Repositories[normalized][tag]; exists {
 
 			if !force {
 				return fmt.Errorf("Conflict: Tag %s is already set to image %s, if you want to replace it, please use -f option", tag, old)
@@ -281,20 +282,20 @@ func (store *TagStore) SetLoad(repoName, tag, imageName string, force, preserveN
 
 			if old != img.ID && out != nil {
 
-				fmt.Fprintf(out, "The image %s:%s already exists, renaming the old one with ID %s to empty string\n", repoName, tag, old[:12])
+				fmt.Fprintf(out, "The image %s:%s already exists, renaming the old one with ID %s to empty string\n", normalized, tag, old[:12])
 
 			}
 		}
 	} else {
 		repo = make(map[string]string)
-		store.Repositories[repoName] = repo
+		store.Repositories[normalized] = repo
 	}
 	repo[tag] = img.ID
 	return store.save()
 }
 
 // SetDigest creates a digest reference to an image ID.
-func (store *TagStore) SetDigest(repoName, digest, imageName string, preserveName bool) error {
+func (store *TagStore) SetDigest(repoName, digest, imageName string, keepUnqualified bool) error {
 	img, err := store.LookupImage(imageName)
 	if err != nil {
 		return err
@@ -314,13 +315,14 @@ func (store *TagStore) SetDigest(repoName, digest, imageName string, preserveNam
 		return err
 	}
 
-	if !preserveName {
-		repoName = registry.NormalizeLocalName(repoName)
+	normalized := registry.NormalizeLocalName(repoName)
+	if keepUnqualified && !registry.RepositoryNameHasIndex(repoName) {
+		_, normalized = registry.SplitReposName(normalized, false)
 	}
-	repoRefs, exists := store.Repositories[repoName]
+	repoRefs, exists := store.Repositories[normalized]
 	if !exists {
 		repoRefs = Repository{}
-		store.Repositories[repoName] = repoRefs
+		store.Repositories[normalized] = repoRefs
 	} else if oldID, exists := repoRefs[digest]; exists && oldID != img.ID {
 		return fmt.Errorf("Conflict: Digest %s is already set to image %s", digest, oldID)
 	}
