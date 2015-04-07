@@ -3,6 +3,7 @@ package registry
 import (
 	"bytes"
 	"crypto/sha256"
+	"regexp"
 	// this is required for some certificates
 	_ "crypto/sha512"
 	"encoding/hex"
@@ -24,6 +25,8 @@ import (
 	"github.com/docker/docker/utils"
 )
 
+var reURLScheme = regexp.MustCompile(`^[^:]+://`)
+
 type Session struct {
 	authConfig    *AuthConfig
 	reqFactory    *requestdecorator.RequestFactory
@@ -34,7 +37,11 @@ type Session struct {
 
 func NewSession(authConfig *AuthConfig, factory *requestdecorator.RequestFactory, endpoint *Endpoint, timeout bool) (r *Session, err error) {
 	if authConfig.ServerAddress != "" {
-		parsed, err := url.Parse(authConfig.ServerAddress)
+		serverAddress := authConfig.ServerAddress
+		if !reURLScheme.MatchString(serverAddress) {
+			serverAddress = "http://" + serverAddress
+		}
+		parsed, err := url.Parse(serverAddress)
 		if err == nil && parsed.Host != endpoint.URL.Host {
 			logrus.Infof("authConfig does not conform to given endpoint (%s != %s)", parsed.Host, endpoint.URL.Host)
 			*authConfig = AuthConfig{}
