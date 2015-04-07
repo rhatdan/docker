@@ -10,8 +10,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/docker/docker/registry"
 )
 
 // save a repo using gz compression and try to load it using stdout
@@ -166,7 +164,7 @@ func TestSaveImageId(t *testing.T) {
 		t.Fatalf("failed to tag repo: %s, %v", out, err)
 	}
 
-	idLongCmd := exec.Command(dockerBinary, "images", "-q", "--no-trunc", registry.INDEXNAME+"/"+repoName)
+	idLongCmd := exec.Command(dockerBinary, "images", "-q", "--no-trunc", repoName)
 	out, _, err := runCommandWithOutput(idLongCmd)
 	if err != nil {
 		t.Fatalf("failed to get repo ID: %s, %v", out, err)
@@ -174,7 +172,7 @@ func TestSaveImageId(t *testing.T) {
 
 	cleanedLongImageID := strings.TrimSpace(out)
 
-	idShortCmd := exec.Command(dockerBinary, "images", "-q", registry.INDEXNAME+"/"+repoName)
+	idShortCmd := exec.Command(dockerBinary, "images", "-q", repoName)
 	out, _, err = runCommandWithOutput(idShortCmd)
 	if err != nil {
 		t.Fatalf("failed to get repo short ID: %s, %v", out, err)
