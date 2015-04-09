@@ -412,9 +412,25 @@ func (container *Container) Start() (err error) {
 	if err := populateCommand(container, env); err != nil {
 		return err
 	}
+	if err := container.setupSecretFiles(); err != nil {
+		return err
+	}
 	if err := container.setupMounts(); err != nil {
 		return err
 	}
+	defer func() {
+		// Now the container is running, unmount the secrets on the host
+		secretsPath, err := container.secretsPath()
+		if err != nil {
+			logrus.Errorf("%v: Secrets Path does not exist: %v", container.ID, err)
+			return
+		}
+
+		if err := syscall.Unmount(secretsPath, syscall.MNT_DETACH); err != nil {
+			logrus.Errorf("%v: Failed to umount %s filesystem: %v", container.ID, secretsPath, err)
+			return
+		}
+	}()
 
 	return container.waitForStart()
 }
@@ -893,6 +909,10 @@ func (container *Container) jsonPath() (string, error) {
 	return container.getRootResourcePath("config.json")
 }
 
+func (container *Container) secretsPath() (string, error) {
+	return container.getRootResourcePath("secrets")
+}
+
 // This method must be exported to be used from the lxc template
 // This directory is only usable when the container is running
 func (container *Container) RootfsPath() string {
@@ -1265,6 +1285,31 @@ func (container *Container) verifyDaemonSettings() {
 	if container.daemon.sysInfo.IPv4ForwardingDisabled {
 		log.Warnf("IPv4 forwarding is disabled. Networking will not work")
 	}
+}
+
+func (container *Container) setupSecretFiles() error {
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(secretsPath, 0700); err != nil {
+		return err
+	}
+
+	if err := syscall.Mount("tmpfs", secretsPath, "tmpfs", uintptr(syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV), label.FormatMountLabel("", container.GetMountLabel())); err != nil {
+		return fmt.Errorf("mounting secret tmpfs: %s", err)
+	}
+
+	data, err := getHostSecretData()
+	if err != nil {
+		return err
+	}
+	for _, s := range data {
+		s.SaveTo(secretsPath)
+	}
+
+	return nil
 }
 
 func (container *Container) setupLinkedContainers() ([]string, error) {
