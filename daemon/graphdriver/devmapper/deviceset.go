@@ -1087,12 +1087,11 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 
 	if devices.thinPoolDevice == "" {
 		if devices.metadataLoopFile != "" || devices.dataLoopFile != "" {
-			logrus.Errorf("WARNING: No --storage-opt dm.thinpooldev specified, using loopback; this configuration is strongly discouraged for production use")
-		}  else {
-			logrus.Warnf("--storage-opt dm.thinpooldev is preferred over --storage-opt dm.datadev or dm.metadatadev")
+			log.Errorf("WARNING: No --storage-opt dm.thinpooldev specified, using loopback; this configuration is strongly discouraged for production use")
+		} else {
+			log.Warnf("--storage-opt dm.thinpooldev is preferred over --storage-opt dm.datadev or dm.metadatadev")
 		}
-	}		
-
+	}
 
 	// If we didn't just create the data or metadata image, we need to
 	// load the transaction id and migrate old metadata
