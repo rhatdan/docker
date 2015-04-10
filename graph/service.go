@@ -20,7 +20,7 @@ func (s *TagStore) Install(eng *engine.Engine) error {
 		"viz":            s.CmdViz,
 		"load":           s.CmdLoad,
 		"import":         s.CmdImport,
-		"pull":           s.CmdPull,
+		"pull":           s.CmdRegistryPull,
 		"push":           s.CmdPush,
 	} {
 		if err := eng.Register(name, handler); err != nil {
