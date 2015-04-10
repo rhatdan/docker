@@ -13,6 +13,7 @@ type Settings struct {
 	Gateway                string
 	IPv6Gateway            string
 	Bridge                 string
+	NetNs                  string
 	PortMapping            map[string]map[string]string // Deprecated
 	Ports                  nat.PortMap
 }
