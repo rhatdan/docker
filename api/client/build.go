@@ -56,6 +56,7 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	flMemorySwap := cmd.String([]string{"-memory-swap"}, "", "Total memory (memory + swap), '-1' to disable swap")
 	flCPUShares := cmd.Int64([]string{"c", "-cpu-shares"}, 0, "CPU shares (relative weight)")
 	flCPUSetCpus := cmd.String([]string{"-cpuset-cpus"}, "", "CPUs in which to allow execution (0-3, 0,1)")
+	flCgroupParent := cmd.String([]string{"-cgroup-parent"}, "", "Optional parent cgroup for the container")
 
 	cmd.Require(flag.Exact, 1)
 	cmd.ParseFlags(args, true)
@@ -278,6 +279,7 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	}
 
 	v.Set("cpusetcpus", *flCPUSetCpus)
+	v.Set("cgroupparent", *flCgroupParent)
 	v.Set("cpushares", strconv.FormatInt(*flCPUShares, 10))
 	v.Set("memory", strconv.FormatInt(memory, 10))
 	v.Set("memswap", strconv.FormatInt(memorySwap, 10))
