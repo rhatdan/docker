@@ -123,10 +123,11 @@ type Builder struct {
 	noBaseImage    bool          // indicates that this build does not start from any base image, but is being built from an empty file system.
 
 	// Set resource restrictions for build containers
-	cpuSetCpus string
-	cpuShares  int64
-	memory     int64
-	memorySwap int64
+	cpuSetCpus   string
+	cpuShares    int64
+	cgroupParent string
+	memory       int64
+	memorySwap   int64
 
 	cancelled <-chan struct{} // When closed, job was cancelled.
 }

@@ -1218,6 +1218,7 @@ func postBuild(eng *engine.Engine, version version.Version, w http.ResponseWrite
 	job.Setenv("memswap", r.FormValue("memswap"))
 	job.Setenv("memory", r.FormValue("memory"))
 	job.Setenv("cpusetcpus", r.FormValue("cpusetcpus"))
+	job.Setenv("cgroupparent", r.FormValue("cgroupparent"))
 	job.Setenv("cpushares", r.FormValue("cpushares"))
 
 	// Job cancellation. Note: not all job types support this.
