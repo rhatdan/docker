@@ -19,7 +19,7 @@ import (
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/label"
 
-	log "github.com/Sirupsen/logrus"
+	logrus "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/execdriver"
 	"github.com/docker/docker/daemon/logger"
 	"github.com/docker/docker/daemon/logger/jsonfilelog"
@@ -203,7 +203,7 @@ func (container *Container) WriteHostConfig() error {
 func (container *Container) LogEvent(action string) {
 	d := container.daemon
 	if err := d.eng.Job("log", action, container.ID, d.Repositories().ImageName(container.ImageID)).Run(); err != nil {
-		log.Errorf("Error logging event %s for %s: %s", action, container.ID, err)
+		logrus.Errorf("Error logging event %s for %s: %s", action, container.ID, err)
 	}
 }
 
@@ -670,8 +670,17 @@ func (container *Container) cleanup() {
 		}
 	}
 
+	// Ignore errors here as it may not be mounted anymore
+	if container.hostConfig.MountRun {
+		path, err := container.runPath()
+		if err != nil {
+			logrus.Errorf("%v: Failed to umount /run filesystem: %v", container.ID, err)
+		}
+		syscall.Unmount(path, syscall.MNT_DETACH)
+	}
+
 	if err := container.Unmount(); err != nil {
-		log.Errorf("%v: Failed to umount filesystem: %v", container.ID, err)
+		logrus.Errorf("%v: Failed to umount filesystem: %v", container.ID, err)
 	}
 
 	for _, eConfig := range container.execCommands.s {
@@ -680,7 +689,7 @@ func (container *Container) cleanup() {
 }
 
 func (container *Container) KillSig(sig int) error {
-	log.Debugf("Sending %d to %s", sig, container.ID)
+	logrus.Debugf("Sending %d to %s", sig, container.ID)
 	container.Lock()
 	defer container.Unlock()
 
@@ -711,7 +720,7 @@ func (container *Container) KillSig(sig int) error {
 func (container *Container) killPossiblyDeadProcess(sig int) error {
 	err := container.KillSig(sig)
 	if err == syscall.ESRCH {
-		log.Debugf("Cannot kill process (pid=%d) with signal %d: no such process.", container.GetPid(), sig)
+		logrus.Debugf("Cannot kill process (pid=%d) with signal %d: no such process.", container.GetPid(), sig)
 		return nil
 	}
 	return err
@@ -751,12 +760,12 @@ func (container *Container) Kill() error {
 	if _, err := container.WaitStop(10 * time.Second); err != nil {
 		// Ensure that we don't kill ourselves
 		if pid := container.GetPid(); pid != 0 {
-			log.Infof("Container %s failed to exit within 10 seconds of kill - trying direct SIGKILL", common.TruncateID(container.ID))
+			logrus.Infof("Container %s failed to exit within 10 seconds of kill - trying direct SIGKILL", common.TruncateID(container.ID))
 			if err := syscall.Kill(pid, 9); err != nil {
 				if err != syscall.ESRCH {
 					return err
 				}
-				log.Debugf("Cannot kill process (pid=%d) with signal 9: no such process.", pid)
+				logrus.Debugf("Cannot kill process (pid=%d) with signal 9: no such process.", pid)
 			}
 		}
 	}
@@ -772,7 +781,7 @@ func (container *Container) Stop(seconds int) error {
 
 	// 1. Send a SIGTERM
 	if err := container.killPossiblyDeadProcess(15); err != nil {
-		log.Infof("Failed to send SIGTERM to the process, force killing")
+		logrus.Infof("Failed to send SIGTERM to the process, force killing")
 		if err := container.killPossiblyDeadProcess(9); err != nil {
 			return err
 		}
@@ -780,7 +789,7 @@ func (container *Container) Stop(seconds int) error {
 
 	// 2. Wait for the process to exit on its own
 	if _, err := container.WaitStop(time.Duration(seconds) * time.Second); err != nil {
-		log.Infof("Container %v failed to exit within %d seconds of SIGTERM - using the force", container.ID, seconds)
+		logrus.Infof("Container %v failed to exit within %d seconds of SIGTERM - using the force", container.ID, seconds)
 		// 3. If it doesn't, then send SIGKILL
 		if err := container.Kill(); err != nil {
 			container.WaitStop(-1 * time.Second)
@@ -886,6 +895,10 @@ func (container *Container) ReadLog(name string) (io.Reader, error) {
 	return os.Open(pth)
 }
 
+func (container *Container) runPath() (string, error) {
+	return container.getRootResourcePath("run")
+}
+
 func (container *Container) hostConfigPath() (string, error) {
 	return container.getRootResourcePath("hostconfig.json")
 }
@@ -916,7 +929,7 @@ func (container *Container) GetSize() (int64, int64) {
 	)
 
 	if err := container.Mount(); err != nil {
-		log.Errorf("Failed to compute size of container rootfs %s: %s", container.ID, err)
+		logrus.Errorf("Failed to compute size of container rootfs %s: %s", container.ID, err)
 		return sizeRw, sizeRootfs
 	}
 	defer container.Unmount()
@@ -924,7 +937,7 @@ func (container *Container) GetSize() (int64, int64) {
 	initID := fmt.Sprintf("%s-init", container.ID)
 	sizeRw, err = driver.DiffSize(container.ID, initID)
 	if err != nil {
-		log.Errorf("Driver %s couldn't return diff size of container %s: %s", driver, container.ID, err)
+		logrus.Errorf("Driver %s couldn't return diff size of container %s: %s", driver, container.ID, err)
 		// FIXME: GetSize should return an error. Not changing it now in case
 		// there is a side-effect.
 		sizeRw = -1
@@ -1019,7 +1032,7 @@ func (container *Container) DisableLink(name string) {
 		if link, exists := container.activeLinks[name]; exists {
 			link.Disable()
 		} else {
-			log.Debugf("Could not find active link for %s", name)
+			logrus.Debugf("Could not find active link for %s", name)
 		}
 	}
 }
@@ -1029,7 +1042,7 @@ func (container *Container) setupContainerDns() error {
 		// check if this is an existing container that needs DNS update:
 		if container.UpdateDns {
 			// read the host's resolv.conf, get the hash and call updateResolvConf
-			log.Debugf("Check container (%s) for update to resolv.conf - UpdateDns flag was set", container.ID)
+			logrus.Debugf("Check container (%s) for update to resolv.conf - UpdateDns flag was set", container.ID)
 			latestResolvConf, latestHash := resolvconf.GetLastModified()
 
 			// clean container resolv.conf re: localhost nameservers and IPv6 NS (if IPv6 disabled)
@@ -1145,7 +1158,7 @@ func (container *Container) updateResolvConf(updatedResolvConf []byte, newResolv
 	//if the user has not modified the resolv.conf of the container since we wrote it last
 	//we will replace it with the updated resolv.conf from the host
 	if string(hashBytes) == curHash {
-		log.Debugf("replacing %q with updated host resolv.conf", container.ResolvConfPath)
+		logrus.Debugf("replacing %q with updated host resolv.conf", container.ResolvConfPath)
 
 		// for atomic updates to these files, use temporary files with os.Rename:
 		dir := path.Dir(container.ResolvConfPath)
@@ -1184,13 +1197,13 @@ func (container *Container) updateParentsHosts() error {
 
 		c, err := container.daemon.Get(ref.ParentID)
 		if err != nil {
-			log.Error(err)
+			logrus.Error(err)
 		}
 
 		if c != nil && !container.daemon.config.DisableNetwork && container.hostConfig.NetworkMode.IsPrivate() {
-			log.Debugf("Update /etc/hosts of %s for alias %s with ip %s", c.ID, ref.Name, container.NetworkSettings.IPAddress)
+			logrus.Debugf("Update /etc/hosts of %s for alias %s with ip %s", c.ID, ref.Name, container.NetworkSettings.IPAddress)
 			if err := etchosts.Update(c.HostsPath, container.NetworkSettings.IPAddress, ref.Name); err != nil {
-				log.Errorf("Failed to update /etc/hosts in parent container %s for alias %s: %v", c.ID, ref.Name, err)
+				logrus.Errorf("Failed to update /etc/hosts in parent container %s for alias %s: %v", c.ID, ref.Name, err)
 			}
 		}
 	}
@@ -1256,15 +1269,15 @@ func (container *Container) initializeNetworking() error {
 // Make sure the config is compatible with the current kernel
 func (container *Container) verifyDaemonSettings() {
 	if container.Config.Memory > 0 && !container.daemon.sysInfo.MemoryLimit {
-		log.Warnf("Your kernel does not support memory limit capabilities. Limitation discarded.")
+		logrus.Warnf("Your kernel does not support memory limit capabilities. Limitation discarded.")
 		container.Config.Memory = 0
 	}
 	if container.Config.Memory > 0 && !container.daemon.sysInfo.SwapLimit {
-		log.Warnf("Your kernel does not support swap limit capabilities. Limitation discarded.")
+		logrus.Warnf("Your kernel does not support swap limit capabilities. Limitation discarded.")
 		container.Config.MemorySwap = -1
 	}
 	if container.daemon.sysInfo.IPv4ForwardingDisabled {
-		log.Warnf("IPv4 forwarding is disabled. Networking will not work")
+		logrus.Warnf("IPv4 forwarding is disabled. Networking will not work")
 	}
 }
 
