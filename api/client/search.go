@@ -11,8 +11,8 @@ import (
 
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/pkg/parsers"
+	"github.com/docker/docker/pkg/stringutils"
 	"github.com/docker/docker/registry"
-	"github.com/docker/docker/utils"
 )
 
 // CmdSearch searches the Docker Hub for images.
@@ -92,7 +92,7 @@ func (cli *DockerCli) CmdSearch(args ...string) error {
 		desc := strings.Replace(res.Description, "\n", " ", -1)
 		desc = strings.Replace(desc, "\r", " ", -1)
 		if !*noTrunc && len(desc) > 45 {
-			desc = utils.Trunc(desc, 42) + "..."
+			desc = stringutils.Truncate(desc, 42) + "..."
 		}
 		row = append(row, res.RegistryName+"/"+res.Name, desc, strconv.Itoa(res.StarCount), "", "")
 		if res.IsOfficial {
