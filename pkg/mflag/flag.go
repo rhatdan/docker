@@ -299,6 +299,7 @@ type FlagSet struct {
 	errorHandling    ErrorHandling
 	output           io.Writer // nil means stderr; use Out() accessor
 	nArgRequirements []nArgRequirement
+	exitCode         int
 }
 
 // A Flag represents the state of a flag.
@@ -1045,7 +1046,7 @@ func (f *FlagSet) Parse(arguments []string) error {
 		case ContinueOnError:
 			return err
 		case ExitOnError:
-			os.Exit(2)
+			os.Exit(f.exitCode)
 		case PanicOnError:
 			panic(err)
 		}
@@ -1086,12 +1087,16 @@ func (cmd *FlagSet) ReportError(str string, withHelp bool) {
 		}
 	}
 	fmt.Fprintf(cmd.Out(), "docker: %s.\n", str)
-	os.Exit(1)
+	os.Exit(cmd.exitCode)
 }
 
 // Parsed reports whether f.Parse has been called.
 func (f *FlagSet) Parsed() bool {
 	return f.parsed
+}
+
+func (f *FlagSet) SetExitCode(code int) {
+	f.exitCode = code
 }
 
 // Parse parses the command-line flags from os.Args[1:].  Must be called
@@ -1127,4 +1132,5 @@ func NewFlagSet(name string, errorHandling ErrorHandling) *FlagSet {
 func (f *FlagSet) Init(name string, errorHandling ErrorHandling) {
 	f.name = name
 	f.errorHandling = errorHandling
+	f.exitCode = 2
 }

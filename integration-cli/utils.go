@@ -35,8 +35,8 @@ func processExitCode(err error) (exitCode int) {
 		var exiterr error
 		if exitCode, exiterr = getExitCode(err); exiterr != nil {
 			// TODO: Fix this so we check the error's text.
-			// we've failed to retrieve exit code, so we set it to 127
-			exitCode = 127
+			// we've failed to retrieve exit code, so we set it to 126
+			exitCode = 126
 		}
 	}
 	return

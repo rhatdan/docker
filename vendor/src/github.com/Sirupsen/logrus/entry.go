@@ -26,14 +26,21 @@ type Entry struct {
 
 	// Message passed to Debug, Info, Warn, Error, Fatal or Panic
 	Message string
+
+	ExitCode int
 }
 
 func NewEntry(logger *Logger) *Entry {
 	return &Entry{
 		Logger: logger,
 		// Default is three fields, give a little extra room
-		Data: make(Fields, 5),
+		Data:     make(Fields, 5),
+		ExitCode: 1,
 	}
+}
+
+func (entry *Entry) SetExitCode(code int) {
+	entry.ExitCode = code
 }
 
 // Returns a reader for the entry, which is a proxy to the formatter.
@@ -140,7 +147,7 @@ func (entry *Entry) Fatal(args ...interface{}) {
 	if entry.Logger.Level >= FatalLevel {
 		entry.log(FatalLevel, fmt.Sprint(args...))
 	}
-	os.Exit(1)
+	os.Exit(entry.ExitCode)
 }
 
 func (entry *Entry) Panic(args ...interface{}) {

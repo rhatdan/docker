@@ -17,6 +17,7 @@ import (
 func (cli *DockerCli) CmdExec(args ...string) error {
 	cmd := cli.Subcmd("exec", "CONTAINER COMMAND [ARG...]", "Run a command in a running container", true)
 
+	cmd.SetExitCode(126)
 	execConfig, err := runconfig.ParseExec(cmd, args)
 	// just in case the ParseExec does not exit
 	if execConfig.Container == "" || err != nil {
