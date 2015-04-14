@@ -453,12 +453,7 @@ func (b *Builder) pullImage(name string) (*imagepkg.Image, error) {
 	if err := job.Run(); err != nil {
 		return nil, err
 	}
-	image, err := b.Daemon.Repositories().LookupImage(name)
-	if err != nil {
-		return nil, err
-	}
-
-	return image, nil
+	return b.Daemon.Repositories().LookupImage(name)
 }
 
 func (b *Builder) processImageFrom(img *imagepkg.Image) error {
