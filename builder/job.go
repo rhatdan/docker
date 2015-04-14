@@ -61,6 +61,7 @@ func (b *BuilderJob) CmdBuild(job *engine.Job) engine.Status {
 		memorySwap     = job.GetenvInt64("memswap")
 		cpuShares      = job.GetenvInt64("cpushares")
 		cpuSetCpus     = job.Getenv("cpusetcpus")
+		cgroupParent   = job.Getenv("cgroupparent")
 		authConfig     = &registry.AuthConfig{}
 		configFile     = &registry.ConfigFile{}
 		tag            string
@@ -151,6 +152,7 @@ func (b *BuilderJob) CmdBuild(job *engine.Job) engine.Status {
 		dockerfileName:  dockerfileName,
 		cpuShares:       cpuShares,
 		cpuSetCpus:      cpuSetCpus,
+		cgroupParent:    cgroupParent,
 		memory:          memory,
 		memorySwap:      memorySwap,
 		cancelled:       job.WaitCancelled(),
