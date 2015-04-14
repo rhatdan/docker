@@ -6,6 +6,7 @@ import (
 	"github.com/docker/docker/opts"
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/pkg/ulimit"
+	"github.com/docker/docker/registry"
 	"github.com/docker/docker/runconfig"
 )
 
@@ -40,6 +41,8 @@ type Config struct {
 	Labels               []string
 	Ulimits              map[string]*ulimit.Ulimit
 	LogConfig            runconfig.LogConfig
+	BlockedRegistries    opts.ListOpts
+	AdditionalRegistries opts.ListOpts
 }
 
 // InstallFlags adds command-line options to the top-level flag parser for
@@ -75,6 +78,10 @@ func (config *Config) InstallFlags() {
 	config.Ulimits = make(map[string]*ulimit.Ulimit)
 	opts.UlimitMapVar(config.Ulimits, []string{"-default-ulimit"}, "Set default ulimits for containers")
 	flag.StringVar(&config.LogConfig.Type, []string{"-log-driver"}, "json-file", "Default driver for container logs")
+	config.BlockedRegistries = opts.NewListOpts(registry.ValidateIndexName)
+	flag.Var(&config.BlockedRegistries, []string{"-block-registry"}, "Don't contact given registry")
+	config.AdditionalRegistries = opts.NewListOpts(registry.ValidateIndexName)
+	flag.Var(&config.AdditionalRegistries, []string{"-add-registry"}, "Registry to query before a public one")
 }
 
 func getDefaultNetworkMtu() int {

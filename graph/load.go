@@ -68,7 +68,7 @@ func (s *TagStore) CmdLoad(job *engine.Job) error {
 
 		for imageName, tagMap := range repositories {
 			for tag, address := range tagMap {
-				if err := s.SetLoad(imageName, tag, address, true, job.Stdout); err != nil {
+				if err := s.SetLoad(imageName, tag, address, true, true, job.Stdout); err != nil {
 					return err
 				}
 			}
