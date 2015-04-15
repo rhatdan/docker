@@ -212,17 +212,21 @@ func (d *driver) setupRlimits(container *configs.Config, c *execdriver.Command) 
 	}
 }
 
-func (d *driver) genPremountCmd(c *execdriver.Command, fullDest string, dest string) [][]string {
-	var premount [][]string
+func (d *driver) genPremountCmd(c *execdriver.Command, fullDest string, dest string) []configs.Command {
+	var premount []configs.Command
 	tarFile := fmt.Sprintf("%s/%s.tar", c.TmpDir, strings.Replace(dest, "/", "_", -1))
-	return append(premount, strings.Split(fmt.Sprintf("/usr/bin/tar -cf %s -C %s .", tarFile, fullDest), " "))
+	args := []string{"-cf", tarFile, "-C", fullDest, "."}
+	premount = append(premount, configs.Command{Path: "/usr/bin/tar", Args: args})
+	return premount
 }
 
-func (d *driver) genPostmountCmd(c *execdriver.Command, fullDest string, dest string) [][]string {
-	var postmount [][]string
+func (d *driver) genPostmountCmd(c *execdriver.Command, fullDest string, dest string) []configs.Command {
+	var postmount []configs.Command
 	tarFile := fmt.Sprintf("%s/%s.tar", c.TmpDir, strings.Replace(dest, "/", "_", -1))
-	postmount = append(postmount, strings.Split(fmt.Sprintf("/usr/bin/tar -xf %s -C %s .", tarFile, fullDest), " "))
-	postmount = append(postmount, strings.Split(fmt.Sprintf("rm -f %s", tarFile), " "))
+	args := []string{"-xf", tarFile, "-C", fullDest, "."}
+	postmount = append(postmount, configs.Command{Path: "/usr/bin/tar", Args: args})
+	args = []string{"-f", tarFile}
+	postmount = append(postmount, configs.Command{Path: "rm", Args: args})
 	return postmount
 }
 

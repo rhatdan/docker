@@ -74,10 +74,15 @@ func setupRootfs(config *configs.Config, console *linuxConsole) (err error) {
 	return nil
 }
 
-func mountCmd(cmd []string) error {
-	if out, err := exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
+func mountCmd(cmd configs.Command) error {
+
+	command := exec.Command(cmd.Path, cmd.Args[:]...)
+	command.Env = cmd.Env
+	command.Dir = cmd.Dir
+	if out, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s failed: %s: %v", cmd, string(out), err)
 	}
+
 	return nil
 }
 
