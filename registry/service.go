@@ -54,11 +54,15 @@ func (s *Service) Auth(job *engine.Job) engine.Status {
 
 	addr := authConfig.ServerAddress
 	if addr == "" {
-		// Use the official registry address if not specified.
+		// Use default registry address if not specified.
 		addr = IndexServerAddress()
 	}
 	if addr == "" {
 		return job.Errorf("No configured registry to authenticate to.")
+	}
+
+	if index, err = ResolveIndexInfo(job, addr); err != nil {
+		return job.Error(err)
 	}
 
 	if endpoint, err = NewEndpoint(index); err != nil {
