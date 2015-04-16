@@ -64,6 +64,7 @@ func (b *BuilderJob) CmdBuild(job *engine.Job) error {
 		cpuShares      = job.GetenvInt64("cpushares")
 		cpuSetCpus     = job.Getenv("cpusetcpus")
 		cpuSetMems     = job.Getenv("cpusetmems")
+		cgroupParent   = job.Getenv("cgroupparent")
 		authConfig     = &registry.AuthConfig{}
 		configFile     = &registry.ConfigFile{}
 		tag            string
@@ -155,6 +156,7 @@ func (b *BuilderJob) CmdBuild(job *engine.Job) error {
 		cpuShares:       cpuShares,
 		cpuSetCpus:      cpuSetCpus,
 		cpuSetMems:      cpuSetMems,
+		cgroupParent:    cgroupParent,
 		memory:          memory,
 		memorySwap:      memorySwap,
 		cancelled:       job.WaitCancelled(),
