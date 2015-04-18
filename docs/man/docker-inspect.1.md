@@ -161,6 +161,7 @@ To get information on a container use its ID or instance name:
         },
         "Volumes": {},
         "VolumesRW": {},
+        "VolumesRelabel": {},
     }
 
 ## Getting the IP address of a container instance
