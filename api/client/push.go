@@ -24,7 +24,7 @@ func (cli *DockerCli) confirmPush() bool {
 		fmt.Fprintln(cli.out, "Nothing pushed.")
 	}
 
-	return answer == "Y"
+	return answer == "Y" || answer == "y"
 }
 
 // CmdPush pushes an image or repository to the registry.
