@@ -1290,7 +1290,7 @@ func (cli *DockerCli) confirmPush() bool {
 		fmt.Fprintln(cli.out, "Nothing pushed.")
 	}
 
-	return answer == "Y"
+	return strings.ToUpper(answer) == "Y"
 }
 
 func (cli *DockerCli) CmdPush(args ...string) error {
