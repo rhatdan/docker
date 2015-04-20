@@ -18,4 +18,10 @@ type Mount struct {
 
 	// Relabel source if set, "z" indicates shared, "Z" indicates unshared.
 	Relabel string `json:"relabel"`
+
+	// Optional Command to be run before Source is mounted.
+	PremountCmds [][]string `json:"premountcmd"`
+
+	// Optional Command to be run after Source is mounted.
+	PostmountCmds [][]string `json:"postmountcmd"`
 }
