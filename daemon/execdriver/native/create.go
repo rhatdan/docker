@@ -216,7 +216,7 @@ func (d *driver) genPremountCmd(c *execdriver.Command, fullDest string, dest str
 	tarFile := fmt.Sprintf("%s/%s.tar", c.TmpDir, strings.Replace(dest, "/", "_", -1))
 	return append(premount, configs.Command{
 		Path: "/usr/bin/tar",
-		Args: []string{"/usr/bin/tar", "-cf", tarFile, "-C", fullDest},
+		Args: []string{"-cf", tarFile, "-C", fullDest},
 	})
 }
 
@@ -225,11 +225,11 @@ func (d *driver) genPostmountCmd(c *execdriver.Command, fullDest string, dest st
 	tarFile := fmt.Sprintf("%s/%s.tar", c.TmpDir, strings.Replace(dest, "/", "_", -1))
 	postmount = append(postmount, configs.Command{
 		Path: "/usr/bin/tar",
-		Args: []string{"tar", "-xf", tarFile, "-C", fullDest},
+		Args: []string{"-xf", tarFile, "-C", fullDest},
 	})
 	return append(postmount, configs.Command{
 		Path: "/usr/bin/rm",
-		Args: []string{"rm", "-f", tarFile},
+		Args: []string{"-f", tarFile},
 	})
 }
 
