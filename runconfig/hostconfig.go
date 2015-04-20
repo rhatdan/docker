@@ -195,6 +195,7 @@ type HostConfig struct {
 	Ulimits         []*ulimit.Ulimit
 	LogConfig       LogConfig
 	CgroupParent    string // Parent cgroup.
+	MountRun        bool
 }
 
 func MergeConfigs(config *Config, hostConfig *HostConfig) *ContainerConfigWrapper {
