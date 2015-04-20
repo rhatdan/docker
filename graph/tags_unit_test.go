@@ -197,7 +197,7 @@ func TestLookupImage(t *testing.T) {
 	runCases(testPrivateImageID, digestLookups, true)
 
 	// now make local image fully qualified (`docker.io` will be prepended)
-	store.Set(testLocalImageName, "", testLocalImageID, false, false)
+	store.Tag(testLocalImageName, "", testLocalImageID, false, false)
 	store.Delete(testLocalImageName, "latest")
 
 	if imageCount(store) != 3 {
@@ -409,7 +409,7 @@ func runSetTagCases(t *testing.T, store *TagStore, additionalRegistry string) {
 				if testCase.refIsDigest {
 					err = store.SetDigest(testCase.dest, testCase.destRef, taggedSource, testCase.preserveName)
 				} else {
-					err = store.Set(testCase.dest, testCase.destRef, taggedSource, false, testCase.preserveName)
+					err = store.Tag(testCase.dest, testCase.destRef, taggedSource, false, testCase.preserveName)
 				}
 
 				if err == nil && !testCase.shallSucceed {
