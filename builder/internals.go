@@ -199,6 +199,7 @@ func (b *Builder) runContextCommand(args []string, allowRemote bool, allowDecomp
 	if err != nil {
 		return err
 	}
+	container.SetHostConfig(&runconfig.HostConfig{MountRun: false})
 	b.TmpContainers[container.ID] = struct{}{}
 
 	if err := container.Mount(); err != nil {
