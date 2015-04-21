@@ -215,7 +215,7 @@ func httpError(w http.ResponseWriter, err error) {
 		statusCode = http.StatusNotAcceptable
 	} else if strings.Contains(errStr, "wrong login/password") {
 		statusCode = http.StatusUnauthorized
-	} else if strings.Contains(errStr, "hasn't been activated") {
+	} else if strings.Contains(errStr, "hasn't been activated") || strings.Contains(errStr, "needs to be forced") {
 		statusCode = http.StatusForbidden
 	}
 
@@ -864,6 +864,7 @@ func (s *Server) postImagesPush(eng *engine.Engine, version version.Version, w h
 	job.SetenvJson("metaHeaders", metaHeaders)
 	job.SetenvJson("authConfig", authConfig)
 	job.Setenv("tag", r.Form.Get("tag"))
+	job.SetenvBool("force", r.Form.Get("force") == "1")
 	if version.GreaterThan("1.0") {
 		job.SetenvBool("json", true)
 		streamJSON(job.Stdout, w, true)
