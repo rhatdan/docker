@@ -51,6 +51,7 @@ type Config struct {
 	CpuShares      int64
 	CpuSetCpus     string
 	CpuSetMems     string
+	CgroupParent   string
 	AuthConfig     *registry.AuthConfig
 	ConfigFile     *registry.ConfigFile
 
@@ -172,6 +173,7 @@ func Build(d *daemon.Daemon, e *engine.Engine, buildConfig *Config) error {
 		cpuShares:       buildConfig.CpuShares,
 		cpuSetCpus:      buildConfig.CpuSetCpus,
 		cpuSetMems:      buildConfig.CpuSetMems,
+		cgroupParent:    buildConfig.CgroupParent,
 		memory:          buildConfig.Memory,
 		memorySwap:      buildConfig.MemorySwap,
 		cancelled:       buildConfig.WaitCancelled(),
