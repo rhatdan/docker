@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -151,12 +152,17 @@ func (container *Container) derefVolumes() {
 		vol.RemoveContainer(container.ID)
 	}
 }
+func resetLabeling() error {
+	err := label.SetFileCreateLabel("")
+	runtime.UnlockOSThread()
+	return err
+}
 
 func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) {
 	var mounts = make(map[string]*Mount)
 	// Get all the bind mounts
 	for _, spec := range container.hostConfig.Binds {
-		path, mountToPath, writable, err := parseBindMountSpec(spec)
+		path, mountToPath, writable, labelMode, err := parseBindMountSpec(spec)
 		if err != nil {
 			return nil, err
 		}
@@ -164,11 +170,31 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 		if m, exists := mounts[mountToPath]; exists {
 			return nil, fmt.Errorf("Duplicate volume %q: %q already in use, mounted from %q", path, mountToPath, m.volume.Path)
 		}
+
+		runtime.LockOSThread()
+		defer resetLabeling()
+
+		if err := label.SetFileCreateLabel(container.MountLabel); err != nil {
+			return nil, fmt.Errorf("Unable to setup default labeling for volume creation %s: %v", path, err)
+		}
+
 		// Check if a volume already exists for this and use it
 		vol, err := container.daemon.volumes.FindOrCreateVolume(path, writable)
 		if err != nil {
 			return nil, err
 		}
+		if err := resetLabeling(); err != nil {
+			return nil, err
+		}
+
+		if strings.ContainsAny(labelMode, "zZ") {
+			if hostpath := container.Volumes[path]; hostpath != path {
+				if err := label.Relabel(path, container.MountLabel, labelMode); err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		mounts[mountToPath] = &Mount{
 			container:   container,
 			volume:      vol,
@@ -216,10 +242,11 @@ func (container *Container) parseVolumeMountConfig() (map[string]*Mount, error) 
 	return mounts, nil
 }
 
-func parseBindMountSpec(spec string) (string, string, bool, error) {
+func parseBindMountSpec(spec string) (string, string, bool, string, error) {
 	var (
 		path, mountToPath string
 		writable          bool
+		mode              string
 		arr               = strings.Split(spec, ":")
 	)
 
@@ -231,18 +258,22 @@ func parseBindMountSpec(spec string) (string, string, bool, error) {
 	case 3:
 		path = arr[0]
 		mountToPath = arr[1]
-		writable = validMountMode(arr[2]) && arr[2] == "rw"
+		mode = arr[2]
+		if !validMountMode(mode) {
+			return "", "", false, "", fmt.Errorf("Invalid volume specification: %s", spec)
+		}
+		writable = rwModes[mode]
 	default:
-		return "", "", false, fmt.Errorf("Invalid volume specification: %s", spec)
+		return "", "", false, "", fmt.Errorf("Invalid volume specification: %s", spec)
 	}
 
 	if !filepath.IsAbs(path) {
-		return "", "", false, fmt.Errorf("cannot bind mount volume: %s volume paths must be absolute.", path)
+		return "", "", false, "", fmt.Errorf("cannot bind mount volume: %s volume paths must be absolute.", path)
 	}
 
 	path = filepath.Clean(path)
 	mountToPath = filepath.Clean(mountToPath)
-	return path, mountToPath, writable, nil
+	return path, mountToPath, writable, mode, nil
 }
 
 func parseVolumesFromSpec(spec string) (string, string, error) {
@@ -293,7 +324,7 @@ func (container *Container) applyVolumesFrom() error {
 		)
 
 		for _, mnt := range fromMounts {
-			mnt.Writable = mnt.Writable && (mode == "rw")
+			mnt.Writable = mnt.Writable && rwModes[mode]
 			mounts = append(mounts, mnt)
 		}
 		mountGroups[id] = mounts
@@ -312,13 +343,25 @@ func (container *Container) applyVolumesFrom() error {
 	return nil
 }
 
-func validMountMode(mode string) bool {
-	validModes := map[string]bool{
-		"rw": true,
-		"ro": true,
-	}
+var rwModes = map[string]bool{
+	"rw":   true,
+	"rw,Z": true,
+	"rw,z": true,
+	"z,rw": true,
+	"Z,rw": true,
+	"Z":    true,
+	"z":    true,
+}
+var roModes = map[string]bool{
+	"ro":   true,
+	"ro,Z": true,
+	"ro,z": true,
+	"z,ro": true,
+	"Z,ro": true,
+}
 
-	return validModes[mode]
+func validMountMode(mode string) bool {
+	return roModes[mode] || rwModes[mode]
 }
 
 func (container *Container) setupJournal() (string, error) {
@@ -361,14 +404,16 @@ func (container *Container) setupMounts() error {
 	}
 
 	if container.ResolvConfPath != "" {
+		label.SetFileLabel(container.ResolvConfPath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.ResolvConfPath, Destination: "/etc/resolv.conf", Writable: true, Private: true})
 	}
-
 	if container.HostnamePath != "" {
+		label.SetFileLabel(container.HostnamePath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.HostnamePath, Destination: "/etc/hostname", Writable: true, Private: true})
 	}
 
 	if container.HostsPath != "" {
+		label.SetFileLabel(container.HostsPath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Writable: true, Private: true})
 	}
 
