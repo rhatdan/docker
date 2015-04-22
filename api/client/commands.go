@@ -1277,20 +1277,20 @@ func (cli *DockerCli) CmdImport(args ...string) error {
 }
 
 func (cli *DockerCli) confirmPush() bool {
-	const prompt = "Do you really want to push to public registry? [Y/n]: "
+	const prompt = "Do you really want to push to public registry? [y/n]: "
 	answer := ""
 	fmt.Fprintln(cli.out, "")
 
-	for answer = ""; answer != "Y" && answer != "n"; {
+	for answer != "n" && answer != "y" {
 		fmt.Fprint(cli.out, prompt)
-		answer = strings.TrimSpace(readInput(cli.in, cli.out))
+		answer = strings.ToLower(strings.TrimSpace(readInput(cli.in, cli.out)))
 	}
 
 	if answer == "n" {
 		fmt.Fprintln(cli.out, "Nothing pushed.")
 	}
 
-	return strings.ToUpper(answer) == "Y"
+	return answer == "y"
 }
 
 func (cli *DockerCli) CmdPush(args ...string) error {
