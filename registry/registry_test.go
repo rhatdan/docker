@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/docker/docker/engine"
 	"github.com/docker/docker/utils"
 )
 
@@ -902,26 +903,36 @@ func TestIsSecureIndex(t *testing.T) {
 	}
 }
 
-var sortSearchResultsCases = []SearchResultExt{
-	{"docker.io", "isv.company.ltd", 10, false, "misc/image", false, false, "Some custom image."},
-	{"docker.io", "isv.company.ltd", 10, false, "custom/image", false, true, "Some custom image."},
-	{"index.company.ltd", "registry.stage.company.ltd", 6, false, "centos", true, false, "Another CentOS"},
-	{"docker.io", "docker.io", 5, false, "custom/image", false, true, "Some custom image from docker registry."},
-	{"127.0.0.1:5000", "127.0.0.1:5000", 0, false, "custom/image", false, false, "Image from private repo."},
-	{"docker.io", "registry.company.ltd", 0, false, "centos", true, true, "Second hand CentOS"},
-	{"docker.io", "docker.io", 0, false, "user/app", false, false, "Some user app."},
-	{"docker.io", "docker.io", 5, false, "user/app1", false, true, "Some user app."},
-	{"docker.io", "docker.io", 2, false, "user/app2", false, false, "Some user app."},
-	{"127.0.0.1:5000", "isv.company.ltd", 11, false, "custom/image", false, true, "Image from private repo."},
-	{"docker.io", "docker.io", 3, false, "user/app3", false, false, "Some user app."},
-	{"index.company.ltd", "registry.company.ltd", 11, false, "centos", true, true, "CentOS."},
-	{"docker.io", "docker.io", 0, true, "fedora/apache", true, false, "Official apache"},
-	{"docker.io", "registry.stage.company.ltd", 11, false, "centos", true, true, "CentOS from another registry."},
-	{"docker.io", "isv.another.comp.ltd", 9, false, "custom/image", false, false, "Custom image."},
-	{"index.company.ltd", "isv.company.ltd", 10, false, "custom/image", false, true, "Some custom image."},
-	{"index.company.ltd", "isv.company.ltd", 11, false, "custom/image", false, false, "Some custom image."},
-	{"127.0.0.1:5000", "127.0.0.1:5000", 0, false, "centos", false, true, "CentOS from private repo."},
-	{"127.0.0.1:5000", "docker.io", 0, false, "user/app2", false, false, "User app from private registry."},
+type TestRegistryInfo struct {
+	IndexName    string `json:"index_name"`
+	RegistryName string `json:"registry_name"`
+	Name         string `json:"name"`
+	StarCount    int    `json:"star_count"`
+	IsOfficial   bool   `json:"is_official"`
+	IsTrusted    bool   `json:"is_trusted"`
+	Description  string `json:"description"`
+}
+
+var sortSearchResultsCases = []TestRegistryInfo{
+	{"docker.io", "isv.company.ltd", "misc/image", 10, false, false, "Some custom image."},
+	{"docker.io", "isv.company.ltd", "custom/image", 10, false, false, "Some custom image."},
+	{"index.company.ltd", "registry.stage.company.ltd", "centos", 6, false, true, "Another CentOS"},
+	{"docker.io", "docker.io", "custom/image", 5, false, false, "Some custom image from docker registry."},
+	{"127.0.0.1:5000", "127.0.0.1:5000", "custom/image", 0, false, false, "Image from private repo."},
+	{"docker.io", "registry.company.ltd", "centos", 0, false, true, "Second hand CentOS"},
+	{"docker.io", "docker.io", "user/app", 0, false, false, "Some user app."},
+	{"docker.io", "docker.io", "user/app1", 5, false, false, "Some user app."},
+	{"docker.io", "docker.io", "user/app2", 2, false, false, "Some user app."},
+	{"127.0.0.1:5000", "isv.company.ltd", "custom/image", 11, false, false, "Image from private repo."},
+	{"docker.io", "docker.io", "user/app3", 3, false, false, "Some user app."},
+	{"index.company.ltd", "registry.company.ltd", "centos", 11, false, true, "CentOS."},
+	{"docker.io", "docker.io", "fedora/apache", 0, true, true, "Official apache"},
+	{"docker.io", "registry.stage.company.ltd", "centos", 11, false, true, "CentOS from another registry."},
+	{"docker.io", "isv.another.comp.ltd", "custom/image", 9, false, false, "Custom image."},
+	{"index.company.ltd", "isv.company.ltd", "custom/image", 10, false, false, "Some custom image."},
+	{"index.company.ltd", "isv.company.ltd", "custom/image", 11, false, false, "Some custom image."},
+	{"127.0.0.1:5000", "127.0.0.1:5000", "centos", 0, false, false, "CentOS from private repo."},
+	{"127.0.0.1:5000", "docker.io", "user/app2", 0, false, false, "User app from private registry."},
 }
 
 // `sortedEntriesMapping` maps new position in the list to original one after
@@ -929,40 +940,45 @@ var sortSearchResultsCases = []SearchResultExt{
 // after the call to `removeSearchDuplicates`. May be null if sorting with
 // index.
 func doTestSortSearchResults(t *testing.T, withIndex bool, sortedEntriesMapping map[int]int, duplicates []int) {
-	cases := make([]SearchResultExt, len(sortSearchResultsCases))
-	for i := range sortSearchResultsCases {
-		cases[i] = sortSearchResultsCases[i]
+	var unsortedEntries []*engine.Env
+	outs := engine.NewTableWithCmpFunc(getSearchResultsCmpFunc(withIndex), len(sortSearchResultsCases))
+	for _, tr := range sortSearchResultsCases {
+		entry := &engine.Env{}
+		entry.Import(tr)
+		outs.Add(entry)
+		unsortedEntries = append(unsortedEntries, entry)
 	}
-	by(getSearchResultsCmpFunc(withIndex)).Sort(cases)
 
-	for i, entry := range sortSearchResultsCases {
+	outs.Sort()
+
+	for i, entry := range unsortedEntries {
 		if newPos, ok := sortedEntriesMapping[i]; !ok {
 			t.Fatalf("sortedEntriesMapping is incomplete (%d index is missing)", i)
-		} else if newPos > len(cases) {
-			t.Fatalf("expected position for entry %d is out of range (%d >= %d)", i, newPos, len(cases))
+		} else if newPos > len(outs.Data) {
+			t.Fatalf("expected position for entry %d is out of range (%d >= %d)", i, newPos, len(outs.Data))
 		}
-		if cases[sortedEntriesMapping[i]] != entry {
+		if outs.Data[sortedEntriesMapping[i]] != entry {
 			j := 0
-			for ; j < len(cases); j++ {
-				if cases[j] == entry {
+			for ; j < len(outs.Data); j++ {
+				if outs.Data[j] == entry {
 					break
 				}
 			}
-			if j >= len(sortSearchResultsCases) {
+			if j >= len(unsortedEntries) {
 				t.Fatalf("sortedEntriesMapping is incomplete")
 			}
-			t.Errorf("Sort failed, item %v (orig. pos=%d) expected on position %d, not %d.", entry, i, sortedEntriesMapping[i], j)
+			t.Errorf("Sort failed, item %v (orig. pos=%d) expected on position %d, not %d.", *entry, i, sortedEntriesMapping[i], j)
 		}
 	}
 
 	if !withIndex {
-		cases := removeSearchDuplicates(cases)
-		if len(cases) != len(sortSearchResultsCases)-len(duplicates) {
+		sorted := removeSearchDuplicates(outs.Data)
+		if len(sorted) != len(unsortedEntries)-len(duplicates) {
 			t.Errorf("Expected %d items in output table after removing duplicates, not %d.",
-				len(sortSearchResultsCases)-len(duplicates), len(cases))
+				len(unsortedEntries)-len(duplicates), len(sorted))
 		}
 
-		for i, entry := range sortSearchResultsCases {
+		for i, entry := range unsortedEntries {
 			isRedundant := false
 			for j := range duplicates {
 				if i == duplicates[j] {
@@ -972,16 +988,16 @@ func doTestSortSearchResults(t *testing.T, withIndex bool, sortedEntriesMapping 
 			}
 			found := false
 			j := 0
-			for ; j < len(cases); j++ {
-				if entry == cases[j] {
+			for ; j < len(sorted); j++ {
+				if entry == sorted[j] {
 					found = true
 					break
 				}
 			}
 			if found && isRedundant {
-				t.Errorf("Entry %v (orig. pos=%d, new pos=%d) is redundant and should have been removed.", entry, i, j)
+				t.Errorf("Entry %v (orig. pos=%d, new pos=%d) is redundant and should have been removed.", *entry, i, j)
 			} else if !found && !isRedundant {
-				t.Errorf("Entry %v (orig. pos=%d) should have stayed in cases results.", entry, i)
+				t.Errorf("Entry %v (orig. pos=%d) should have stayed in sorted results.", *entry, i)
 			}
 		}
 	}
