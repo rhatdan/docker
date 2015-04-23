@@ -2167,7 +2167,7 @@ func (s *DockerSuite) TestRunInspectMacAddress(c *check.C) {
 	}
 }
 
-func TestRunNetworkInitializedNetNsMode(t *testing.T) {
+func (s *DockerSuite) TestRunNetworkInitializedNetNsMode(c *check.C) {
 	dir := "/var/run/netns"
 	ns := "myns"
 	p := path.Join(dir, ns)
@@ -2176,21 +2176,21 @@ func TestRunNetworkInitializedNetNsMode(t *testing.T) {
 	cmd_ip_netns := exec.Command("/bin/ip", "netns", "add", ns)
 	out_ip_netns, _, err_ip_netns := runCommandWithOutput(cmd_ip_netns)
 	if err_ip_netns != nil {
-		t.Fatalf("ip netns add failed: %s %s", err_ip_netns, out_ip_netns)
+		c.Fatalf("ip netns add failed: %s %s", err_ip_netns, out_ip_netns)
 	}
 
 	cmd := exec.Command(dockerBinary, "run", "-d", "--net=ns:"+p, "busybox", "top")
 	out, _, err := runCommandWithOutput(cmd)
 	if err != nil {
-		t.Fatalf("run failed: %s %s", err, out)
+		c.Fatalf("run failed: %s %s", err, out)
 	}
 	id := strings.TrimSpace(out)
 	res, err := inspectField(id, "NetworkSettings.IPAddress")
 	if err != nil {
-		t.Fatal(err)
+		c.Fatal(err)
 	}
 	if res == "" {
-		t.Fatal("For 'netns' mode network was not initialized.")
+		c.Fatal("For 'netns' mode network was not initialized.")
 	}
 
 	deleteAllContainers()
@@ -2198,10 +2198,8 @@ func TestRunNetworkInitializedNetNsMode(t *testing.T) {
 	cmd_ip_netns = exec.Command("/bin/ip", "netns", "delete", ns)
 	out_ip_netns, _, err_ip_netns = runCommandWithOutput(cmd_ip_netns)
 	if err_ip_netns != nil {
-		t.Fatalf("ip netns delete failed: %s %s", err_ip_netns, out_ip_netns)
+		c.Fatalf("ip netns delete failed: %s %s", err_ip_netns, out_ip_netns)
 	}
-
-	logDone("run - network must be initialized in 'netns' mode")
 }
 
 // test docker run use a invalid mac address

@@ -154,7 +154,7 @@ func (s *DockerSuite) TestPushEmptyLayer(c *check.C) {
 	}
 }
 
-func TestPushToPublicRegistry(t *testing.T) {
+func (s *DockerSuite) TestPushToPublicRegistry(c *check.C) {
 	const (
 		confirmText  = "want to push to public registry? [y/n]"
 		farewellText = "nothing pushed."
@@ -163,7 +163,7 @@ func TestPushToPublicRegistry(t *testing.T) {
 	// tag the image to upload it to the private registry
 	tagCmd := exec.Command(dockerBinary, "tag", "busybox", repoName)
 	if out, _, err := runCommandWithOutput(tagCmd); err != nil {
-		t.Fatalf("image tagging failed: %s, %v", out, err)
+		c.Fatalf("image tagging failed: %s, %v", out, err)
 	}
 	defer deleteImages(repoName)
 
@@ -172,18 +172,18 @@ func TestPushToPublicRegistry(t *testing.T) {
 	runTest := func(pushCmd *exec.Cmd, sayNo bool) {
 		stdin, err := pushCmd.StdinPipe()
 		if err != nil {
-			t.Fatalf("Failed to get stdin pipe for process: %v", err)
+			c.Fatalf("Failed to get stdin pipe for process: %v", err)
 		}
 		stdout, err := pushCmd.StdoutPipe()
 		if err != nil {
-			t.Fatalf("Failed to get stdout pipe for process: %v", err)
+			c.Fatalf("Failed to get stdout pipe for process: %v", err)
 		}
 		stderr, err := pushCmd.StderrPipe()
 		if err != nil {
-			t.Fatalf("Failed to get stderr pipe for process: %v", err)
+			c.Fatalf("Failed to get stderr pipe for process: %v", err)
 		}
 		if err := pushCmd.Start(); err != nil {
-			t.Fatalf("Failed to start pushing to private registry: %v", err)
+			c.Fatalf("Failed to start pushing to private registry: %v", err)
 		}
 
 		outReader := bufio.NewReader(stdout)
@@ -191,18 +191,18 @@ func TestPushToPublicRegistry(t *testing.T) {
 		readConfirmText := func(out *bufio.Reader) {
 			line, err := out.ReadBytes(']')
 			if err != nil {
-				t.Fatalf("Failed to read a confirmation text for a push: %v", err)
+				c.Fatalf("Failed to read a confirmation text for a push: %v", err)
 			}
 			if !strings.HasSuffix(strings.ToLower(string(line)), confirmText) {
-				t.Fatalf("Expected confirmation text %q, not: %q", confirmText, line)
+				c.Fatalf("Expected confirmation text %q, not: %q", confirmText, line)
 			}
 			buf := make([]byte, 4)
 			n, err := out.Read(buf)
 			if err != nil {
-				t.Fatalf("Failed to read confirmation text for a push: %v", err)
+				c.Fatalf("Failed to read confirmation text for a push: %v", err)
 			}
 			if n > 2 || n < 1 || buf[0] != ':' {
-				t.Fatalf("Got unexpected line ending: %q", string(buf))
+				c.Fatalf("Got unexpected line ending: %q", string(buf))
 			}
 		}
 		readConfirmText(outReader)
@@ -223,42 +223,42 @@ func TestPushToPublicRegistry(t *testing.T) {
 
 		line, isPrefix, err := outReader.ReadLine()
 		if err != nil {
-			t.Fatalf("Failed to read farewell: %v", err)
+			c.Fatalf("Failed to read farewell: %v", err)
 		}
 		if isPrefix {
-			t.Errorf("Got unexpectedly long output.")
+			c.Errorf("Got unexpectedly long output.")
 		}
 		lowered := strings.ToLower(string(line))
 		if sayNo {
 			if !strings.HasSuffix(lowered, farewellText) {
-				t.Errorf("Expected farewell %q, not: %q", farewellText, string(line))
+				c.Errorf("Expected farewell %q, not: %q", farewellText, string(line))
 			}
 			if strings.Contains(lowered, confirmText) {
-				t.Errorf("God unexpected confirmation text: %q", string(line))
+				c.Errorf("God unexpected confirmation text: %q", string(line))
 			}
 		} else {
 			if lowered != "eof" {
-				t.Errorf("Expected \"EOF\" not: %q", string(line))
+				c.Errorf("Expected \"EOF\" not: %q", string(line))
 			}
 			if line, _, err = outReader.ReadLine(); err != io.EOF {
-				t.Errorf("Expected EOF, not: %q", line)
+				c.Errorf("Expected EOF, not: %q", line)
 			}
 		}
 		if line, _, err = outReader.ReadLine(); err != io.EOF {
-			t.Errorf("Expected EOF, not: %q", line)
+			c.Errorf("Expected EOF, not: %q", line)
 		}
 		errReader := bufio.NewReader(stderr)
 		for ; err != io.EOF; line, _, err = errReader.ReadLine() {
-			t.Errorf("Expected no message on stderr, got: %q", string(line))
+			c.Errorf("Expected no message on stderr, got: %q", string(line))
 		}
 
 		// Wait for command to finish with short timeout.
 		finish := make(chan struct{})
 		go func() {
 			if err := pushCmd.Wait(); err != nil && sayNo {
-				t.Error(err)
+				c.Error(err)
 			} else if err == nil && !sayNo {
-				t.Errorf("Process should have failed after closing input stream.")
+				c.Errorf("Process should have failed after closing input stream.")
 			}
 			close(finish)
 		}()
@@ -269,11 +269,9 @@ func TestPushToPublicRegistry(t *testing.T) {
 			if sayNo {
 				cause = "negative answer"
 			}
-			t.Fatalf("Docker push failed to exit on %s.", cause)
+			c.Fatalf("Docker push failed to exit on %s.", cause)
 		}
 	}
 	runTest(exec.Command(dockerBinary, "push", repoName), false)
 	runTest(exec.Command(dockerBinary, "push", repoName), true)
-
-	logDone("push - to public registry")
 }
