@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/volumes"
+	"github.com/docker/libcontainer/label"
 )
 
 type Mount struct {
@@ -337,14 +338,17 @@ func (container *Container) setupMounts() error {
 	}
 
 	if container.ResolvConfPath != "" {
+		label.SetFileLabel(container.ResolvConfPath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.ResolvConfPath, Destination: "/etc/resolv.conf", Writable: true, Private: true})
 	}
 
 	if container.HostnamePath != "" {
+		label.SetFileLabel(container.HostnamePath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.HostnamePath, Destination: "/etc/hostname", Writable: true, Private: true})
 	}
 
 	if container.HostsPath != "" {
+		label.SetFileLabel(container.HostsPath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Writable: true, Private: true})
 	}
 
