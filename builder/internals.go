@@ -554,12 +554,13 @@ func (b *Builder) create() (*daemon.Container, error) {
 	b.Config.Image = b.image
 
 	hostConfig := &runconfig.HostConfig{
-		CpuShares:  b.cpuShares,
-		CpuQuota:   b.cpuQuota,
-		CpusetCpus: b.cpuSetCpus,
-		CpusetMems: b.cpuSetMems,
-		Memory:     b.memory,
-		MemorySwap: b.memorySwap,
+		CpuShares:    b.cpuShares,
+		CpuQuota:     b.cpuQuota,
+		CpusetCpus:   b.cpuSetCpus,
+		CpusetMems:   b.cpuSetMems,
+		Memory:       b.memory,
+		MemorySwap:   b.memorySwap,
+		CgroupParent: b.cgroupParent,
 	}
 
 	config := *b.Config
