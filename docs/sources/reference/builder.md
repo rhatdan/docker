@@ -1,8 +1,8 @@
-page_title: Dockerfile Reference
+page_title: Dockerfile reference
 page_description: Dockerfiles use a simple DSL which allows you to automate the steps you would normally manually take to create an image.
 page_keywords: builder, docker, Dockerfile, automation, image creation
 
-# Dockerfile Reference
+# Dockerfile reference
 
 **Docker can build images automatically** by reading the instructions
 from a `Dockerfile`. A `Dockerfile` is a text document that contains all
@@ -105,7 +105,7 @@ be treated as an argument. This allows statements like:
 Here is the set of instructions you can use in a `Dockerfile` for building
 images.
 
-### Environment Replacement
+### Environment replacement
 
 > **Note**: prior to 1.3, `Dockerfile` environment variables were handled
 > similarly, in that they would be replaced as described below. However, there
@@ -180,7 +180,7 @@ that will be excluded from the context. Globbing is done using Go's
 > **Note**:
 > The `.dockerignore` file can even be used to ignore the `Dockerfile` and
 > `.dockerignore` files. This might be useful if you are copying files from
-> the root of the build context into your new containter but do not want to 
+> the root of the build context into your new container but do not want to 
 > include the `Dockerfile` or `.dockerignore` files (e.g. `ADD . /someDir/`).
 
 The following example shows the use of the `.dockerignore` file to exclude the
@@ -288,7 +288,7 @@ guide](/articles/dockerfile_best-practices/#build-cache) for more information.
 The cache for `RUN` instructions can be invalidated by `ADD` instructions. See
 [below](#add) for details.
 
-### Known Issues (RUN)
+### Known issues (RUN)
 
 - [Issue 783](https://github.com/docker/docker/issues/783) is about file
   permissions problems that can occur when using the AUFS file system. You
@@ -373,9 +373,8 @@ blackslashes as you would in command-line parsing.
     LABEL "com.example.vendor"="ACME Incorporated"
 
 An image can have more than one label. To specify multiple labels, separate each
-key-value pair by an EOL.
+key-value pair with whitespace.
 
-    LABEL com.example.label-without-value
     LABEL com.example.label-with-value="foo"
     LABEL version="1.0"
     LABEL description="This text illustrates \
@@ -385,12 +384,24 @@ Docker recommends combining labels in a single `LABEL` instruction where
 possible. Each `LABEL` instruction produces a new layer which can result in an
 inefficient image if you use many labels. This example results in four image
 layers. 
+
+    LABEL multi.label1="value1" multi.label2="value2" other="value3"
     
 Labels are additive including `LABEL`s in `FROM` images. As the system
 encounters and then applies a new label, new `key`s override any previous labels
 with identical keys.    
 
 To view an image's labels, use the `docker inspect` command.
+
+    "Labels": {
+        "com.example.vendor": "ACME Incorporated"
+        "com.example.label-with-value": "foo",
+        "version": "1.0",
+        "description": "This text illustrates that label-values can span multiple lines.",
+        "multi.label1": "value1",
+        "multi.label2": "value2",
+        "other": "value3"
+    },
 
 ## EXPOSE
 
@@ -962,7 +973,7 @@ For example you might add something like this:
 
 > **Warning**: The `ONBUILD` instruction may not trigger `FROM` or `MAINTAINER` instructions.
 
-## Dockerfile Examples
+## Dockerfile examples
 
     # Nginx
     #

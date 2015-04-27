@@ -55,7 +55,9 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	flMemoryString := cmd.String([]string{"m", "-memory"}, "", "Memory limit")
 	flMemorySwap := cmd.String([]string{"-memory-swap"}, "", "Total memory (memory + swap), '-1' to disable swap")
 	flCPUShares := cmd.Int64([]string{"c", "-cpu-shares"}, 0, "CPU shares (relative weight)")
+	flCpuQuota := cmd.Int64([]string{"-cpu-quota"}, 0, "Limit the CPU CFS (Completely Fair Scheduler) quota")
 	flCPUSetCpus := cmd.String([]string{"-cpuset-cpus"}, "", "CPUs in which to allow execution (0-3, 0,1)")
+	flCPUSetMems := cmd.String([]string{"-cpuset-mems"}, "", "MEMs in which to allow execution (0-3, 0,1)")
 	flCgroupParent := cmd.String([]string{"-cgroup-parent"}, "", "Optional parent cgroup for the container")
 
 	cmd.Require(flag.Exact, 1)
@@ -95,20 +97,11 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	} else {
 		root := cmd.Arg(0)
 		if urlutil.IsGitURL(root) {
-			remoteURL := cmd.Arg(0)
-			if !urlutil.IsGitTransport(remoteURL) {
-				remoteURL = "https://" + remoteURL
-			}
-
-			root, err = ioutil.TempDir("", "docker-build-git")
+			root, err = utils.GitClone(root)
 			if err != nil {
 				return err
 			}
 			defer os.RemoveAll(root)
-
-			if output, err := exec.Command("git", "clone", "--recursive", remoteURL, root).CombinedOutput(); err != nil {
-				return fmt.Errorf("Error trying to use git: %s (%s)", err, output)
-			}
 		}
 		if _, err := os.Stat(root); err != nil {
 			return err
@@ -280,16 +273,16 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 
 	v.Set("cpusetcpus", *flCPUSetCpus)
 	v.Set("cgroupparent", *flCgroupParent)
+	v.Set("cpusetmems", *flCPUSetMems)
 	v.Set("cpushares", strconv.FormatInt(*flCPUShares, 10))
+	v.Set("cpuquota", strconv.FormatInt(*flCpuQuota, 10))
 	v.Set("memory", strconv.FormatInt(memory, 10))
 	v.Set("memswap", strconv.FormatInt(memorySwap, 10))
 
 	v.Set("dockerfile", *dockerfileName)
 
-	cli.LoadConfigFile()
-
 	headers := http.Header(make(map[string][]string))
-	buf, err := json.Marshal(cli.configFile)
+	buf, err := json.Marshal(cli.configFile.AuthConfigs)
 	if err != nil {
 		return err
 	}
@@ -304,7 +297,7 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 		if jerr.Code == 0 {
 			jerr.Code = 1
 		}
-		return &utils.StatusError{Status: jerr.Message, StatusCode: jerr.Code}
+		return StatusError{Status: jerr.Message, StatusCode: jerr.Code}
 	}
 	return err
 }

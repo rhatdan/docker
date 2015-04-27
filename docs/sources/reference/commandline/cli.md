@@ -24,7 +24,7 @@ the `docker` command, your system administrator can create a Unix group called
 For more information about installing Docker or `sudo` configuration, refer to
 the [installation](/installation) instructions for your operating system.
 
-## Environment Variables
+## Environment variables
 
 For easy reference, the following list of environment variables are supported
 by the `docker` command line:
@@ -47,6 +47,35 @@ variables used by the 'Go' runtime. In particular, you may find these useful:
 These Go environment variables are case-insensitive. See the
 [Go specification](http://golang.org/pkg/net/http/) for details on these
 variables.
+
+## Configuration files
+
+The Docker command line stores its configuration files in a directory called
+`.docker` within your `HOME` directory. Docker manages most of the files in
+`.docker` and you should not modify them. However, you *can modify* the
+`.docker/config.json` file to control certain aspects of how the `docker`
+command behaves.
+
+Currently, you can modify the `docker` command behavior using environment 
+variables or command-line options. You can also use options within 
+`config.json` to modify some of the same behavior.  When using these 
+mechanisms, you must keep in mind the order of precedence among them. Command 
+line options override environment variables and environment variables override 
+properties you specify in a `config.json` file.
+
+The `config.json` file stores a JSON encoding of a single `HttpHeaders`
+property. The property specifies a set of headers to include in all
+messages sent from the Docker client to the daemon. Docker does not try to
+interpret or understand these header; it simply puts them into the messages.
+Docker does not allow these headers to change any headers it sets for itself.
+
+Following is a sample `config.json` file:
+
+    {
+      "HttpHeaders: {
+        "MyHeader": "MyValue"
+      }
+    }
 
 ## Help
 To list the help on any command just execute the command, followed by the `--help` option.
@@ -116,6 +145,8 @@ expect an integer, and they can only be specified once.
       --bip=""                               Specify network bridge IP
       -D, --debug=false                      Enable debug mode
       -d, --daemon=false                     Enable daemon mode
+      --default-gateway=""                   Container default gateway IPv4 address
+      --default-gateway-v6=""                Container default gateway IPv6 address
       --dns=[]                               DNS server to use
       --dns-search=[]                        DNS search domains to use
       -e, --exec-driver="native"             Exec driver to use
@@ -516,10 +547,16 @@ interactively.  You can attach to the same contained process multiple times
 simultaneously, screen sharing style, or quickly view the progress of your
 daemonized process.
 
-You can detach from the container (and leave it running) with `CTRL-p CTRL-q`
-(for a quiet exit) or `CTRL-c` which will send a `SIGKILL` to the container.
-When you are attached to a container, and exit its main process, the process's
-exit code will be returned to the client.
+You can detach from the container and leave it running with `CTRL-p
+CTRL-q` (for a quiet exit) or with `CTRL-c` if `--sig-proxy` is false.
+
+If `--sig-proxy` is true (the default),`CTRL-c` sends a `SIGINT`
+to the container.
+
+>**Note**: A process running as PID 1 inside a container is treated
+>specially by Linux: it ignores any signal with the default action.
+>So, the process will not terminate on `SIGINT` or `SIGTERM` unless it is
+>coded to do so.
 
 It is forbidden to redirect the standard input of a `docker attach` command while
 attaching to a tty-enabled container (i.e.: launched with `-t`).
@@ -591,6 +628,7 @@ is returned by the `docker attach` command to its caller too:
       --memory-swap=""         Total memory (memory + swap), `-1` to disable swap
       -c, --cpu-shares         CPU Shares (relative weight)
       --cpuset-cpus=""         CPUs in which to allow execution, e.g. `0-3`, `0,1`
+      --cpuset-mems=""         MEMs in which to allow execution, e.g. `0-3`, `0,1`
 
 Builds Docker images from a Dockerfile and a "context". A build's context is
 the files located in the specified `PATH` or `URL`.  The build process can
@@ -598,12 +636,13 @@ refer to any of the files in the context. For example, your build can use
 an [*ADD*](/reference/builder/#add) instruction to reference a file in the
 context.
 
-The `URL` parameter can specify the location of a Git repository; in this
-case,  the repository is the context. The Git repository is recursively
-cloned with its submodules.  The system does a fresh `git clone -recursive`
-in a temporary directory on your local host. Then, this clone is sent to
-the Docker daemon as the context. Local clones give you the ability to
-access private repositories using local user credentials, VPN's, and so forth.
+The `URL` parameter can specify the location of a Git repository;
+the repository acts as the build context.  The system recursively clones the repository
+and its submodules using a `git clone --depth 1 --recursive` command.
+This command runs in a temporary directory on your local host.
+After the command succeeds, the directory is sent to the Docker daemon as the context.
+Local clones give you the ability to access private repositories using
+local user credentials, VPN's, and so forth.
 
 Instead of specifying a context, you can pass a single Dockerfile in the
 `URL` or pipe the file in via `STDIN`.  To pipe a Dockerfile from `STDIN`:
@@ -832,7 +871,8 @@ If this behavior is undesired, set the 'p' option to false.
 
 The `--change` option will apply `Dockerfile` instructions to the image
 that is created.
-Supported `Dockerfile` instructions: `ADD`|`CMD`|`ENTRYPOINT`|`ENV`|`EXPOSE`|`FROM`|`MAINTAINER`|`RUN`|`USER`|`LABEL`|`VOLUME`|`WORKDIR`|`COPY`
+Supported `Dockerfile` instructions:
+`CMD`|`ENTRYPOINT`|`ENV`|`EXPOSE`|`ONBUILD`|`USER`|`VOLUME`|`WORKDIR`
 
 #### Commit a container
 
@@ -886,6 +926,8 @@ Creates a new container.
       --cgroup-parent=""         Optional parent cgroup for the container
       --cidfile=""               Write the container ID to the file
       --cpuset-cpus=""           CPUs in which to allow execution (0-3, 0,1)
+      --cpuset-mems=""           Memory nodes (MEMs) in which to allow execution (0-3, 0,1)
+      --cpu-quota=0              Limit the CPU CFS (Completely Fair Scheduler) quota
       --device=[]                Add a host device to the container
       --dns=[]                   Set custom DNS servers
       --dns-search=[]            Set custom DNS search domains
@@ -1114,7 +1156,9 @@ You'll need two shells for this example.
 
       -d, --detach=false         Detached mode: run command in the background
       -i, --interactive=false    Keep STDIN open even if not attached
+      --privileged=false         Give extended privileges to the command
       -t, --tty=false            Allocate a pseudo-TTY
+      -u, --user=                Username or UID (format: <name|uid>[:<group|gid>])
 
 The `docker exec` command runs a new command in a running container.
 
@@ -1181,6 +1225,7 @@ This will create a new Bash session in the container `ubuntu_bash`.
 
     Show the history of an image
 
+      -H, --human=true     Print sizes and dates in human readable format
       --no-trunc=false     Don't truncate output
       -q, --quiet=false    Only show numeric IDs
 
@@ -1337,8 +1382,8 @@ the `-` parameter to take the data from `STDIN`.
 
 The `--change` option will apply `Dockerfile` instructions to the image
 that is created.
-Supported `Dockerfile` instructions: `CMD`, `ENTRYPOINT`, `ENV`, `EXPOSE`,
-`ONBUILD`, `USER`, `VOLUME`, `WORKDIR`
+Supported `Dockerfile` instructions:
+`CMD`|`ENTRYPOINT`|`ENV`|`EXPOSE`|`ONBUILD`|`USER`|`VOLUME`|`WORKDIR`
 
 #### Examples
 
@@ -1836,6 +1881,8 @@ To remove an image using its digest:
       --cap-drop=[]              Drop Linux capabilities
       --cidfile=""               Write the container ID to the file
       --cpuset-cpus=""           CPUs in which to allow execution (0-3, 0,1)
+      --cpuset-mems=""           Memory nodes (MEMs) in which to allow execution (0-3, 0,1)
+      --cpu-quota=0              Limit the CPU CFS (Completely Fair Scheduler) quota
       -d, --detach=false         Run container in background and print container ID
       --device=[]                Add a host device to the container
       --dns=[]                   Set custom DNS servers
@@ -2164,7 +2211,7 @@ application change:
    `--rm` option means that when the container exits, the container's layer is
    removed.
 
-#### Restart Policies
+#### Restart policies
 
 Use Docker's `--restart` to specify a container's *restart policy*. A restart
 policy controls whether the Docker daemon restarts a container after exit.
@@ -2335,8 +2382,8 @@ Running `docker stats` on multiple containers
 
     $ docker stats redis1 redis2
     CONTAINER           CPU %               MEM USAGE/LIMIT     MEM %               NET I/O
-    redis1              0.07%               796 KiB/64 MiB      1.21%               788 B/648 B
-    redis2              0.07%               2.746 MiB/64 MiB    4.29%               1.266 KiB/648 B
+    redis1              0.07%               796 KB/64 MB        1.21%               788 B/648 B
+    redis2              0.07%               2.746 MB/64 MB      4.29%               1.266 KB/648 B
 
 
 The `docker stats` command will only return a live stream of data for running

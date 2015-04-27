@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/configs"
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/label"
@@ -22,6 +21,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/execdriver"
 	"github.com/docker/docker/daemon/logger"
+	"github.com/docker/docker/daemon/logger/journald"
 	"github.com/docker/docker/daemon/logger/jsonfilelog"
 	"github.com/docker/docker/daemon/logger/syslog"
 	"github.com/docker/docker/daemon/network"
@@ -179,11 +179,13 @@ func (container *Container) readHostConfig() error {
 		return nil
 	}
 
-	data, err := ioutil.ReadFile(pth)
+	f, err := os.Open(pth)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, container.hostConfig)
+	defer f.Close()
+
+	return json.NewDecoder(f).Decode(&container.hostConfig)
 }
 
 func (container *Container) WriteHostConfig() error {
@@ -356,6 +358,8 @@ func populateCommand(c *Container, env []string) error {
 		MemorySwap: c.hostConfig.MemorySwap,
 		CpuShares:  c.hostConfig.CpuShares,
 		CpusetCpus: c.hostConfig.CpusetCpus,
+		CpusetMems: c.hostConfig.CpusetMems,
+		CpuQuota:   c.hostConfig.CpuQuota,
 		Rlimits:    rlimits,
 	}
 
@@ -955,37 +959,35 @@ func (container *Container) GetSize() (int64, int64) {
 }
 
 func (container *Container) Copy(resource string) (io.ReadCloser, error) {
+	container.Lock()
+	defer container.Unlock()
+	var err error
 	if err := container.Mount(); err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err != nil {
+			container.Unmount()
+		}
+	}()
+
+	if err = container.mountVolumes(); err != nil {
+		container.unmountVolumes()
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			container.unmountVolumes()
+		}
+	}()
 
 	basePath, err := container.getResourcePath(resource)
 	if err != nil {
-		container.Unmount()
 		return nil, err
-	}
-
-	// Check if this is actually in a volume
-	for _, mnt := range container.VolumeMounts() {
-		if len(mnt.MountToPath) > 0 && strings.HasPrefix(resource, mnt.MountToPath[1:]) {
-			return mnt.Export(resource)
-		}
-	}
-
-	// Check if this is a special one (resolv.conf, hostname, ..)
-	if resource == "etc/resolv.conf" {
-		basePath = container.ResolvConfPath
-	}
-	if resource == "etc/hostname" {
-		basePath = container.HostnamePath
-	}
-	if resource == "etc/hosts" {
-		basePath = container.HostsPath
 	}
 
 	stat, err := os.Stat(basePath)
 	if err != nil {
-		container.Unmount()
 		return nil, err
 	}
 	var filter []string
@@ -1003,11 +1005,12 @@ func (container *Container) Copy(resource string) (io.ReadCloser, error) {
 		IncludeFiles: filter,
 	})
 	if err != nil {
-		container.Unmount()
 		return nil, err
 	}
+
 	return ioutils.NewReadCloserWrapper(archive, func() error {
 			err := archive.Close()
+			container.unmountVolumes()
 			container.Unmount()
 			return err
 		}),
@@ -1018,14 +1021,6 @@ func (container *Container) Copy(resource string) (io.ReadCloser, error) {
 func (container *Container) Exposes(p nat.Port) bool {
 	_, exists := container.Config.ExposedPorts[p]
 	return exists
-}
-
-func (container *Container) GetPtyMaster() (libcontainer.Console, error) {
-	ttyConsole, ok := container.command.ProcessConfig.Terminal.(execdriver.TtyTerminal)
-	if !ok {
-		return nil, ErrNoTTY
-	}
-	return ttyConsole.Master(), nil
 }
 
 func (container *Container) HostConfig() *runconfig.HostConfig {
@@ -1063,7 +1058,7 @@ func (container *Container) setupContainerDns() error {
 			updatedResolvConf, modified := resolvconf.FilterResolvDns(latestResolvConf, container.daemon.config.Bridge.EnableIPv6)
 			if modified {
 				// changes have occurred during resolv.conf localhost cleanup: generate an updated hash
-				newHash, err := utils.HashData(bytes.NewReader(updatedResolvConf))
+				newHash, err := ioutils.HashData(bytes.NewReader(updatedResolvConf))
 				if err != nil {
 					return err
 				}
@@ -1118,7 +1113,7 @@ func (container *Container) setupContainerDns() error {
 	}
 	//get a sha256 hash of the resolv conf at this point so we can check
 	//for changes when the host resolv.conf changes (e.g. network update)
-	resolvHash, err := utils.HashData(bytes.NewReader(resolvConf))
+	resolvHash, err := ioutils.HashData(bytes.NewReader(resolvConf))
 	if err != nil {
 		return err
 	}
@@ -1150,7 +1145,7 @@ func (container *Container) updateResolvConf(updatedResolvConf []byte, newResolv
 	if err != nil {
 		return err
 	}
-	curHash, err := utils.HashData(bytes.NewReader(resolvBytes))
+	curHash, err := ioutils.HashData(bytes.NewReader(resolvBytes))
 	if err != nil {
 		return err
 	}
@@ -1282,13 +1277,13 @@ func (container *Container) initializeNetworking() error {
 
 // Make sure the config is compatible with the current kernel
 func (container *Container) verifyDaemonSettings() {
-	if container.Config.Memory > 0 && !container.daemon.sysInfo.MemoryLimit {
+	if container.hostConfig.Memory > 0 && !container.daemon.sysInfo.MemoryLimit {
 		logrus.Warnf("Your kernel does not support memory limit capabilities. Limitation discarded.")
-		container.Config.Memory = 0
+		container.hostConfig.Memory = 0
 	}
-	if container.Config.Memory > 0 && !container.daemon.sysInfo.SwapLimit {
+	if container.hostConfig.Memory > 0 && container.hostConfig.MemorySwap != -1 && !container.daemon.sysInfo.SwapLimit {
 		logrus.Warnf("Your kernel does not support swap limit capabilities. Limitation discarded.")
-		container.Config.MemorySwap = -1
+		container.hostConfig.MemorySwap = -1
 	}
 	if container.daemon.sysInfo.IPv4ForwardingDisabled {
 		logrus.Warnf("IPv4 forwarding is disabled. Networking will not work")
@@ -1328,7 +1323,7 @@ func (container *Container) setupLinkedContainers() ([]string, error) {
 				linkAlias,
 				child.Config.Env,
 				child.Config.ExposedPorts,
-				daemon.eng)
+			)
 
 			if err != nil {
 				rollback()
@@ -1414,6 +1409,7 @@ func (container *Container) startLogging() error {
 		if err != nil {
 			return err
 		}
+		container.LogPath = pth
 
 		dl, err := jsonfilelog.New(pth)
 		if err != nil {
@@ -1422,6 +1418,12 @@ func (container *Container) startLogging() error {
 		l = dl
 	case "syslog":
 		dl, err := syslog.New(container.ID[:12])
+		if err != nil {
+			return err
+		}
+		l = dl
+	case "journald":
+		dl, err := journald.New(container.ID[:12])
 		if err != nil {
 			return err
 		}

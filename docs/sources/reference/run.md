@@ -111,6 +111,11 @@ as you'll see in later examples.  Specifying `-t` is forbidden when the client
 standard output is redirected or piped, such as in:
 `echo test | docker run -i busybox cat`.
 
+>**Note**: A process running as PID 1 inside a container is treated
+>specially by Linux: it ignores any signal with the default action.
+>So, the process will not terminate on `SIGINT` or `SIGTERM` unless it is
+>coded to do so.
+
 ## Container identification
 
 ### Name (--name)
@@ -151,7 +156,7 @@ Images using the v2 or later image format have a content-addressable identifier
 called a digest. As long as the input used to generate the image is unchanged,
 the digest value is predictable and referenceable.
 
-## PID Settings (--pid)
+## PID settings (--pid)
     --pid=""  : Set the PID (Process) Namespace mode for the container,
            'host': use the host's PID namespace inside the container
 
@@ -172,7 +177,7 @@ within the container.
 This command would allow you to use `strace` inside the container on pid 1234 on
 the host.
 
-## IPC Settings (--ipc)
+## IPC settings (--ipc)
 
     --ipc=""  : Set the IPC mode for the container,
                  'container:<name|id>': reuses another container's IPC namespace
@@ -469,6 +474,8 @@ container:
     -memory-swap="": Total memory limit (memory + swap, format: <number><optional unit>, where unit = b, k, m or g)
     -c, --cpu-shares=0: CPU shares (relative weight)
     --cpuset-cpus="": CPUs in which to allow execution (0-3, 0,1)
+    --cpuset-mems="": Memory nodes (MEMs) in which to allow execution (0-3, 0,1). Only effective on NUMA systems.
+    --cpu-quota=0: Limit the CPU CFS (Completely Fair Scheduler) quota
 
 ### Memory constraints
 
@@ -593,6 +600,30 @@ This means processes in container can be executed on cpu 1 and cpu 3.
     $ docker run -ti --cpuset-cpus="0-2" ubuntu:14.04 /bin/bash
 
 This means processes in container can be executed on cpu 0, cpu 1 and cpu 2.
+
+We can set mems in which to allow execution for containers. Only effective
+on NUMA systems.
+
+Examples:
+
+    $ docker run -ti --cpuset-mems="1,3" ubuntu:14.04 /bin/bash
+
+This example restricts the processes in the container to only use memory from
+memory nodes 1 and 3.
+
+    $ docker run -ti --cpuset-mems="0-2" ubuntu:14.04 /bin/bash
+
+This example restricts the processes in the container to only use memory from
+memory nodes 0, 1 and 2.
+
+### CPU quota constraint
+
+The `--cpu-quota` flag limits the container's CPU usage. The default 0 value
+allows the container to take 100% of a CPU resource (1 CPU). The CFS (Completely Fair
+Scheduler) handles resource allocation for executing processes and is default
+Linux Scheduler used by the kernel. Set this value to 50000 to limit the container
+to 50% of a CPU resource. For multiple CPUs, adjust the `--cpu-quota` as necessary.
+For more information, see the [CFS documentation on bandwidth limiting](https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt).
 
 ## Runtime privilege, Linux capabilities, and LXC configuration
 
@@ -756,6 +787,10 @@ command is available only for this logging driver
 
 Syslog logging driver for Docker. Writes log messages to syslog. `docker logs`
 command is not available for this logging driver
+
+#### Logging driver: journald
+
+Journald logging driver for Docker. Writes log messages to journald. `docker logs` command is not available for this logging driver
 
 ## Overriding Dockerfile image defaults
 
