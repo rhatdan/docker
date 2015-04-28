@@ -48,6 +48,7 @@ complete -c docker -f -n '__fish_docker_no_subcommand' -l api-cors-header -d "Se
 complete -c docker -f -n '__fish_docker_no_subcommand' -s b -l bridge -d 'Attach containers to a pre-existing network bridge'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l bip -d "Use this CIDR notation address for the network bridge's IP, not compatible with -b"
 complete -c docker -f -n '__fish_docker_no_subcommand' -l block-registry -d "Don't contact given registry"
+complete -c docker -f -n '__fish_docker_no_subcommand' -l confirm-def-push -d 'Confirm a push to default registry'
 complete -c docker -f -n '__fish_docker_no_subcommand' -s D -l debug -d 'Enable debug mode'
 complete -c docker -f -n '__fish_docker_no_subcommand' -s d -l daemon -d 'Enable daemon mode'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l dns -d 'Force Docker to use specific DNS servers'

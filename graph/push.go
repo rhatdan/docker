@@ -507,9 +507,9 @@ func (s *TagStore) CmdPush(job *engine.Job) engine.Status {
 	job.GetenvJson("metaHeaders", &metaHeaders)
 	force := job.GetenvBool("force")
 
-	if repoInfo.Index.Official && !force {
+	if repoInfo.Index.Official && s.ConfirmDefPush && !force {
 		return job.Errorf("Error: Status 403 trying to push repository %s to official registry: needs to be forced", localName)
-	} else if repoInfo.Index.Official && force {
+	} else if repoInfo.Index.Official && !s.ConfirmDefPush && force {
 		log.Infof("Push of %s to official registry has been forced", localName)
 	}
 
