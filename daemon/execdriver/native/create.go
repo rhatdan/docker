@@ -254,7 +254,6 @@ func (d *driver) setupMounts(container *configs.Config, c *execdriver.Command) e
 				Source:        m.Source,
 				Destination:   dest,
 				Device:        "tmpfs",
-				Data:          "mode=755,size=65536k",
 				Flags:         flags,
 				PremountCmds:  d.genPremountCmd(c, dest, m.Destination),
 				PostmountCmds: d.genPostmountCmd(c, dest, m.Destination),
