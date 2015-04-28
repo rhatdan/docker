@@ -891,11 +891,12 @@ func NewDaemonFromDirectory(config *Config, eng *engine.Engine, registryService 
 	eventsService := events.New()
 	logrus.Debug("Creating repository list")
 	tagCfg := &graph.TagStoreConfig{
-		Graph:    g,
-		Key:      trustKey,
-		Registry: registryService,
-		Events:   eventsService,
-		Trust:    trustService,
+		Graph:          g,
+		Key:            trustKey,
+		Registry:       registryService,
+		Events:         eventsService,
+		Trust:          trustService,
+		ConfirmDefPush: config.ConfirmDefPush,
 	}
 	repositories, err := graph.NewTagStore(path.Join(config.Root, "repositories-"+driver.String()), tagCfg)
 	if err != nil {

@@ -41,6 +41,9 @@ To see the man page for a command run **man docker <command>**.
 **--block-registry**=[]
   **EXPERIMENTAL** Prevent Docker daemon from contacting specified registries. There are two special keywords recognized. The first is "public" and represents public Docker registry. The second is "all" which causes all registries but those added with **--add-registry** flag to be blocked.
 
+**--confirm-def-push**=*true*|*false*
+  Makes Docker ask for a confirmation before a push to public registry. Default is true.
+
 **-D**, **--debug**=*true*|*false*
   Enable debug mode. Default is false.
 
@@ -110,6 +113,9 @@ unix://[/path/to/socket] to use.
 
 **-p**, **--pidfile**=""
   Path to use for daemon PID file. Default is `/var/run/docker.pid`
+
+**--protect-push**=*true*|*false*
+  Makes Docker ask for a confirmation to push to public registry. Default is true.
 
 **--registry-mirror**=<scheme>://<host>
   Prepend a registry mirror to be used for image pulls from public Docker registry. May be specified multiple times.
