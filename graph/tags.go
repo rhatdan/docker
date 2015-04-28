@@ -44,6 +44,7 @@ type TagStore struct {
 	registryService *registry.Service
 	eventsService   *events.Events
 	trustService    *trust.TrustStore
+	ConfirmDefPush  bool
 }
 
 type Repository map[string]string
@@ -67,11 +68,12 @@ func (r Repository) Contains(u Repository) bool {
 }
 
 type TagStoreConfig struct {
-	Graph    *Graph
-	Key      libtrust.PrivateKey
-	Registry *registry.Service
-	Events   *events.Events
-	Trust    *trust.TrustStore
+	Graph          *Graph
+	Key            libtrust.PrivateKey
+	Registry       *registry.Service
+	Events         *events.Events
+	Trust          *trust.TrustStore
+	ConfirmDefPush bool
 }
 
 func NewTagStore(path string, cfg *TagStoreConfig) (*TagStore, error) {
@@ -90,6 +92,7 @@ func NewTagStore(path string, cfg *TagStoreConfig) (*TagStore, error) {
 		registryService: cfg.Registry,
 		eventsService:   cfg.Events,
 		trustService:    cfg.Trust,
+		ConfirmDefPush:  cfg.ConfirmDefPush,
 	}
 	// Load the json file if it exists, otherwise create it.
 	if err := store.reload(); os.IsNotExist(err) {

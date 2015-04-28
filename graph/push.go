@@ -505,9 +505,9 @@ func (s *TagStore) Push(localName string, imagePushConfig *ImagePushConfig) erro
 		return err
 	}
 
-	if repoInfo.Index.Official && !imagePushConfig.Force {
+	if repoInfo.Index.Official && s.ConfirmDefPush && !imagePushConfig.Force {
 		return fmt.Errorf("Error: Status 403 trying to push repository %s to official registry: needs to be forced", localName)
-	} else if repoInfo.Index.Official && imagePushConfig.Force {
+	} else if repoInfo.Index.Official && !s.ConfirmDefPush && imagePushConfig.Force {
 		logrus.Infof("Push of %s to official registry has been forced", localName)
 	}
 

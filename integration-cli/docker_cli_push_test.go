@@ -14,6 +14,12 @@ import (
 	"github.com/go-check/check"
 )
 
+const (
+	confirmText  = "want to push to public registry? [y/n]"
+	farewellText = "nothing pushed."
+	loginText    = "login prior to push:"
+)
+
 // pulling an image from the central registry should work
 func (s *DockerRegistrySuite) TestPushBusyboxImage(c *check.C) {
 	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
@@ -142,10 +148,6 @@ func (s *DockerRegistrySuite) TestPushEmptyLayer(c *check.C) {
 }
 
 func (s *DockerSuite) TestPushToPublicRegistry(c *check.C) {
-	const (
-		confirmText  = "want to push to public registry? [y/n]"
-		farewellText = "nothing pushed."
-	)
 	repoName := "docker.io/dockercli/busybox"
 	// tag the image to upload it to the private registry
 	tagCmd := exec.Command(dockerBinary, "tag", "busybox", repoName)
@@ -261,4 +263,91 @@ func (s *DockerSuite) TestPushToPublicRegistry(c *check.C) {
 	}
 	runTest(exec.Command(dockerBinary, "push", repoName), false)
 	runTest(exec.Command(dockerBinary, "push", repoName), true)
+}
+
+func (s *DockerSuite) TestPushToPublicRegistryNoConfirm(c *check.C) {
+	d := NewDaemon(c)
+	daemonArgs := []string{"--confirm-def-push=false"}
+	if err := d.StartWithBusybox(daemonArgs...); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing { %s } flags: %v", strings.Join(daemonArgs, ", "), err)
+	}
+	defer d.Stop()
+
+	repoName := "docker.io/user/hello-world"
+	if out, err := d.Cmd("tag", "busybox", repoName); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+
+	runTest := func(name string, arg ...string) {
+		args := []string{"--host", d.sock(), name}
+		args = append(args, arg...)
+		c.Logf("Running %s %s %s", dockerBinary, name, strings.Join(args, " "))
+		cmd := exec.Command(dockerBinary, args...)
+
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			c.Fatalf("Failed to get stdin pipe for process: %v", err)
+		}
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			c.Fatalf("Failed to get stdout pipe for process: %v", err)
+		}
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			c.Fatalf("Failed to get stderr pipe for process: %v", err)
+		}
+		if err := cmd.Start(); err != nil {
+			c.Fatalf("Failed to start pushing to private registry: %v", err)
+		}
+		outReader := bufio.NewReader(stdout)
+
+		go io.Copy(os.Stderr, stderr)
+
+		errChan := make(chan error)
+		go func() {
+			for {
+				line, err := outReader.ReadBytes('\n')
+				if err != nil {
+					errChan <- fmt.Errorf("Failed to read line: %v", err)
+					break
+				}
+				c.Logf("output of push command: %q", line)
+				trimmed := strings.ToLower(strings.TrimSpace(string(line)))
+				if strings.HasSuffix(trimmed, confirmText) {
+					errChan <- fmt.Errorf("Got unexpected confirmation text: %q", line)
+					break
+				}
+				if strings.HasSuffix(trimmed, loginText) {
+					errChan <- nil
+					break
+				}
+			}
+		}()
+		select {
+		case err := <-errChan:
+			if err != nil {
+				c.Fatal(err.Error())
+			}
+		case <-time.After(10 * time.Second):
+			c.Fatal("Push command timeouted!")
+		}
+		stdin.Close()
+
+		// Wait for command to finish with short timeout.
+		finish := make(chan struct{})
+		go func() {
+			if err := cmd.Wait(); err == nil {
+				c.Errorf("Process should have failed after closing input stream.")
+			}
+			close(finish)
+		}()
+		select {
+		case <-finish:
+		case <-time.After(500 * time.Millisecond):
+			c.Fatalf("Docker push failed to exit!")
+		}
+	}
+
+	runTest("push", repoName)
+	runTest("push", "-f", repoName)
 }

@@ -828,9 +828,9 @@ func (s *Server) postImagesPush(version version.Version, w http.ResponseWriter, 
 		MetaHeaders: metaHeaders,
 		AuthConfig:  authConfig,
 		Tag:         r.Form.Get("tag"),
+		Force:       boolValue(r, "force"),
 		OutStream:   output,
 		Json:        useJSON,
-		Force:       boolValue(r, "force"),
 	}
 	if useJSON {
 		w.Header().Set("Content-Type", "application/json")
