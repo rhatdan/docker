@@ -1,6 +1,10 @@
 package registry
 
-import "github.com/docker/docker/cliconfig"
+import (
+	"fmt"
+
+	"github.com/docker/docker/cliconfig"
+)
 
 type Service struct {
 	Config *ServiceConfig
@@ -20,8 +24,11 @@ func NewService(options *Options) *Service {
 func (s *Service) Auth(authConfig *cliconfig.AuthConfig) (string, error) {
 	addr := authConfig.ServerAddress
 	if addr == "" {
-		// Use the official registry address if not specified.
+		// Use default registry address if not specified.
 		addr = IndexServerAddress()
+	}
+	if addr == "" {
+		return "", fmt.Errorf("No configured registry to authenticate to.")
 	}
 	index, err := s.ResolveIndex(addr)
 	if err != nil {
