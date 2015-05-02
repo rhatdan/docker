@@ -210,6 +210,7 @@ func httpError(w http.ResponseWriter, err error) {
 		"impossible":            http.StatusNotAcceptable,
 		"wrong login/password":  http.StatusUnauthorized,
 		"hasn't been activated": http.StatusForbidden,
+		"needs to be forced":    http.StatusForbidden,
 	} {
 		if strings.Contains(errStr, keyword) {
 			statusCode = status
@@ -829,6 +830,7 @@ func (s *Server) postImagesPush(version version.Version, w http.ResponseWriter, 
 		Tag:         r.Form.Get("tag"),
 		OutStream:   output,
 		Json:        useJSON,
+		Force:       boolValue(r, "force"),
 	}
 	if useJSON {
 		w.Header().Set("Content-Type", "application/json")
