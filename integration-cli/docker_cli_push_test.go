@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -165,6 +166,33 @@ func TestPushEmptyLayer(t *testing.T) {
 	logDone("push - empty layer config to private registry")
 }
 
+func readConfirmText(t *testing.T, out *bufio.Reader) {
+	done := make(chan struct{})
+	go func() {
+		line, err := out.ReadBytes(']')
+		if err != nil {
+			t.Fatalf("Failed to read a confirmation text for a push: %v", err)
+		}
+		if !strings.HasSuffix(strings.ToLower(string(line)), confirmText) {
+			t.Fatalf("Expected confirmation text %q, not: %q", confirmText, line)
+		}
+		buf := make([]byte, 4)
+		n, err := out.Read(buf)
+		if err != nil {
+			t.Fatalf("Failed to read confirmation text for a push: %v", err)
+		}
+		if n > 2 || n < 1 || buf[0] != ':' {
+			t.Fatalf("Got unexpected line ending: %q", string(buf))
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(4 * time.Second):
+		t.Fatalf("Timeout while waiting on confirmation text.")
+	}
+}
+
 func TestPushToPublicRegistry(t *testing.T) {
 	repoName := "docker.io/dockercli/busybox"
 	// tag the image to upload it to the private registry
@@ -195,33 +223,16 @@ func TestPushToPublicRegistry(t *testing.T) {
 
 		outReader := bufio.NewReader(stdout)
 
-		readConfirmText := func(out *bufio.Reader) {
-			line, err := out.ReadBytes(']')
-			if err != nil {
-				t.Fatalf("Failed to read a confirmation text for a push: %v", err)
-			}
-			if !strings.HasSuffix(strings.ToLower(string(line)), confirmText) {
-				t.Fatalf("Expected confirmation text %q, not: %q", confirmText, line)
-			}
-			buf := make([]byte, 4)
-			n, err := out.Read(buf)
-			if err != nil {
-				t.Fatalf("Failed to read confirmation text for a push: %v", err)
-			}
-			if n > 2 || n < 1 || buf[0] != ':' {
-				t.Fatalf("Got unexpected line ending: %q", string(buf))
-			}
-		}
-		readConfirmText(outReader)
+		readConfirmText(t, outReader)
 
 		stdin.Write([]byte("\n"))
-		readConfirmText(outReader)
+		readConfirmText(t, outReader)
 		stdin.Write([]byte("  \n"))
-		readConfirmText(outReader)
+		readConfirmText(t, outReader)
 		stdin.Write([]byte("foo\n"))
-		readConfirmText(outReader)
+		readConfirmText(t, outReader)
 		stdin.Write([]byte("no\n"))
-		readConfirmText(outReader)
+		readConfirmText(t, outReader)
 		if sayNo {
 			stdin.Write([]byte(" n \n"))
 		} else {
@@ -372,4 +383,96 @@ func TestPushToPublicRegistryNoConfirm(t *testing.T) {
 	runTest("push", "-f", repoName)
 
 	logDone("push - to public registry without confirmation")
+}
+
+func TestPushToAdditionalRegistry(t *testing.T) {
+	reg := setupAndGetRegistryAt(t, privateRegistryURLs[0])
+	defer reg.Close()
+	d := NewDaemon(t)
+	if err := d.StartWithBusybox("--add-registry=" + reg.url); err != nil {
+		t.Fatalf("We should have been able to start the daemon with passing add-registry=%s: %v", reg.url, err)
+	}
+	defer d.Stop()
+
+	busyboxId := d.getAndTestImageEntry(t, 1, "busybox", "").id
+
+	// push busybox to additional registry as "library/busybox" and remove all local images
+	if out, err := d.Cmd("tag", "busybox", "library/busybox"); err != nil {
+		t.Fatalf("Failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("push", "library/busybox"); err != nil {
+		t.Fatalf("Failed to push image library/busybox: error %v, output %q", err, out)
+	}
+	toRemove := []string{"busybox", "library/busybox"}
+	if out, err := d.Cmd("rmi", toRemove...); err != nil {
+		t.Fatalf("Failed to remove images %v: %v, output: %s", toRemove, err, out)
+	}
+	d.getAndTestImageEntry(t, 0, "", "")
+
+	// pull it from additional registry
+	if _, err := d.Cmd("pull", "library/busybox"); err != nil {
+		t.Fatalf("We should have been able to pull library/busybox from %q: %v", reg.url, err)
+	}
+	d.getAndTestImageEntry(t, 1, reg.url+"/library/busybox", busyboxId)
+
+	logDone("push - to additional registry")
+}
+
+func TestPushOfficialImage(t *testing.T) {
+	var reErr = regexp.MustCompile(`rename your repository to[^:]*:\s*<user>/busybox\b`)
+
+	// push busybox to public registry as "library/busybox"
+	cmd := exec.Command(dockerBinary, "push", "library/busybox")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("Failed to get stdin pipe for process: %v", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("Failed to get stdout pipe for process: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("Failed to get stderr pipe for process: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Failed to start pushing to public registry: %v", err)
+	}
+	outReader := bufio.NewReader(stdout)
+	readConfirmText(t, outReader)
+	stdin.Write([]byte{'Y', '\n'})
+
+	errReader := bufio.NewReader(stderr)
+	line, isPrefix, err := errReader.ReadLine()
+	if err != nil {
+		t.Fatalf("Failed to read farewell: %v", err)
+	}
+	if isPrefix {
+		t.Errorf("Got unexpectedly long output.")
+	}
+	if !reErr.Match(line) {
+		t.Errorf("Got unexpected output %q", line)
+	}
+	if line, _, err = outReader.ReadLine(); err != io.EOF {
+		t.Errorf("Expected EOF, not: %q", line)
+	}
+	for ; err != io.EOF; line, _, err = errReader.ReadLine() {
+		t.Errorf("Expected no message on stderr, got: %q", string(line))
+	}
+
+	// Wait for command to finish with short timeout.
+	finish := make(chan struct{})
+	go func() {
+		if err := cmd.Wait(); err == nil {
+			t.Error("Push command should have failed.")
+		}
+		close(finish)
+	}()
+	select {
+	case <-finish:
+	case <-time.After(1 * time.Second):
+		t.Fatalf("Docker push failed to exit.")
+	}
+
+	logDone("push - official image")
 }
