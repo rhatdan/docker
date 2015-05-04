@@ -494,6 +494,7 @@ func (s *TagStore) CmdPush(job *engine.Job) engine.Status {
 		sf          = utils.NewStreamFormatter(job.GetenvBool("json"))
 		authConfig  = &registry.AuthConfig{}
 		metaHeaders map[string][]string
+		localRepo   Repository
 	)
 
 	// Resolve the Repository name from fqn to RepositoryInfo
@@ -511,6 +512,23 @@ func (s *TagStore) CmdPush(job *engine.Job) engine.Status {
 		return job.Errorf("Error: Status 403 trying to push repository %s to official registry: needs to be forced", localName)
 	} else if repoInfo.Index.Official && force {
 		log.Infof("Push of %s to official registry has been forced", localName)
+	}
+
+	// If we're not using a custom registry, we know the restrictions
+	// applied to repository names and can warn the user in advance.
+	// Custom repositories can have different rules, and we must also
+	// allow pushing by image ID.
+	if repoInfo.Official {
+		username := authConfig.Username
+		if username == "" {
+			username = "<user>"
+		}
+		name := localName
+		parts := strings.Split(repoInfo.LocalName, "/")
+		if len(parts) > 0 {
+			name = parts[len(parts)-1]
+		}
+		return job.Errorf("You cannot push a \"root\" repository. Please rename your repository to <user>/<repo> (ex: %s/%s)", username, name)
 	}
 
 	if _, err := s.poolAdd("push", repoInfo.LocalName); err != nil {
@@ -533,10 +551,14 @@ func (s *TagStore) CmdPush(job *engine.Job) engine.Status {
 		reposLen = len(s.Repositories[repoInfo.LocalName])
 	}
 	job.Stdout.Write(sf.FormatStatus("", "The push refers to a repository [%s] (len: %d)", repoInfo.CanonicalName, reposLen))
-	// If it fails, try to get the repository
-	localRepo, exists := s.Repositories[repoInfo.LocalName]
-	if !exists {
-		return job.Errorf("Repository does not exist: %s", repoInfo.LocalName)
+	matching := s.getRepositoryList(localName)
+	for _, namedRepo := range matching {
+		for _, localRepo = range namedRepo {
+			break
+		}
+	}
+	if localRepo == nil {
+		return job.Errorf("Repository does not exist: %s", localName)
 	}
 
 	if repoInfo.Index.Official || endpoint.Version == registry.APIVersion2 {
