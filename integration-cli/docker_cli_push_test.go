@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -372,4 +373,89 @@ func TestPushToPublicRegistryNoConfirm(t *testing.T) {
 	runTest("push", "-f", repoName)
 
 	logDone("push - to public registry without confirmation")
+}
+
+func TestPushToAdditionalRegistry(t *testing.T) {
+	reg := setupAndGetRegistryAt(t, privateRegistryURLs[0])
+	defer reg.Close()
+	d := NewDaemon(t)
+	if err := d.StartWithBusybox("--add-registry=" + reg.url); err != nil {
+		t.Fatalf("We should have been able to start the daemon with passing add-registry=%s: %v", reg.url, err)
+	}
+	defer d.Stop()
+
+	busyboxId := d.getAndTestImageEntry(t, 1, "busybox", "").id
+
+	// push busybox to additional registry as "library/busybox" and remove all local images
+	if out, err := d.Cmd("tag", "busybox", "library/busybox"); err != nil {
+		t.Fatalf("Failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("push", "library/busybox"); err != nil {
+		t.Fatalf("Failed to push image library/busybox: error %v, output %q", err, out)
+	}
+	toRemove := []string{"busybox", "library/busybox"}
+	if out, err := d.Cmd("rmi", toRemove...); err != nil {
+		t.Fatalf("Failed to remove images %v: %v, output: %s", toRemove, err, out)
+	}
+	d.getAndTestImageEntry(t, 0, "", "")
+
+	// pull it from additional registry
+	if _, err := d.Cmd("pull", "library/busybox"); err != nil {
+		t.Fatalf("We should have been able to pull library/busybox from %q: %v", reg.url, err)
+	}
+	d.getAndTestImageEntry(t, 1, reg.url+"/library/busybox", busyboxId)
+
+	logDone("push - to additional registry")
+}
+
+func TestPushOfficialImage(t *testing.T) {
+	var reErr = regexp.MustCompile(`rename your repository to[^:]*:\s*<user>/busybox\b`)
+
+	// push busybox to public registry as "library/busybox"
+	cmd := exec.Command(dockerBinary, "push", "library/busybox")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("Failed to get stdout pipe for process: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("Failed to get stderr pipe for process: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Failed to start pushing to public registry: %v", err)
+	}
+	outReader := bufio.NewReader(stdout)
+	errReader := bufio.NewReader(stderr)
+	line, isPrefix, err := errReader.ReadLine()
+	if err != nil {
+		t.Fatalf("Failed to read farewell: %v", err)
+	}
+	if isPrefix {
+		t.Errorf("Got unexpectedly long output.")
+	}
+	if !reErr.Match(line) {
+		t.Errorf("Got unexpected output %q", line)
+	}
+	if line, _, err = outReader.ReadLine(); err != io.EOF {
+		t.Errorf("Expected EOF, not: %q", line)
+	}
+	for ; err != io.EOF; line, _, err = errReader.ReadLine() {
+		t.Errorf("Expected no message on stderr, got: %q", string(line))
+	}
+
+	// Wait for command to finish with short timeout.
+	finish := make(chan struct{})
+	go func() {
+		if err := cmd.Wait(); err == nil {
+			t.Error("Push command should have failed.")
+		}
+		close(finish)
+	}()
+	select {
+	case <-finish:
+	case <-time.After(1 * time.Second):
+		t.Fatalf("Docker push failed to exit.")
+	}
+
+	logDone("push - official image")
 }

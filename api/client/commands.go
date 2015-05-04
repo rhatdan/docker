@@ -1311,19 +1311,6 @@ func (cli *DockerCli) CmdPush(args ...string) error {
 	if err != nil {
 		return err
 	}
-	// Resolve the Auth config relevant for this server
-	authConfig := cli.configFile.ResolveAuthConfig(repoInfo.Index)
-	// If we're not using a custom registry, we know the restrictions
-	// applied to repository names and can warn the user in advance.
-	// Custom repositories can have different rules, and we must also
-	// allow pushing by image ID.
-	if repoInfo.Official {
-		username := authConfig.Username
-		if username == "" {
-			username = "<user>"
-		}
-		return fmt.Errorf("You cannot push a \"root\" repository. Please rename your repository to <user>/<repo> (ex: %s/%s)", username, repoInfo.LocalName)
-	}
 
 	v := url.Values{}
 	v.Set("tag", tag)
