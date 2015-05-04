@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -350,4 +351,45 @@ func (s *DockerSuite) TestPushToPublicRegistryNoConfirm(c *check.C) {
 
 	runTest("push", repoName)
 	runTest("push", "-f", repoName)
+}
+
+func (s *DockerRegistrySuite) TestPushToAdditionalRegistry(c *check.C) {
+	d := NewDaemon(c)
+	if err := d.StartWithBusybox("--add-registry=" + s.reg.url); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing add-registry=%s: %v", s.reg.url, err)
+	}
+	defer d.Stop()
+
+	busyboxId := d.getAndTestImageEntry(c, 1, "busybox", "").id
+
+	// push busybox to additional registry as "library/busybox" and remove all local images
+	if out, err := d.Cmd("tag", "busybox", "library/busybox"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("push", "library/busybox"); err != nil {
+		c.Fatalf("failed to push image library/busybox: error %v, output %q", err, out)
+	}
+	toRemove := []string{"busybox", "library/busybox"}
+	if out, err := d.Cmd("rmi", toRemove...); err != nil {
+		c.Fatalf("failed to remove images %v: %v, output: %s", toRemove, err, out)
+	}
+	d.getAndTestImageEntry(c, 0, "", "")
+
+	// pull it from additional registry
+	if _, err := d.Cmd("pull", "library/busybox"); err != nil {
+		c.Fatalf("we should have been able to pull library/busybox from %q: %v", s.reg.url, err)
+	}
+	d.getAndTestImageEntry(c, 1, s.reg.url+"/library/busybox", busyboxId)
+}
+
+func (s *DockerSuite) TestPushOfficialImage(c *check.C) {
+	var reErr = regexp.MustCompile(`rename your repository to[^:]*:\s*<user>/busybox\b`)
+
+	// push busybox to public registry as "library/busybox"
+	cmd := exec.Command(dockerBinary, "push", "library/busybox")
+	if out, _, err := runCommandWithOutput(cmd); err == nil {
+		c.Fatalf("Push to public registry should have failed: %s", out)
+	} else if !reErr.MatchString(out) {
+		c.Fatalf("Got unexpected text from push command: %q; error: %v", out, err)
+	}
 }
