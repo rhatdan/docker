@@ -54,6 +54,7 @@ type Config struct {
 	CpuSetMems     string
 	AuthConfig     *cliconfig.AuthConfig
 	ConfigFile     *cliconfig.ConfigFile
+	CgroupParent   string
 
 	Stdout  io.Writer
 	Context io.ReadCloser
@@ -166,6 +167,7 @@ func Build(d *daemon.Daemon, buildConfig *Config) error {
 		cpuQuota:        buildConfig.CpuQuota,
 		cpuSetCpus:      buildConfig.CpuSetCpus,
 		cpuSetMems:      buildConfig.CpuSetMems,
+		cgroupParent:    buildConfig.CgroupParent,
 		memory:          buildConfig.Memory,
 		memorySwap:      buildConfig.MemorySwap,
 		cancelled:       buildConfig.WaitCancelled(),

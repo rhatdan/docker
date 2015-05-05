@@ -146,6 +146,7 @@ Create a container
                "LxcConf": {"lxc.utsname":"docker"},
                "Memory": 0,
                "MemorySwap": 0,
+               "CgroupParent": "0,1",
                "CpuShares": 512,
                "CpusetCpus": "0,1",
                "CpusetMems": "0,1",
@@ -1258,6 +1259,7 @@ Query Parameters:
 -   **memswap** - Total memory (memory + swap), `-1` to disable swap
 -   **cpushares** - CPU shares (relative weight)
 -   **cpusetcpus** - CPUs in which to allow execution, e.g., `0-3`, `0,1`
+-   **CgroupParent** - Path to cgroups under which the cgroup for the container will be created. If the path is not absolute, the path is considered to be relative to the cgroups path of the init process. Cgroups will be created if they do not already exist.
 
     Request Headers:
 
