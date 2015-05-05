@@ -19,6 +19,7 @@ docker-build - Build a new image from the source code at PATH
 [**-c**|**--cpu-shares**[=*0*]]
 [**--cpu-quota**[=*0*]]
 [**--cpuset-cpus**[=*CPUSET-CPUS*]]
+[**--cgroup-parent**[=*CGROUP-PATH*]]
 
 PATH | URL | -
 
@@ -62,6 +63,9 @@ as context.
 
 **-t**, **--tag**=""
    Repository name (and optionally a tag) to be applied to the resulting image in case of success
+
+**--cgroup-parent**=""
+   Path to cgroups under which the cgroup for the container will be created. If the path is not absolute, the path is considered to be relative to the cgroups path of the init process. Cgroups will be created if they do not already exist.
 
 # EXAMPLES
 
