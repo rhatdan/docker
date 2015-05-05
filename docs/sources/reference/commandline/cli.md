@@ -1921,7 +1921,13 @@ To remove an image using its digest:
       --memory-swap=""           Total memory (memory + swap), '-1' to disable swap
       --name=""                  Assign a name to the container
       --net="bridge"             Set the Network mode for the container
-      --oom-kill-disable=false   Whether to disable OOM Killer for the container or not
+                                 'bridge': creates a new network stack for the container onthe docker bridge
+                                 'none': no networking for this container
+                                 'container:<name|id>': reuses another container network stack
+                                 'host': use the host network stack inside the container.  Note: the host mode gives the container full access to local system services such as D-bus and is therefore considered insecure.
+                                   'ns:<path>': use the specified network namespace
+      --oom-kill-disable=false   Whether to disable OOM Killer for the containe
+r or not
       -P, --publish-all=false    Publish all exposed ports to random ports
       -p, --publish=[]           Publish a container's port(s) to the host
       --pid=""                   PID namespace to use
