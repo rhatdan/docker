@@ -58,6 +58,12 @@ func TestNetHostname(t *testing.T) {
 	}
 }
 
+func TestNetNs(t *testing.T) {
+	if _, _, _, err := parseRun([]string{"--net=ns:mynetns", "img", "cmd"}); err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+}
+
 func TestConflictContainerNetworkAndLinks(t *testing.T) {
 	if _, _, _, err := parseRun([]string{"--net=container:other", "--link=zip:zap", "img", "cmd"}); err != ErrConflictContainerNetworkAndLinks {
 		t.Fatalf("Expected error ErrConflictContainerNetworkAndLinks, got: %s", err)
