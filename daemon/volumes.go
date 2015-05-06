@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -69,7 +70,7 @@ func (container *Container) createVolumes() error {
 	// track bind paths separately due to #10618
 	bindPaths := make(map[string]struct{})
 	for _, spec := range container.hostConfig.Binds {
-		mnt, err := parseBindMountSpec(spec)
+		mnt, err := parseBindMountSpec(spec, container.MountLabel)
 		if err != nil {
 			return err
 		}
@@ -112,9 +113,20 @@ func (container *Container) createVolumes() error {
 			return err
 		}
 
+		runtime.LockOSThread()
+		defer resetLabeling()
+
+		if err := label.SetFileCreateLabel(container.MountLabel); err != nil {
+			return fmt.Errorf("Unable to setup default labeling for volume creation %s: %v", mnt.hostPath, err)
+		}
+
 		// Create the actual volume
 		v, err := container.daemon.volumes.FindOrCreateVolume(mnt.hostPath, mnt.writable)
 		if err != nil {
+			return err
+		}
+
+		if err := resetLabeling(); err != nil {
 			return err
 		}
 
@@ -165,11 +177,25 @@ func (container *Container) registerVolumes() {
 		if rw, exists := container.VolumesRW[path]; exists {
 			writable = rw
 		}
+		runtime.LockOSThread()
+		defer resetLabeling()
+
+		if err := label.SetFileCreateLabel(container.MountLabel); err != nil {
+			logrus.Debugf("Unable to setup default labeling for volume creation %s: %v", path, err)
+			continue
+
+		}
+
+		// Create the actual volume
 		v, err := container.daemon.volumes.FindOrCreateVolume(path, writable)
 		if err != nil {
 			logrus.Debugf("error registering volume %s: %v", path, err)
 			continue
 		}
+		if err := resetLabeling(); err != nil {
+			logrus.Debugf("Unable to reset labeling %s: %v", path, err)
+		}
+
 		v.AddContainer(container.ID)
 	}
 }
@@ -184,8 +210,13 @@ func (container *Container) derefVolumes() {
 		vol.RemoveContainer(container.ID)
 	}
 }
+func resetLabeling() error {
+	err := label.SetFileCreateLabel("")
+	runtime.UnlockOSThread()
+	return err
+}
 
-func parseBindMountSpec(spec string) (*volumeMount, error) {
+func parseBindMountSpec(spec string, mountLabel string) (*volumeMount, error) {
 	arr := strings.Split(spec, ":")
 
 	mnt := &volumeMount{}
@@ -197,7 +228,17 @@ func parseBindMountSpec(spec string) (*volumeMount, error) {
 	case 3:
 		mnt.hostPath = arr[0]
 		mnt.containerPath = arr[1]
-		mnt.writable = validMountMode(arr[2]) && arr[2] == "rw"
+		mode := arr[2]
+		if !validMountMode(mode) {
+			return nil, fmt.Errorf("Invalid volume specification: %s", spec)
+		}
+		mnt.writable = rwModes[mode]
+		if strings.ContainsAny(mode, "zZ") {
+			if err := label.Relabel(mnt.hostPath, mountLabel, mode); err != nil {
+				return nil, err
+			}
+		}
+
 	default:
 		return nil, fmt.Errorf("Invalid volume specification: %s", spec)
 	}
@@ -230,24 +271,39 @@ func parseVolumesFromSpec(spec string) (string, string, error) {
 	return id, mode, nil
 }
 
-func validMountMode(mode string) bool {
-	validModes := map[string]bool{
-		"rw": true,
-		"ro": true,
-	}
+var rwModes = map[string]bool{
+	"rw":   true,
+	"rw,Z": true,
+	"rw,z": true,
+	"z,rw": true,
+	"Z,rw": true,
+	"Z":    true,
+	"z":    true,
+}
+var roModes = map[string]bool{
+	"ro":   true,
+	"ro,Z": true,
+	"ro,z": true,
+	"z,ro": true,
+	"Z,ro": true,
+}
 
-	return validModes[mode]
+func validMountMode(mode string) bool {
+	return roModes[mode] || rwModes[mode]
 }
 
 func (container *Container) specialMounts() []execdriver.Mount {
 	var mounts []execdriver.Mount
 	if container.ResolvConfPath != "" {
+		label.SetFileLabel(container.ResolvConfPath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.ResolvConfPath, Destination: "/etc/resolv.conf", Writable: !container.hostConfig.ReadonlyRootfs, Private: true})
 	}
 	if container.HostnamePath != "" {
+		label.SetFileLabel(container.HostnamePath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.HostnamePath, Destination: "/etc/hostname", Writable: !container.hostConfig.ReadonlyRootfs, Private: true})
 	}
 	if container.HostsPath != "" {
+		label.SetFileLabel(container.HostsPath, container.MountLabel)
 		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Writable: !container.hostConfig.ReadonlyRootfs, Private: true})
 	}
 	return mounts
