@@ -277,7 +277,7 @@ func (store *TagStore) Delete(repoName, ref string) (bool, error) {
 // overwritten. Default repository will be prepend to unqualified repoName
 // unless keepUnqualified is true.
 func (store *TagStore) Tag(repoName, tag, imageName string, force, keepUnqualified bool) error {
-	return store.setLoad(repoName, tag, imageName, force, nil)
+	return store.setLoad(repoName, tag, imageName, force, keepUnqualified, nil)
 }
 
 // setLoad stores the image to the store.
