@@ -134,13 +134,14 @@ type ContainerProcessList struct {
 }
 
 type Version struct {
-	Version       string
-	ApiVersion    version.Version
-	GitCommit     string
-	GoVersion     string
-	Os            string
-	Arch          string
-	KernelVersion string `json:",omitempty"`
+	Version        string
+	ApiVersion     version.Version
+	GitCommit      string
+	GoVersion      string
+	Os             string
+	Arch           string
+	KernelVersion  string `json:",omitempty"`
+	PackageVersion string `json:",omitempty"`
 }
 
 // GET "/info"
