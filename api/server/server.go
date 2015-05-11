@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -254,6 +255,12 @@ func (s *Server) getVersion(version version.Version, w http.ResponseWriter, r *h
 	}
 	if kernelVersion, err := kernel.GetKernelVersion(); err == nil {
 		v.KernelVersion = kernelVersion.String()
+	}
+	if output, err := exec.Command("rpm", "-q", "docker").Output(); err == nil {
+		fmt.Println("Dan output", output)
+		v.PackageVersion = string(output)
+	} else {
+		fmt.Println("Dan err", err)
 	}
 
 	return writeJSON(w, http.StatusOK, v)
