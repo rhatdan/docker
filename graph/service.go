@@ -195,12 +195,6 @@ func (s *TagStore) fetchManifest(name, ref string, config *LookupRemoteConfig) (
 		logrus.Debugf("Trying to fetch image manifest of %s repository from %s %s", repoInfo.CanonicalName, endpoint.URL, endpoint.Version)
 		fallback := false
 
-		/*		if !endpoint.Mirror && (endpoint.Official || endpoint.Version == registry.APIVersion2) {
-					if repoInfo.Official {
-						s.trustService.UpdateBase()
-					}
-				}
-		*/
 		fetcher, err := NewManifestFetcher(s, endpoint, repoInfo, config)
 		if err != nil {
 			lastErr = err

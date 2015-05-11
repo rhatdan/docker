@@ -335,12 +335,6 @@ func (s *TagStore) getRemoteTagList(name string, config *RemoteTagsConfig) (*typ
 		logrus.Debugf("Trying to fetch tag list of %s repository from %s %s", repoInfo.CanonicalName, endpoint.URL, endpoint.Version)
 		fallback := false
 
-		/*		if !endpoint.Mirror && (endpoint.Official || endpoint.Version == registry.APIVersion2) {
-					if repoInfo.Official {
-						s.trustService.UpdateBase()
-					}
-				}
-		*/
 		tagLister, err := NewTagLister(s, endpoint, repoInfo, config)
 		if err != nil {
 			lastErr = err
