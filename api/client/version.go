@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"runtime"
 
 	"github.com/docker/docker/api"
@@ -26,6 +27,9 @@ func (cli *DockerCli) CmdVersion(args ...string) error {
 		fmt.Fprintf(cli.out, "Client version: %s\n", dockerversion.VERSION)
 	}
 	fmt.Fprintf(cli.out, "Client API version: %s\n", api.APIVERSION)
+	if output, err := exec.Command("rpm", "-q", "docker").Output(); err == nil {
+		fmt.Fprintf(cli.out, "Client package version: %s", output)
+	}
 	fmt.Fprintf(cli.out, "Go version (client): %s\n", runtime.Version())
 	if dockerversion.GITCOMMIT != "" {
 		fmt.Fprintf(cli.out, "Git commit (client): %s\n", dockerversion.GITCOMMIT)
@@ -50,6 +54,9 @@ func (cli *DockerCli) CmdVersion(args ...string) error {
 	fmt.Fprintf(cli.out, "Go version (server): %s\n", v.GoVersion)
 	fmt.Fprintf(cli.out, "Git commit (server): %s\n", v.GitCommit)
 	fmt.Fprintf(cli.out, "OS/Arch (server): %s/%s\n", v.Os, v.Arch)
+	if v.PackageVersion != "" {
+		fmt.Fprintf(cli.out, "Server package version: %s\n", v.PackageVersion)
+	}
 
 	return nil
 }
