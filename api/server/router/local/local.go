@@ -104,6 +104,7 @@ func (r *router) initRoutes() {
 		NewGetRoute("/images/{name:.*}/get", r.getImagesGet),
 		NewGetRoute("/images/{name:.*}/history", r.getImagesHistory),
 		NewGetRoute("/images/{name:.*}/json", r.getImagesByName),
+		NewGetRoute("/images/{name:.*}/tags", r.getImagesTags),
 		// POST
 		NewPostRoute("/auth", r.postAuth),
 		NewPostRoute("/commit", r.postCommit),
