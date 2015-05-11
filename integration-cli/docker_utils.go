@@ -343,7 +343,7 @@ func (d *Daemon) getImages(c *check.C, args ...string) map[string]*LocalImageEnt
 	reImageEntry := regexp.MustCompile(`(?m)^([[:alnum:]/.:_-]+)\s+(\w+)\s+([a-fA-F0-9]+)\s+`)
 	result := make(map[string]*LocalImageEntry)
 
-	out, err := d.Cmd("images", args...)
+	out, err := d.Cmd("images", append([]string{"--no-trunc"}, args...)...)
 	if err != nil {
 		c.Fatalf("failed to list images: %v", err)
 	}
