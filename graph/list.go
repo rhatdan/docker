@@ -8,6 +8,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/cliconfig"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/parsers/filters"
 	"github.com/docker/docker/registry"
@@ -30,6 +31,55 @@ type ByCreated []*types.Image
 func (r ByCreated) Len() int           { return len(r) }
 func (r ByCreated) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r ByCreated) Less(i, j int) bool { return r[i].Created < r[j].Created }
+
+type ByTagName []*types.RepositoryTag
+
+func (r ByTagName) Len() int           { return len(r) }
+func (r ByTagName) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
+func (r ByTagName) Less(i, j int) bool { return r[i].Tag < r[j].Tag }
+
+type ByAPIVersion []registry.APIEndpoint
+
+func (r ByAPIVersion) Len() int      { return len(r) }
+func (r ByAPIVersion) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r ByAPIVersion) Less(i, j int) bool {
+	if r[i].Version < r[j].Version {
+		return true
+	}
+	if r[i].Version == r[j].Version && strings.HasPrefix(r[i].URL, "https://") && !strings.HasPrefix(r[j].URL, "https://") {
+		return true
+	}
+	return false
+}
+
+type RemoteTagsConfig struct {
+	MetaHeaders map[string][]string
+	AuthConfig  *cliconfig.AuthConfig
+}
+
+type TagLister interface {
+	ListTags() (tagList []*types.RepositoryTag, fallback bool, err error)
+}
+
+func NewTagLister(s *TagStore, endpoint registry.APIEndpoint, repoInfo *registry.RepositoryInfo, config *RemoteTagsConfig) (TagLister, error) {
+	switch endpoint.Version {
+	case registry.APIVersion2:
+		return &v2TagLister{
+			TagStore: s,
+			endpoint: endpoint,
+			config:   config,
+			repoInfo: repoInfo,
+		}, nil
+	case registry.APIVersion1:
+		return &v1TagLister{
+			TagStore: s,
+			endpoint: endpoint,
+			config:   config,
+			repoInfo: repoInfo,
+		}, nil
+	}
+	return nil, fmt.Errorf("unknown version %d for registry %s", endpoint.Version, endpoint.URL)
+}
 
 func (s *TagStore) Images(config *ImagesConfig) ([]*types.Image, error) {
 	var (
@@ -164,4 +214,129 @@ func (s *TagStore) Images(config *ImagesConfig) ([]*types.Image, error) {
 	sort.Sort(sort.Reverse(ByCreated(images)))
 
 	return images, nil
+}
+
+func (s *TagStore) Tags(name string) (*types.RepositoryTagList, error) {
+	var tagList *types.RepositoryTagList
+
+	// Resolve the Repository name from fqn to RepositoryInfo
+	repos := s.getRepositoryList(name)
+	if len(repos) < 1 {
+		return nil, fmt.Errorf("no such repository %q", name)
+	}
+
+	for repoName, repo := range repos[0] {
+		tagList = &types.RepositoryTagList{
+			Name:    repoName,
+			TagList: make([]*types.RepositoryTag, 0, len(repo)),
+		}
+
+		for ref, id := range repo {
+			tagList.TagList = append(tagList.TagList, &types.RepositoryTag{
+				Tag:     ref,
+				ImageID: id,
+			})
+		}
+	}
+
+	sort.Sort(ByTagName(tagList.TagList))
+	return tagList, nil
+}
+
+func (s *TagStore) RemoteTags(name string, config *RemoteTagsConfig) (*types.RepositoryTagList, error) {
+	var (
+		tagList *types.RepositoryTagList
+		err     error
+	)
+	// Unless the index name is specified, iterate over all registries until
+	// the matching image is found.
+	if registry.RepositoryNameHasIndex(name) {
+		return s.getRemoteTagList(name, config)
+	}
+	if len(registry.RegistryList) == 0 {
+		return nil, fmt.Errorf("No configured registry to pull from.")
+	}
+	for _, r := range registry.RegistryList {
+		// Prepend the index name to the image name.
+		if tagList, err = s.getRemoteTagList(fmt.Sprintf("%s/%s", r, name), config); err == nil {
+			return tagList, nil
+		}
+	}
+	return tagList, err
+}
+
+func (s *TagStore) getRemoteTagList(name string, config *RemoteTagsConfig) (*types.RepositoryTagList, error) {
+	// Resolve the Repository name from fqn to RepositoryInfo
+	repoInfo, err := s.registryService.ResolveRepository(name)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateRepoName(repoInfo.LocalName); err != nil {
+		return nil, err
+	}
+
+	endpoints, err := s.registryService.LookupEndpoints(repoInfo.CanonicalName)
+	if err != nil {
+		return nil, err
+	}
+	// Prefer v1 versions which provide also image ids
+	sort.Sort(ByAPIVersion(endpoints))
+
+	var (
+		lastErr error
+		// discardNoSupportErrors is used to track whether an endpoint encountered an error of type registry.ErrNoSupport
+		// By default it is false, which means that if a ErrNoSupport error is encountered, it will be saved in lastErr.
+		// As soon as another kind of error is encountered, discardNoSupportErrors is set to true, avoiding the saving of
+		// any subsequent ErrNoSupport errors in lastErr.
+		// It's needed for pull-by-digest on v1 endpoints: if there are only v1 endpoints configured, the error should be
+		// returned and displayed, but if there was a v2 endpoint which supports pull-by-digest, then the last relevant
+		// error is the ones from v2 endpoints not v1.
+		discardNoSupportErrors bool
+		tagList                = &types.RepositoryTagList{Name: repoInfo.CanonicalName}
+	)
+	for _, endpoint := range endpoints {
+		logrus.Debugf("Trying to fetch tag list of %s repository from %s %s", repoInfo.CanonicalName, endpoint.URL, endpoint.Version)
+		fallback := false
+
+		if !endpoint.Mirror && (endpoint.Official || endpoint.Version == registry.APIVersion2) {
+			if repoInfo.Official {
+				s.trustService.UpdateBase()
+			}
+		}
+
+		tagLister, err := NewTagLister(s, endpoint, repoInfo, config)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		tagList.TagList, fallback, err = tagLister.ListTags()
+		if err != nil {
+			// We're querying v1 registries first. Let's ignore errors until
+			// the first v2 registry.
+			if fallback || endpoint.Version == registry.APIVersion1 {
+				if _, ok := err.(registry.ErrNoSupport); !ok {
+					// Because we found an error that's not ErrNoSupport, discard all subsequent ErrNoSupport errors.
+					discardNoSupportErrors = true
+					// save the current error
+					lastErr = err
+				} else if !discardNoSupportErrors {
+					// Save the ErrNoSupport error, because it's either the first error or all encountered errors
+					// were also ErrNoSupport errors.
+					lastErr = err
+				}
+				continue
+			}
+			logrus.Debugf("Not continuing with error: %v", err)
+			return nil, err
+		}
+
+		sort.Sort(ByTagName(tagList.TagList))
+		return tagList, nil
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no endpoints found for %s", repoInfo.Index.Name)
+	}
+	return nil, lastErr
 }
