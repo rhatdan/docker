@@ -236,6 +236,7 @@ func (d *driver) setupMounts(container *configs.Config, c *execdriver.Command) e
 		container.Mounts = append(container.Mounts, &configs.Mount{
 			Source:      m.Source,
 			Destination: m.Destination,
+			Relabel:     m.Relabel,
 			Device:      "bind",
 			Flags:       flags,
 		})

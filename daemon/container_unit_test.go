@@ -5,6 +5,50 @@ import (
 	"testing"
 )
 
+func TestVolumeSpec(t *testing.T) {
+	valid_ro_opts := []string{
+		"/vol1:/vol1:ro",
+		"/vol1:/vol1:roZ",
+		"/vol1:/vol1:Zro",
+		"/vol1:/vol1:zro",
+		"/vol1:/vol1:roz",
+	}
+
+	valid_rw_opts := []string{
+		"/vol1:/vol1",
+		"/vol1:/vol1:rw",
+		"/vol1:/vol1:rwZ",
+		"/vol1:/vol1:zrw",
+		"/vol1:/vol1:Zrw",
+		"/vol1:/vol1:rwz",
+		"/vol1:/vol1:z",
+		"/vol1:/vol1:Z",
+	}
+	for _, opt := range valid_rw_opts {
+		_, _, writable, _, err := parseBindMountSpec(opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !writable {
+			t.Fatal("Writable option not writable")
+		}
+	}
+	for _, opt := range valid_ro_opts {
+		_, _, writable, _, err := parseBindMountSpec(opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if writable {
+			t.Fatal("Read/Only option writable")
+		}
+	}
+
+	_, _, _, _, err := parseBindMountSpec("/vol1:/vol1:rp")
+	if err == nil {
+		t.Fatal("Error should not be nil")
+	}
+}
+
 func TestParseNetworkOptsPrivateOnly(t *testing.T) {
 	ports, bindings, err := nat.ParsePortSpecs([]string{"192.168.1.100::80"})
 	if err != nil {
