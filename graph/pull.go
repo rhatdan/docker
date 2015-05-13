@@ -112,6 +112,7 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 	tagsList, err := r.GetRemoteTags(repoData.Endpoints, repoInfo.RemoteName, repoData.Tokens)
 	if err != nil {
 		logrus.Errorf("unable to get remote tags: %s", err)
+		out.Write(sf.FormatStatus("", " failed"))
 		return err
 	}
 
@@ -133,10 +134,13 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		// Otherwise, check that the tag exists and use only that one
 		id, exists := tagsList[askedTag]
 		if !exists {
+			out.Write(sf.FormatStatus("", " not found"))
 			return fmt.Errorf("Tag %s not found in repository %s", askedTag, repoInfo.CanonicalName)
 		}
 		repoData.ImgList[id].Tag = askedTag
 	}
+
+	out.Write(sf.FormatStatus("", ""))
 
 	errors := make(chan error)
 
@@ -226,7 +230,7 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		if askedTag != "" && tag != askedTag {
 			continue
 		}
-		if err := s.Tag(repoInfo.LocalName, tag, id, true); err != nil {
+		if err := s.Tag(repoInfo.LocalName, tag, id, true, false); err != nil {
 			return err
 		}
 	}
@@ -581,12 +585,12 @@ func (s *TagStore) pullV2Tag(r *registry.Session, out io.Writer, endpoint *regis
 	}
 
 	if utils.DigestReference(tag) {
-		if err = s.SetDigest(repoInfo.LocalName, tag, downloads[0].img.ID); err != nil {
+		if err = s.SetDigest(repoInfo.LocalName, tag, downloads[0].img.ID, false); err != nil {
 			return false, err
 		}
 	} else {
 		// only set the repository/tag -> image ID mapping when pulling by tag (i.e. not by digest)
-		if err = s.Tag(repoInfo.LocalName, tag, downloads[0].img.ID, true); err != nil {
+		if err = s.Tag(repoInfo.LocalName, tag, downloads[0].img.ID, true, false); err != nil {
 			return false, err
 		}
 	}
