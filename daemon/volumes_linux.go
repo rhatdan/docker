@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/volume"
 	"github.com/docker/docker/volume/local"
+	"github.com/docker/libcontainer/label"
 )
 
 // copyOwnership copies the permissions and uid:gid of the source file
@@ -54,6 +55,31 @@ func (container *Container) setupMounts() ([]execdriver.Mount, error) {
 			Destination: m.Destination,
 			Writable:    m.RW,
 		})
+	}
+
+	if container.Config.Init == "systemd" {
+		if container.MountPoints["/run"] == nil {
+			mounts = append(mounts, execdriver.Mount{Source: "tmpfs", Destination: "/run", Writable: true, Private: true})
+		}
+
+		if container.MountPoints["/sys"] == nil &&
+			container.MountPoints["/sys/fs"] == nil &&
+			container.MountPoints["/sys/fs/cgroup"] == nil {
+			mounts = append(mounts, execdriver.Mount{Source: "/sys/fs/cgroup", Destination: "/sys/fs/cgroup", Writable: false, Private: true})
+		}
+
+		if container.MountPoints["/var"] == nil &&
+			container.MountPoints["/var/log"] == nil &&
+			container.MountPoints["/var/log/journal"] == nil {
+			if journalPath, err := container.setupJournal(); err != nil {
+				return nil, err
+			} else {
+				if journalPath != "" {
+					label.Relabel(journalPath, container.MountLabel, "Z")
+					mounts = append(mounts, execdriver.Mount{Source: journalPath, Destination: journalPath, Writable: true, Private: true})
+				}
+			}
+		}
 	}
 
 	mounts = sortMounts(mounts)
@@ -128,4 +154,14 @@ func validVolumeLayout(files []os.FileInfo) bool {
 	}
 
 	return true
+}
+
+func (container *Container) setupJournal() (string, error) {
+	path := journalPath(container.ID)
+	if path != "" {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return "", err
+		}
+	}
+	return path, nil
 }
