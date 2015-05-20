@@ -50,6 +50,7 @@ docker-run - Run a command in a new container
 [**--rm**[=*false*]]
 [**--security-opt**[=*[]*]]
 [**--sig-proxy**[=*true*]]
+[**--systemd**[=*false*]]
 [**-t**|**--tty**[=*false*]]
 [**-u**|**--user**[=*USER*]]
 [**-v**|**--volume**[=*[]*]]

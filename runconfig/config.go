@@ -129,6 +129,7 @@ type Config struct {
 	MacAddress      string
 	OnBuild         []string
 	Labels          map[string]string
+	Systemd         bool
 }
 
 type ContainerConfigWrapper struct {
