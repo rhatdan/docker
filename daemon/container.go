@@ -87,6 +87,7 @@ type CommonContainer struct {
 	// logDriver for closing
 	logDriver logger.Logger
 	logCopier *logger.Copier
+	Systemd   bool
 }
 
 func (container *Container) FromDisk() error {
