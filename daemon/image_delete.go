@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/engine"
 	"github.com/docker/docker/graph"
 	"github.com/docker/docker/image"
@@ -145,6 +146,16 @@ func (daemon *Daemon) DeleteImage(eng *engine.Engine, name string, imgs *engine.
 
 func (daemon *Daemon) canDeleteImage(imgID string, force bool) error {
 	for _, container := range daemon.List() {
+		if container.ImageID == "" {
+			// This technically should never happen, but if the container
+			// has no ImageID then log the situation and move on.
+			// If we allowed processing to continue then the code later
+			// on would fail with a "Prefix can't be empty" error even
+			// though the bad container has nothing to do with the image
+			// we're trying to delete.
+			log.Errorf("Container %q has no image associated with it!", container.ID)
+			continue
+		}
 		parent, err := daemon.Repositories().LookupImage(container.ImageID)
 		if err != nil {
 			if daemon.Graph().IsNotExist(err) {
