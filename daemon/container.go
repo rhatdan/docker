@@ -348,6 +348,7 @@ func (container *Container) cleanup() {
 	}
 
 	container.UnmountVolumes(false)
+	container.terminateMachine()
 }
 
 func (container *Container) KillSig(sig int) error {
@@ -739,6 +740,7 @@ func (container *Container) waitForStart() error {
 		return err
 	}
 
+	container.registerMachine()
 	return nil
 }
 
