@@ -99,8 +99,9 @@ type Container struct {
 	Volumes map[string]string
 	// Store rw/ro in a separate structure to preserve reverse-compatibility on-disk.
 	// Easier than migrating older container configs :)
-	VolumesRW  map[string]bool
-	hostConfig *runconfig.HostConfig
+	VolumesRW      map[string]bool
+	VolumesRelabel map[string]string
+	hostConfig     *runconfig.HostConfig
 
 	activeLinks  map[string]*links.Link
 	monitor      *containerMonitor
@@ -1531,6 +1532,6 @@ rather then fail the container
 func (container *Container) registerMachine() {
 	err := systemd.RegisterMachine(container.Name[1:], container.ID, container.Pid, "/")
 	if err != nil {
-		logrus.Errorf("Unable to RegisterMachine %s for %s: %s", container.Name[1:], container.ID, err)
+		log.Errorf("Unable to RegisterMachine %s for %s: %s", container.Name[1:], container.ID, err)
 	}
 }
