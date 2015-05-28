@@ -20,6 +20,33 @@ import (
 	"github.com/docker/docker/utils"
 )
 
+func (s *TagStore) CmdRegistryPull(job *engine.Job) engine.Status {
+	var (
+		tmp    = job.Args[0]
+		status = engine.StatusErr
+	)
+	doPull := func(what string) engine.Status {
+		job.Args[0] = what
+		status := s.CmdPull(job)
+		return status
+	}
+	// Unless the index name is specified, iterate over all registries until
+	// the matching image is found.
+	if registry.RepositoryNameHasIndex(tmp) {
+		return doPull(tmp)
+	}
+	if len(registry.RegistryList) == 0 {
+		return job.Errorf("No configured registry to pull from.")
+	}
+	for _, r := range registry.RegistryList {
+		// Prepend the index name to the image/repository.
+		if status = doPull(fmt.Sprintf("%s/%s", r, tmp)); status == engine.StatusOK {
+			break
+		}
+	}
+	return status
+}
+
 func (s *TagStore) CmdPull(job *engine.Job) engine.Status {
 	if n := len(job.Args); n != 1 && n != 2 {
 		return job.Errorf("Usage: %s IMAGE [TAG|DIGEST]", job.Name)
@@ -108,21 +135,44 @@ func (s *TagStore) CmdPull(job *engine.Job) engine.Status {
 }
 
 func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *registry.RepositoryInfo, askedTag string, sf *utils.StreamFormatter, parallel bool) error {
-	out.Write(sf.FormatStatus("", "Pulling repository %s", repoInfo.CanonicalName))
+	out.Write(sf.FormatStream(fmt.Sprintf("Trying to pull repository %s ...", repoInfo.CanonicalName)))
 
 	repoData, err := r.GetRepositoryData(repoInfo.RemoteName)
 	if err != nil {
 		if strings.Contains(err.Error(), "HTTP code: 404") {
+			out.Write(sf.FormatStatus("", " not found"))
 			return fmt.Errorf("Error: image %s not found", utils.ImageReference(repoInfo.RemoteName, askedTag))
 		}
 		// Unexpected HTTP error
+		out.Write(sf.FormatStatus("", " failed"))
 		return err
+	}
+
+	if strings.HasPrefix(repoInfo.LocalName, registry.INDEXNAME+"/") {
+		newEndpoints := []string{}
+		unofficial := []string{}
+		for _, endpoint := range repoData.Endpoints {
+			if parsedURL, err := url.Parse(endpoint); err == nil {
+				if strings.HasSuffix(parsedURL.Host, registry.INDEXNAME) {
+					newEndpoints = append(newEndpoints, endpoint)
+				} else {
+					log.Infof("Filtering out endpoint %q pointing out to unofficial registry.", endpoint)
+					unofficial = append(unofficial, strings.Replace(repoInfo.LocalName, registry.INDEXNAME, parsedURL.Host, 1))
+				}
+			}
+		}
+		if len(newEndpoints) == 0 {
+			out.Write(sf.FormatStatus("", " failed"))
+			return fmt.Errorf("Official registry redirects to unofficial for repository %q, please specify it as: %s", repoInfo.LocalName, strings.Join(unofficial, " or "))
+		}
+		repoData.Endpoints = newEndpoints
 	}
 
 	log.Debugf("Retrieving the tag list")
 	tagsList, err := r.GetRemoteTags(repoData.Endpoints, repoInfo.RemoteName, repoData.Tokens)
 	if err != nil {
 		log.Errorf("unable to get remote tags: %s", err)
+		out.Write(sf.FormatStatus("", " failed"))
 		return err
 	}
 
@@ -144,10 +194,13 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		// Otherwise, check that the tag exists and use only that one
 		id, exists := tagsList[askedTag]
 		if !exists {
+			out.Write(sf.FormatStatus("", " not found"))
 			return fmt.Errorf("Tag %s not found in repository %s", askedTag, repoInfo.CanonicalName)
 		}
 		repoData.ImgList[id].Tag = askedTag
 	}
+
+	out.Write(sf.FormatStatus("", ""))
 
 	errors := make(chan error)
 
@@ -252,7 +305,7 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		if askedTag != "" && tag != askedTag {
 			continue
 		}
-		if err := s.Set(repoInfo.LocalName, tag, id, true); err != nil {
+		if err := s.Set(repoInfo.LocalName, tag, id, true, false); err != nil {
 			return err
 		}
 	}
@@ -601,6 +654,8 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 			if _, exists := repo[tag]; !exists {
 				tagUpdated = true
 			}
+		} else {
+			tagUpdated = true
 		}
 	}
 
@@ -613,12 +668,12 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 	}
 
 	if utils.DigestReference(tag) {
-		if err = s.SetDigest(repoInfo.LocalName, tag, downloads[0].img.ID); err != nil {
+		if err = s.SetDigest(repoInfo.LocalName, tag, downloads[0].img.ID, false); err != nil {
 			return false, err
 		}
 	} else {
 		// only set the repository/tag -> image ID mapping when pulling by tag (i.e. not by digest)
-		if err = s.Set(repoInfo.LocalName, tag, downloads[0].img.ID, true); err != nil {
+		if err = s.Set(repoInfo.LocalName, tag, downloads[0].img.ID, true, false); err != nil {
 			return false, err
 		}
 	}
