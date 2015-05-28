@@ -187,6 +187,9 @@ func (config *ServiceConfig) isSecureIndex(indexName string) bool {
 	if index, ok := config.IndexConfigs[indexName]; ok {
 		return index.Secure
 	}
+	if indexName == INDEXNAME {
+		return true
+	}
 
 	host, _, err := net.SplitHostPort(indexName)
 	if err != nil {
