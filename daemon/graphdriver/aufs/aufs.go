@@ -160,6 +160,10 @@ func (a *Driver) Status() [][2]string {
 	}
 }
 
+func (a *Driver) GetMetadata(id string) (interface{}, error) {
+	return nil, nil
+}
+
 // Exists returns true if the given id is registered with
 // this driver
 func (a *Driver) Exists(id string) bool {

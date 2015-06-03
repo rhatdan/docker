@@ -45,6 +45,13 @@ func (s *TagStore) Lookup(name string) (*types.ImageInspect, error) {
 		VirtualSize:     image.GetParentsSize(0) + image.Size,
 	}
 
+	imageInspect.GraphDriver.Name = s.graph.Driver().String()
+
+	graphDriverData, err := s.graph.Driver().GetMetadata(image.ID)
+	if err != nil {
+		return nil, err
+	}
+	imageInspect.GraphDriver.Data = graphDriverData
 	return imageInspect, nil
 }
 
