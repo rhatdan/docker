@@ -23,7 +23,6 @@ func scanForAPIVersion(address string) (string, APIVersion) {
 		chunks        []string
 		apiVersionStr string
 	)
-
 	if strings.HasSuffix(address, "/") {
 		address = address[:len(address)-1]
 	}
@@ -88,9 +87,12 @@ func newEndpoint(address string, secure bool, metaHeaders http.Header) (*Endpoin
 		trimmedAddress string
 		err            error
 	)
-
 	if !strings.HasPrefix(address, "http") {
-		address = "https://" + address
+		if secure {
+			address = "https://" + address
+		} else {
+			address = "http://" + address
+		}
 	}
 
 	trimmedAddress, endpoint.Version = scanForAPIVersion(address)
@@ -166,7 +168,7 @@ func (e *Endpoint) Ping() (RegistryInfo, error) {
 func (e *Endpoint) pingV1() (RegistryInfo, error) {
 	logrus.Debugf("attempting v1 ping for registry endpoint %s", e)
 
-	if e.String() == IndexServerAddress() {
+	if e.String() == INDEXSERVER {
 		// Skip the check, we know this one is valid
 		// (and we never want to fallback to http in case of error)
 		return RegistryInfo{Standalone: false}, nil
