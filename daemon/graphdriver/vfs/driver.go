@@ -33,6 +33,10 @@ func (d *Driver) Status() [][2]string {
 	return nil
 }
 
+func (d *Driver) GetMetadata(id string) (interface{}, error) {
+	return nil, nil
+}
+
 func (d *Driver) Cleanup() error {
 	return nil
 }
