@@ -4,15 +4,14 @@ package devmapper
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path"
-
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/docker/docker/pkg/devicemapper"
 	"github.com/docker/docker/pkg/mount"
 	"github.com/docker/docker/pkg/units"
+	"io/ioutil"
+	"os"
+	"path"
 )
 
 func init() {
@@ -89,6 +88,14 @@ func (d *Driver) Status() [][2]string {
 		status = append(status, [2]string{"Library Version", vStr})
 	}
 	return status
+}
+
+func (d *Driver) GetMetadata(id string) (interface{}, error) {
+	m, err := d.DeviceSet.ExportDeviceMetadata(id)
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (d *Driver) Cleanup() error {

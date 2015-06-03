@@ -127,6 +127,13 @@ type Status struct {
 	DeferredRemoveEnabled bool
 }
 
+// This data is exported in docker-inspect. Do not change field names. You
+// can append more data to it as need be. It becomes an API for other tools.
+type ExportedMetadata struct {
+	DeviceId   int
+	DeviceSize uint64 // size in 512 byte sectors
+}
+
 type DevStatus struct {
 	DeviceId            int
 	Size                uint64
@@ -1707,6 +1714,22 @@ func (devices *DeviceSet) Status() *Status {
 	}
 
 	return status
+}
+
+func (devices *DeviceSet) ExportDeviceMetadata(hash string) (*ExportedMetadata, error) {
+	info, err := devices.lookupDevice(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	info.lock.Lock()
+	defer info.lock.Unlock()
+
+	devices.Lock()
+	defer devices.Unlock()
+
+	metadata := &ExportedMetadata{info.DeviceId, info.Size}
+	return metadata, nil
 }
 
 func NewDeviceSet(root string, doInit bool, options []string) (*DeviceSet, error) {
