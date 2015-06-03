@@ -325,11 +325,11 @@ func (d *Daemon) buildImageWithOut(name, dockerfile string, useCache bool) (stri
 }
 
 // List images of given Docker daemon and return it in a map[repoName]=*LocaleImageEntry.
-func (d *Daemon) getImages(c *check.C) map[string]*LocalImageEntry {
+func (d *Daemon) getImages(c *check.C, args ...string) map[string]*LocalImageEntry {
 	reImageEntry := regexp.MustCompile(`(?m)^([[:alnum:]/.:_-]+)\s+(\w+)\s+([a-fA-F0-9]+)\s+`)
 	result := make(map[string]*LocalImageEntry)
 
-	out, err := d.Cmd("images")
+	out, err := d.Cmd("images", args...)
 	if err != nil {
 		c.Fatalf("failed to list images: %v", err)
 	}
