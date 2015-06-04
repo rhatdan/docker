@@ -107,16 +107,16 @@ type Port struct {
 }
 
 type Container struct {
-	ID         string            `json:"Id"`
-	Names      []string          `json:",omitempty"`
-	Image      string            `json:",omitempty"`
-	Command    string            `json:",omitempty"`
-	Created    int               `json:",omitempty"`
-	Ports      []Port            `json:",omitempty"`
-	SizeRw     int               `json:",omitempty"`
-	SizeRootFs int               `json:",omitempty"`
-	Labels     map[string]string `json:",omitempty"`
-	Status     string            `json:",omitempty"`
+	ID         string `json:"Id"`
+	Names      []string
+	Image      string
+	Command    string
+	Created    int
+	Ports      []Port
+	SizeRw     int `json:",omitempty"`
+	SizeRootFs int `json:",omitempty"`
+	Labels     map[string]string
+	Status     string
 }
 
 // POST "/containers/"+containerID+"/copy"
@@ -138,7 +138,7 @@ type Version struct {
 	Os            string
 	Arch          string
 	KernelVersion string `json:",omitempty"`
-	Experimental  bool
+	Experimental  bool   `json:",omitempty"`
 }
 
 // GET "/info"
