@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/events"
 	"github.com/docker/docker/graph/tags"
 	"github.com/docker/docker/image"
@@ -101,6 +102,12 @@ func NewTagStore(path string, cfg *TagStoreConfig) (*TagStore, error) {
 		}
 	} else if err != nil {
 		return nil, err
+	}
+	if store.ConfirmDefPush != cfg.ConfirmDefPush {
+		store.ConfirmDefPush = cfg.ConfirmDefPush
+		if err := store.save(); err != nil {
+			logrus.Warnf("Failed to write TagStore configuration to %s: %v", abspath, err)
+		}
 	}
 	return store, nil
 }
