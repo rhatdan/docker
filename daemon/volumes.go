@@ -344,6 +344,17 @@ func validMountMode(mode string) bool {
 func (container *Container) setupMounts() error {
 	mounts := []execdriver.Mount{}
 
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return err
+	}
+
+	mounts = append(mounts, execdriver.Mount{
+		Source:      secretsPath,
+		Destination: "/run/secrets",
+		Writable:    true,
+	})
+
 	// Mount user specified volumes
 	// Note, these are not private because you may want propagation of (un)mounts from host
 	// volumes. For instance if you use -v /usr:/usr and the host later mounts /usr/share you
@@ -369,17 +380,6 @@ func (container *Container) setupMounts() error {
 	if container.HostsPath != "" {
 		mounts = append(mounts, execdriver.Mount{Source: container.HostsPath, Destination: "/etc/hosts", Writable: true, Relabel: "Z", Private: true})
 	}
-
-	secretsPath, err := container.secretsPath()
-	if err != nil {
-		return err
-	}
-
-	mounts = append(mounts, execdriver.Mount{
-		Source:      secretsPath,
-		Destination: "/run/secrets",
-		Writable:    true,
-	})
 
 	container.command.Mounts = mounts
 	return nil
