@@ -283,6 +283,7 @@ func SetupInitLayer(initLayer string) error {
 		"/etc/hostname":    "file",
 		"/dev/console":     "file",
 		"/etc/mtab":        "/proc/mounts",
+		"/run/secrets":     "dir",
 	} {
 		parts := strings.Split(pth, "/")
 		prev := "/"
