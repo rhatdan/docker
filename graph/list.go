@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/parsers/filters"
+	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 )
 
@@ -67,11 +68,27 @@ func (s *TagStore) Images(config *ImagesConfig) ([]*types.Image, error) {
 		return nil, err
 	}
 
+	// try to match filter against all repositories from additional registries
+	// when dealing with short name
+	repoNameFilters := make([]string, 1, 1+len(registry.RegistryList))
+	repoNameFilters[0] = config.Filter
+	if strings.IndexByte(config.Filter, '/') == -1 {
+		for _, r := range registry.RegistryList {
+			repoNameFilters = append(repoNameFilters, r+"/"+config.Filter)
+		}
+	}
+
 	lookup := make(map[string]*types.Image)
 	s.Lock()
 	for repoName, repository := range s.Repositories {
-		if config.Filter != "" {
-			if match, _ := path.Match(config.Filter, repoName); !match {
+		if repoNameFilters[0] != "" {
+			match := false
+			for _, filter := range repoNameFilters {
+				if match, _ = path.Match(filter, repoName); match {
+					break
+				}
+			}
+			if !match {
 				continue
 			}
 		}
