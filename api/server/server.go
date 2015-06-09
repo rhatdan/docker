@@ -207,6 +207,7 @@ func httpError(w http.ResponseWriter, err error) {
 		"impossible":            http.StatusNotAcceptable,
 		"wrong login/password":  http.StatusUnauthorized,
 		"hasn't been activated": http.StatusForbidden,
+		"needs to be forced":    http.StatusForbidden,
 	} {
 		if strings.Contains(errStr, keyword) {
 			statusCode = status
@@ -630,7 +631,7 @@ func (s *Server) postImagesTag(version version.Version, w http.ResponseWriter, r
 	tag := r.Form.Get("tag")
 	force := boolValue(r, "force")
 	name := vars["name"]
-	if err := s.daemon.Repositories().Tag(repo, tag, name, force); err != nil {
+	if err := s.daemon.Repositories().Tag(repo, tag, name, force, true); err != nil {
 		return err
 	}
 	s.daemon.EventsService.Log("tag", utils.ImageReference(repo, tag), "")
@@ -785,11 +786,11 @@ func (s *Server) getImagesSearch(version version.Version, w http.ResponseWriter,
 			headers[k] = v
 		}
 	}
-	query, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers)
+	results, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers, boolValue(r, "noIndex"))
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(w).Encode(query.Results)
+	return json.NewEncoder(w).Encode(results)
 }
 
 func (s *Server) postImagesPush(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -829,6 +830,7 @@ func (s *Server) postImagesPush(version version.Version, w http.ResponseWriter, 
 		MetaHeaders: metaHeaders,
 		AuthConfig:  authConfig,
 		Tag:         r.Form.Get("tag"),
+		Force:       boolValue(r, "force"),
 		OutStream:   output,
 	}
 
