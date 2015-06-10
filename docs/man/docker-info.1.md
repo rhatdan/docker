@@ -11,9 +11,10 @@ docker-info - Display system-wide information
 
 # DESCRIPTION
 This command displays system wide information regarding the Docker installation.
-Information displayed includes the number of containers and images, pool name,
-data file, metadata file, data space used, total data space, metadata space used
-, total metadata space, execution driver, and the kernel version.
+Information displayed includes the number of containers and images, list of
+configured registires, pool name, data file, metadata file, data space used,
+total data space, metadata space used, total metadata space, execution driver,
+and the kernel version.
 
 The data file is where the images are stored and the metadata file is where the
 meta data regarding those images are stored. When run for the first time Docker
@@ -33,6 +34,8 @@ Here is a sample output:
     # docker info
     Containers: 14
     Images: 52
+    Registries: 1
+     docker.io
     Storage Driver: aufs
      Root Dir: /var/lib/docker/aufs
      Dirs: 80
@@ -47,3 +50,4 @@ Here is a sample output:
 April 2014, Originally compiled by William Henry (whenry at redhat dot com)
 based on docker.com source material and internal work.
 June 2014, updated by Sven Dowideit <SvenDowideit@home.org.au>
+June 2015, updated by William Temple <wtemple at redhat dot com>

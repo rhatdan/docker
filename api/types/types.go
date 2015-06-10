@@ -165,6 +165,7 @@ type Info struct {
 	OperatingSystem    string
 	IndexServerAddress string
 	RegistryConfig     interface{}
+	RegistryList       []string
 	InitSha1           string
 	InitPath           string
 	NCPU               int
