@@ -104,6 +104,9 @@ func Relabel(path string, fileLabel string, relabel string) error {
 	if fileLabel == "" {
 		return nil
 	}
+	if !strings.ContainsAny(relabel, "zZ") {
+		return nil
+	}
 	if relabel == "z" {
 		c := selinux.NewContext(fileLabel)
 		c["level"] = "s0"
