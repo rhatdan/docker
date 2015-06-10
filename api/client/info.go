@@ -30,6 +30,13 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 
 	fmt.Fprintf(cli.out, "Containers: %d\n", info.Containers)
 	fmt.Fprintf(cli.out, "Images: %d\n", info.Images)
+
+	fmt.Fprintf(cli.out, "Registries: %d\n", len(info.RegistryList))
+
+	for _, registry := range info.RegistryList {
+		fmt.Fprintf(cli.out, " %s\n", registry)
+	}
+
 	ioutils.FprintfIfNotEmpty(cli.out, "Storage Driver: %s\n", info.Driver)
 	if info.DriverStatus != nil {
 		for _, pair := range info.DriverStatus {
