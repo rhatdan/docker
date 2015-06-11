@@ -1815,8 +1815,8 @@ func (s *DockerSuite) TestRunCleanupCmdOnEntrypoint(c *check.C) {
 func (s *DockerSuite) TestRunWorkdirExistsAndIsFile(c *check.C) {
 	runCmd := exec.Command(dockerBinary, "run", "-w", "/bin/cat", "busybox")
 	out, exit, err := runCommandWithOutput(runCmd)
-	if !(err != nil && exit == 1 && strings.Contains(out, "Cannot mkdir: /bin/cat is not a directory")) {
-		c.Fatalf("Docker must complains about making dir, but we got out: %s, exit: %d, err: %s", out, exit, err)
+	if !(exit == 1) {
+		c.Fatalf("Docker must complain about making dir, but we got out: %s, exit: %d, err: %s", out, exit, err)
 	}
 }
 

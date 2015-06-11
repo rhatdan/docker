@@ -5,6 +5,9 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
+	"strings"
+	"syscall"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/opts"
@@ -32,6 +35,22 @@ func (cid *cidFile) Write(id string) error {
 	}
 	cid.written = true
 	return nil
+}
+
+// Exit code 126 signals docker failure
+// Exit code 127 for contained cmd not found
+func RunError(err error) error {
+	var statusError StatusError
+	if strings.Contains(err.Error(), syscall.ENOENT.Error()) {
+		statusError = StatusError{StatusCode: 127}
+	} else if strings.Contains(err.Error(), exec.ErrNotFound.Error()) {
+		statusError = StatusError{StatusCode: 126}
+	} else if strings.Contains(err.Error(), "not found") {
+		statusError = StatusError{StatusCode: 126}
+	} else {
+		statusError = StatusError{Status: err.Error(), StatusCode: 1}
+	}
+	return statusError
 }
 
 // CmdRun runs a command in a new container.
@@ -78,7 +97,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 
 	if !*flDetach {
 		if err := cli.CheckTtyInput(config.AttachStdin, config.Tty); err != nil {
-			return err
+			return RunError(err)
 		}
 	} else {
 		if fl := cmd.Lookup("-attach"); fl != nil {
@@ -105,7 +124,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 
 	createResponse, err := cli.createContainer(config, hostConfig, hostConfig.ContainerIDFile, *flName)
 	if err != nil {
-		return err
+		return RunError(err)
 	}
 	if sigProxy {
 		sigc := cli.forwardAllSignals(createResponse.ID)
@@ -176,7 +195,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 	case err := <-errCh:
 		if err != nil {
 			logrus.Debugf("Error hijack: %s", err)
-			return err
+			return RunError(err)
 		}
 	}
 
@@ -190,7 +209,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 
 	//start the container
 	if _, _, err = readBody(cli.call("POST", "/containers/"+createResponse.ID+"/start", nil, nil)); err != nil {
-		return err
+		return RunError(err)
 	}
 
 	if (config.AttachStdin || config.AttachStdout || config.AttachStderr) && config.Tty && cli.isTerminalOut {
@@ -202,7 +221,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 	if errCh != nil {
 		if err := <-errCh; err != nil {
 			logrus.Debugf("Error hijack: %s", err)
-			return err
+			return RunError(err)
 		}
 	}
 
@@ -220,7 +239,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 		// Autoremove: wait for the container to finish, retrieve
 		// the exit code and remove the container
 		if _, _, err := readBody(cli.call("POST", "/containers/"+createResponse.ID+"/wait", nil, nil)); err != nil {
-			return err
+			return RunError(err)
 		}
 		if _, status, err = getExitCode(cli, createResponse.ID); err != nil {
 			return err
