@@ -399,6 +399,7 @@ func (s *Server) getEvents(version version.Version, w http.ResponseWriter, r *ht
 		}
 		until = u
 	}
+
 	timer := time.NewTimer(0)
 	timer.Stop()
 	if until > 0 {
@@ -457,6 +458,9 @@ func (s *Server) getEvents(version version.Version, w http.ResponseWriter, r *ht
 	}
 
 	current, l := es.Subscribe()
+	if since == -1 {
+		current = nil
+	}
 	defer es.Evict(l)
 	for _, ev := range current {
 		if ev.Time < since {

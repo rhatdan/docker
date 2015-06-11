@@ -366,7 +366,7 @@ func (container *Container) KillSig(sig int) error {
 	}
 
 	if !container.Running {
-		return nil
+		return fmt.Errorf("Container %s is not running", container.ID)
 	}
 
 	// signal to the monitor that it should not restart the container
@@ -443,7 +443,7 @@ func (container *Container) Unpause() error {
 
 func (container *Container) Kill() error {
 	if !container.IsRunning() {
-		return nil
+		return fmt.Errorf("Container %s is not running", container.ID)
 	}
 
 	// 1. Send SIGKILL
@@ -699,9 +699,14 @@ func (container *Container) getLogger() (logger.Logger, error) {
 		return nil, fmt.Errorf("Failed to get logging factory: %v", err)
 	}
 	ctx := logger.Context{
-		Config:        cfg.Config,
-		ContainerID:   container.ID,
-		ContainerName: container.Name,
+		Config:              cfg.Config,
+		ContainerID:         container.ID,
+		ContainerName:       container.Name,
+		ContainerEntrypoint: container.Path,
+		ContainerArgs:       container.Args,
+		ContainerImageID:    container.ImageID,
+		ContainerImageName:  container.Config.Image,
+		ContainerCreated:    container.Created,
 	}
 
 	// Set logging file for "json-logger"
