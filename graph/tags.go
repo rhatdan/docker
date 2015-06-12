@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/common"
 	"github.com/docker/docker/pkg/parsers"
@@ -83,6 +84,12 @@ func NewTagStore(path string, graph *Graph, key libtrust.PrivateKey, confirmDefP
 		}
 	} else if err != nil {
 		return nil, err
+	}
+	if store.ConfirmDefPush != confirmDefPush {
+		store.ConfirmDefPush = confirmDefPush
+		if err := store.save(); err != nil {
+			logrus.Warnf("Failed to write TagStore configuration to %s: %v", abspath, err)
+		}
 	}
 	return store, nil
 }
