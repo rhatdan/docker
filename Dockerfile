@@ -23,6 +23,7 @@
 # the case. Therefore, you don't have to disable it anymore.
 #
 
+# Cut for distribution specific
 FROM ubuntu:14.04
 MAINTAINER Tianon Gravi <admwiggin@gmail.com> (@tianon)
 
@@ -33,6 +34,14 @@ RUN	echo deb http://ppa.launchpad.net/zfs-native/stable/ubuntu trusty main > /et
 RUN apt-get update && apt-get install -y \
 	apparmor \
 	aufs-tools \
+  libapparmor-dev \
+  libcap-dev \
+  libsqlite3-dev \
+  python-websocket \
+  ruby1.9.1 \
+  ruby1.9.1-dev \
+  --no-install-recommends
+# End dependencies cut
 	automake \
 	bash-completion \
 	btrfs-tools \
@@ -41,21 +50,14 @@ RUN apt-get update && apt-get install -y \
 	dpkg-sig \
 	git \
 	iptables \
-	libapparmor-dev \
-	libcap-dev \
-	libsqlite3-dev \
 	mercurial \
 	parallel \
 	python-mock \
 	python-pip \
-	python-websocket \
 	reprepro \
-	ruby1.9.1 \
-	ruby1.9.1-dev \
 	s3cmd=1.1.0* \
 	ubuntu-zfs \
 	libzfs-dev \
-	--no-install-recommends
 
 # Get lvm2 source for compiling statically
 RUN git clone -b v2_02_103 https://git.fedorahosted.org/git/lvm2.git /usr/local/lvm2
@@ -151,7 +153,9 @@ RUN useradd --create-home --gid docker unprivilegeduser
 
 VOLUME /var/lib/docker
 WORKDIR /go/src/github.com/docker/docker
+# Cut for buildtags distribution specific
 ENV DOCKER_BUILDTAGS apparmor selinux
+# End buildtags cut
 
 # Let us use a .bashrc file
 RUN ln -sfv $PWD/.bashrc ~/.bashrc
