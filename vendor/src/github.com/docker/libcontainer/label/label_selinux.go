@@ -107,7 +107,13 @@ func Relabel(path string, fileLabel string, relabel string) error {
 	if !strings.ContainsAny(relabel, "zZ") {
 		return nil
 	}
-	if relabel == "z" {
+    if !strings.ContainsAny(relabel, "zZ") {
+       return nil
+    }
+    if strings.Contains(relabel, "z") && strings.Contains(relabel, "Z") {
+        return fmt.Errorf("Bad SELinux option z and Z can not be used together")
+    }
+    if strings.Contains(relabel, "z") {
 		c := selinux.NewContext(fileLabel)
 		c["level"] = "s0"
 		fileLabel = c.Get()
