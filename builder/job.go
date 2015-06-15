@@ -24,6 +24,8 @@ import (
 
 // whitelist of commands allowed for a commit/import
 var validCommitCommands = map[string]bool{
+	"maintainer": true,
+	"label":      true,
 	"entrypoint": true,
 	"cmd":        true,
 	"user":       true,
