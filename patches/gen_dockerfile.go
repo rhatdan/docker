@@ -2,23 +2,33 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
 	"strings"
 )
 
-func genDockerfile() (string, error) {
-	file, err := os.Open("/etc/redhat-release")
+type DfileConfig struct {
+	Distribution string   `json:"distribution"`
+	Dependencies []string `json:"dependencies"`
+	Buildtags    string   `json:"buildtags"`
+	Markers      []string `json:"markers:`
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func genDockerfileName() (string, error) {
+	file, err := ioutil.ReadFile("/etc/redhat-release")
 	if err != nil {
 		return "Dockerfile", nil
 	}
-	defer file.Close()
-	reader := bufio.NewReader(file)
-	scanner := bufio.NewScanner(reader)
-	scanner.Scan()
-	line := strings.Split(scanner.Text(), " ")
+	line := strings.Split(string(file), " ")
 	os_str := line[0]
 	switch os_str {
 	case "Fedora", "Centos":
@@ -26,33 +36,78 @@ func genDockerfile() (string, error) {
 	case "red":
 		os_str = "RHEL"
 		break
-
 	default:
 		return "Dockerfile", nil
-	}
-	if err := patchDockerfile(os_str); err != nil {
-		return "", err
 	}
 	return "patches/Dockerfile" + os_str, nil
 }
 
-func patchDockerfile(os_name string) error {
-	patchStr := "patch -p1 -o patches/Dockerfile" + os_name + " < patches/" + os_name + ".patch"
-	patcher := []string{"-c", patchStr}
-	c := exec.Command("/bin/sh", patcher...)
-	out, err := c.CombinedOutput()
-	if err != nil {
-		fmt.Println(string(out), err)
+func patchLines(patched string, original string, patchText string) error {
+	patchedFile, err := os.Create(patched)
+	check(err)
+	w := bufio.NewWriter(patchedFile)
+	defer w.Flush()
+	dfConfig := new(DfileConfig)
+	patchJsonFile, err := os.Open(patchText)
+	check(err)
+	defer patchJsonFile.Close()
+	jsonParser := json.NewDecoder(patchJsonFile)
+	check(err)
+	err = jsonParser.Decode(&dfConfig)
+	check(err)
+	origDf, err := os.Open(original)
+	check(err)
+	defer origDf.Close()
+	scanner := bufio.NewScanner(origDf)
+	scanner.Split(bufio.ScanLines)
+	i := 0 // will increment to avoid multiple writes of same lines
+	for scanner.Scan() {
+		if i == 0 {
+			if !strings.Contains(scanner.Text(), dfConfig.Markers[0]) {
+				fmt.Fprintln(w, scanner.Text())
+			} else {
+				fmt.Fprintln(w, scanner.Text())
+				fmt.Fprintln(w, dfConfig.Distribution)
+				for _, dep := range dfConfig.Dependencies {
+					fmt.Fprintln(w, dep)
+				}
+				i++
+			}
+		} else if i == 1 {
+			if strings.Contains(scanner.Text(), dfConfig.Markers[1]) {
+				fmt.Fprintln(w, scanner.Text())
+				i++
+			}
+		} else if i == 2 {
+			if !strings.Contains(scanner.Text(), dfConfig.Markers[2]) {
+				fmt.Fprintln(w, scanner.Text())
+			} else {
+				fmt.Fprintln(w, scanner.Text())
+				fmt.Fprintln(w, dfConfig.Buildtags)
+				i++
+			}
+		} else if i == 3 {
+			if strings.Contains(scanner.Text(), dfConfig.Markers[3]) {
+				fmt.Fprintln(w, scanner.Text())
+				i++
+			}
+		} else {
+			fmt.Fprintln(w, scanner.Text())
+		}
 	}
-	return err
+	return nil
 }
 
 func main() {
-
-	dockerfile, err := genDockerfile()
+	patchedDockerfile, err := genDockerfileName()
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(dockerfile)
-
+	if patchedDockerfile != "Dockerfile" {
+		err = patchLines(patchedDockerfile, "Dockerfile", "patches/FedoraPatch.json")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	fmt.Println(patchedDockerfile)
 }

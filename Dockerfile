@@ -23,6 +23,7 @@
 # the case. Therefore, you don't have to disable it anymore.
 #
 
+# Cut for distribution specific
 FROM ubuntu:14.04
 MAINTAINER Tianon Gravi <admwiggin@gmail.com> (@tianon)
 
@@ -33,6 +34,14 @@ RUN	echo deb http://ppa.launchpad.net/zfs-native/stable/ubuntu trusty main > /et
 RUN apt-get update && apt-get install -y \
 	apparmor \
 	aufs-tools \
+  libapparmor-dev \
+  libcap-dev \
+  libsqlite3-dev \
+  python-websocket \
+  ruby1.9.1 \
+  ruby1.9.1-dev \
+  --no-install-recommends
+# End dependencies cut
 	automake \
 	bash-completion \
 	btrfs-tools \
@@ -41,21 +50,14 @@ RUN apt-get update && apt-get install -y \
 	dpkg-sig \
 	git \
 	iptables \
-	libapparmor-dev \
-	libcap-dev \
-	libsqlite3-dev \
 	mercurial \
 	parallel \
 	python-mock \
 	python-pip \
-	python-websocket \
 	reprepro \
-	ruby1.9.1 \
-	ruby1.9.1-dev \
 	s3cmd=1.1.0* \
 	ubuntu-zfs \
 	libzfs-dev \
-	--no-install-recommends
 
 # Get lvm2 source for compiling statically
 RUN git clone -b v2_02_103 https://git.fedorahosted.org/git/lvm2.git /usr/local/lvm2
@@ -123,12 +125,12 @@ RUN gem install --no-rdoc --no-ri fpm --version 1.3.2
 # Install registry
 ENV REGISTRY_COMMIT d957768537c5af40e4f4cd96871f7b2bde9e2923
 RUN set -x \
-	&& export GOPATH="$(mktemp -d)" \
-	&& git clone https://github.com/docker/distribution.git "$GOPATH/src/github.com/docker/distribution" \
-	&& (cd "$GOPATH/src/github.com/docker/distribution" && git checkout -q "$REGISTRY_COMMIT") \
-	&& GOPATH="$GOPATH/src/github.com/docker/distribution/Godeps/_workspace:$GOPATH" \
-		go build -o /usr/local/bin/registry-v2 github.com/docker/distribution/cmd/registry \
-	&& rm -rf "$GOPATH"
+       && export GOPATH="$(mktemp -d)" \
+       && git clone https://github.com/docker/distribution.git "$GOPATH/src/github.com/docker/distribution" \
+       && (cd "$GOPATH/src/github.com/docker/distribution" && git checkout -q "$REGISTRY_COMMIT") \
+       && GOPATH="$GOPATH/src/github.com/docker/distribution/Godeps/_workspace:$GOPATH" \
+         go build -o /usr/local/bin/registry-v2 github.com/docker/distribution/cmd/registry \
+       && rm -rf "$GOPATH"
 
 # Get the "docker-py" source so we can run their integration tests
 ENV DOCKER_PY_COMMIT 91985b239764fe54714fa0a93d52aa362357d251
@@ -152,7 +154,9 @@ RUN useradd --create-home --gid docker unprivilegeduser
 
 VOLUME /var/lib/docker
 WORKDIR /go/src/github.com/docker/docker
+# Cut for buildtags distribution specific
 ENV DOCKER_BUILDTAGS apparmor selinux
+# End buildtags cut
 
 # Let us use a .bashrc file
 RUN ln -sfv $PWD/.bashrc ~/.bashrc
@@ -170,21 +174,21 @@ RUN ./contrib/download-frozen-image.sh /docker-frozen-images \
 
 # Download man page generator
 RUN set -x \
-	&& export GOPATH="$(mktemp -d)" \
-	&& git clone -b v1.0.1 https://github.com/cpuguy83/go-md2man.git "$GOPATH/src/github.com/cpuguy83/go-md2man" \
-	&& git clone -b v1.2 https://github.com/russross/blackfriday.git "$GOPATH/src/github.com/russross/blackfriday" \
-	&& go get -v -d github.com/cpuguy83/go-md2man \
-	&& go build -v -o /usr/local/bin/go-md2man github.com/cpuguy83/go-md2man \
-	&& rm -rf "$GOPATH"
+       && export GOPATH="$(mktemp -d)" \
+       && git clone -b v1.0.1 https://github.com/cpuguy83/go-md2man.git "$GOPATH/src/github.com/cpuguy83/go-md2man" \
+       && git clone -b v1.2 https://github.com/russross/blackfriday.git "$GOPATH/src/github.com/russross/blackfriday" \
+       && go get -v -d github.com/cpuguy83/go-md2man \
+       && go build -v -o /usr/local/bin/go-md2man github.com/cpuguy83/go-md2man \
+       && rm -rf "$GOPATH"
 
 # Download toml validator
 ENV TOMLV_COMMIT 9baf8a8a9f2ed20a8e54160840c492f937eeaf9a
 RUN set -x \
-	&& export GOPATH="$(mktemp -d)" \
-	&& git clone https://github.com/BurntSushi/toml.git "$GOPATH/src/github.com/BurntSushi/toml" \
-	&& (cd "$GOPATH/src/github.com/BurntSushi/toml" && git checkout -q "$TOMLV_COMMIT") \
-	&& go build -v -o /usr/local/bin/tomlv github.com/BurntSushi/toml/cmd/tomlv \
-	&& rm -rf "$GOPATH"
+       && export GOPATH="$(mktemp -d)" \
+       && git clone https://github.com/BurntSushi/toml.git "$GOPATH/src/github.com/BurntSushi/toml" \
+       && (cd "$GOPATH/src/github.com/BurntSushi/toml" && git checkout -q "$TOMLV_COMMIT") \
+       && go build -v -o /usr/local/bin/tomlv github.com/BurntSushi/toml/cmd/tomlv \
+       && rm -rf "$GOPATH"
 
 # Build/install the tool for embedding resources in Windows binaries
 ENV RSRC_COMMIT e48dbf1b7fc464a9e85fcec450dddf80816b76e0
