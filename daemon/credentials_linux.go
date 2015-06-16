@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/audit"
 	"io/ioutil"
 	"log/syslog"
 	"net/http"
@@ -131,6 +132,7 @@ func (daemon *Daemon) LogAction(w http.ResponseWriter, action string, id string)
 	//Wrap everything in brackets and append the acction and ID
 	message = fmt.Sprintf("{Action=%v, ID=%s, %s}", action, id, message)
 	logSyslog(message)
+	audit.AuditLogUserEvent(audit.AUDIT_VIRT_CONTROL, message, true)
 	return nil
 }
 
