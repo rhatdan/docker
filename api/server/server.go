@@ -299,6 +299,7 @@ func (s *Server) postContainersKill(version version.Version, w http.ResponseWrit
 		return err
 	}
 
+	s.daemon.LogAction(w, "kill", vars["name"])
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
@@ -315,6 +316,7 @@ func (s *Server) postContainersPause(version version.Version, w http.ResponseWri
 		return err
 	}
 
+	s.daemon.LogAction(w, "pause", vars["name"])
 	w.WriteHeader(http.StatusNoContent)
 
 	return nil
@@ -332,6 +334,7 @@ func (s *Server) postContainersUnpause(version version.Version, w http.ResponseW
 		return err
 	}
 
+	s.daemon.LogAction(w, "unpause", vars["name"])
 	w.WriteHeader(http.StatusNoContent)
 
 	return nil
@@ -913,6 +916,7 @@ func (s *Server) postContainersCreate(version version.Version, w http.ResponseWr
 		return err
 	}
 
+	s.daemon.LogAction(w, "create", containerId)
 	return writeJSON(w, http.StatusCreated, &types.ContainerCreateResponse{
 		ID:       containerId,
 		Warnings: warnings,
@@ -933,6 +937,7 @@ func (s *Server) postContainersRestart(version version.Version, w http.ResponseW
 		return err
 	}
 
+	s.daemon.LogAction(w, "restart", vars["name"])
 	w.WriteHeader(http.StatusNoContent)
 
 	return nil
@@ -951,6 +956,8 @@ func (s *Server) postContainerRename(version version.Version, w http.ResponseWri
 	if err := s.daemon.ContainerRename(name, newName); err != nil {
 		return err
 	}
+
+	s.daemon.LogAction(w, "rename", newName)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
@@ -964,6 +971,8 @@ func (s *Server) deleteContainers(version version.Version, w http.ResponseWriter
 	}
 
 	name := vars["name"]
+	//We need to log here before the container actually gets destroyed
+	s.daemon.LogAction(w, "kill", vars["name"])
 	config := &daemon.ContainerRmConfig{
 		ForceRemove:  boolValue(r, "force"),
 		RemoveVolume: boolValue(r, "v"),
@@ -1035,6 +1044,7 @@ func (s *Server) postContainersStart(version version.Version, w http.ResponseWri
 		}
 		return err
 	}
+	s.daemon.LogAction(w, "start", vars["name"])
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
@@ -1056,6 +1066,7 @@ func (s *Server) postContainersStop(version version.Version, w http.ResponseWrit
 		}
 		return err
 	}
+	s.daemon.LogAction(w, "stop", vars["name"])
 	w.WriteHeader(http.StatusNoContent)
 
 	return nil
@@ -1071,6 +1082,7 @@ func (s *Server) postContainersWait(version version.Version, w http.ResponseWrit
 		return err
 	}
 
+	s.daemon.LogAction(w, "wait", vars["name"])
 	return writeJSON(w, http.StatusOK, &types.ContainerWaitResponse{
 		StatusCode: status,
 	})
@@ -1093,6 +1105,7 @@ func (s *Server) postContainersResize(version version.Version, w http.ResponseWr
 		return err
 	}
 
+	s.daemon.LogAction(w, "resize", vars["name"])
 	return s.daemon.ContainerResize(vars["name"], height, width)
 }
 
@@ -1130,6 +1143,7 @@ func (s *Server) postContainersAttach(version version.Version, w http.ResponseWr
 		fmt.Fprintf(outStream, "Error attaching: %s\n", err)
 	}
 
+	s.daemon.LogAction(w, "attach", vars["name"])
 	return nil
 }
 
@@ -1315,6 +1329,7 @@ func (s *Server) postContainersCopy(version version.Version, w http.ResponseWrit
 	}
 	defer data.Close()
 
+	s.daemon.LogAction(w, "copy", vars["name"])
 	w.Header().Set("Content-Type", "application/x-tar")
 	if _, err := io.Copy(w, data); err != nil {
 		return err
