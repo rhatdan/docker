@@ -31,6 +31,18 @@ func copyOwnership(source, destination string) error {
 
 func (container *Container) setupMounts() ([]execdriver.Mount, error) {
 	var mounts []execdriver.Mount
+
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return nil, err
+	}
+
+	mounts = append(mounts, execdriver.Mount{
+		Source:      secretsPath,
+		Destination: "/run/secrets",
+		Writable:    true,
+	})
+
 	for _, m := range container.MountPoints {
 		path, err := m.Setup()
 		if err != nil {
