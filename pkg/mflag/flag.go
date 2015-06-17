@@ -1058,7 +1058,7 @@ func (f *FlagSet) Parse(arguments []string) error {
 		case ContinueOnError:
 			return err
 		case ExitOnError:
-			os.Exit(2)
+			os.Exit(125)
 		case PanicOnError:
 			panic(err)
 		}
