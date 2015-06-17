@@ -30,6 +30,31 @@ type ImagePullConfig struct {
 
 func (s *TagStore) Pull(image string, tag string, imagePullConfig *ImagePullConfig) error {
 	var (
+		err error
+	)
+	doPull := func(image string) error {
+		err := s.pullFromRegistry(image, tag, imagePullConfig)
+		return err
+	}
+	// Unless the index name is specified, iterate over all registries until
+	// the matching image is found.
+	if registry.RepositoryNameHasIndex(image) {
+		return doPull(image)
+	}
+	if len(registry.RegistryList) == 0 {
+		return fmt.Errorf("No configured registry to pull from.")
+	}
+	for _, r := range registry.RegistryList {
+		// Prepend the index name to the image name.
+		if err = doPull(fmt.Sprintf("%s/%s", r, image)); err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+func (s *TagStore) pullFromRegistry(image string, tag string, imagePullConfig *ImagePullConfig) error {
+	var (
 		sf = streamformatter.NewJSONStreamFormatter()
 	)
 
@@ -207,14 +232,16 @@ func (s *TagStore) pullFromV2Mirror(mirrorEndpoint *registry.Endpoint, repoInfo 
 }
 
 func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *registry.RepositoryInfo, askedTag string, sf *streamformatter.StreamFormatter) error {
-	out.Write(sf.FormatStatus("", "Pulling repository %s", repoInfo.CanonicalName))
+	out.Write(sf.FormatStream(fmt.Sprintf("Trying to pull repository %s ...", repoInfo.CanonicalName)))
 
 	repoData, err := r.GetRepositoryData(repoInfo.RemoteName)
 	if err != nil {
 		if strings.Contains(err.Error(), "HTTP code: 404") {
+			out.Write(sf.FormatStatus("", " not found"))
 			return fmt.Errorf("Error: image %s not found", utils.ImageReference(repoInfo.RemoteName, askedTag))
 		}
 		// Unexpected HTTP error
+		out.Write(sf.FormatStatus("", " failed"))
 		return err
 	}
 
@@ -232,6 +259,7 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 			return fmt.Errorf("Tag %s not found in repository %s", askedTag, repoInfo.CanonicalName)
 		}
 		logrus.Errorf("unable to get remote tags: %s", err)
+		out.Write(sf.FormatStatus("", " failed"))
 		return err
 	}
 
@@ -253,10 +281,13 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		// Otherwise, check that the tag exists and use only that one
 		id, exists := tagsList[askedTag]
 		if !exists {
+			out.Write(sf.FormatStatus("", " not found"))
 			return fmt.Errorf("Tag %s not found in repository %s", askedTag, repoInfo.CanonicalName)
 		}
 		repoData.ImgList[id].Tag = askedTag
 	}
+
+	out.Write(sf.FormatStatus("", ""))
 
 	errors := make(chan error)
 
@@ -341,6 +372,7 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		}
 	}
 	if lastError != nil {
+		out.Write(sf.FormatStatus("", " failed"))
 		return lastError
 	}
 
@@ -348,7 +380,7 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 		if askedTag != "" && tag != askedTag {
 			continue
 		}
-		if err := s.Tag(repoInfo.LocalName, tag, id, true); err != nil {
+		if err := s.Tag(repoInfo.LocalName, tag, id, true, false); err != nil {
 			return err
 		}
 	}
@@ -722,14 +754,14 @@ func (s *TagStore) pullV2Tag(r *registry.Session, out io.Writer, endpoint *regis
 		// store treats the digest as a separate tag, meaning there may be an
 		// untagged digest image that would seem to be dangling by a user.
 
-		if err = s.SetDigest(repoInfo.LocalName, localDigest.String(), downloads[0].img.ID); err != nil {
+		if err = s.SetDigest(repoInfo.LocalName, localDigest.String(), downloads[0].img.ID, false); err != nil {
 			return false, err
 		}
 	}
 
 	if !utils.DigestReference(tag) {
 		// only set the repository/tag -> image ID mapping when pulling by tag (i.e. not by digest)
-		if err = s.Tag(repoInfo.LocalName, tag, downloads[0].img.ID, true); err != nil {
+		if err = s.Tag(repoInfo.LocalName, tag, downloads[0].img.ID, true, false); err != nil {
 			return false, err
 		}
 	}
