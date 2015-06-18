@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/docker/docker/nat"
@@ -3175,5 +3176,50 @@ func (s *DockerSuite) TestDevicePermissions(c *check.C) {
 	}
 	if !strings.HasPrefix(out, permissions) {
 		c.Fatalf("output should begin with %q, got %q", permissions, out)
+	}
+}
+
+// TestRunNonExecutableCmd checks that 'docker run busybox foo' exits with error msg 127 and contains 'executable file not found in $PATH'
+func (s *DockerSuite) TestRunNonExecutableCmd(c *check.C) {
+	runCmd := exec.Command(dockerBinary, "run", "busybox", "foo")
+	out, exit, err := runCommandWithOutput(runCmd)
+	if !(err != nil && exit == 127 && strings.Contains(out, exec.ErrNotFound.Error())) {
+		c.Fatalf("Run non-existing image should have errored with 'executable file not found in $PATH' code 127, but we got out: %s, exit: %d, err: %s", out, exit, err)
+	}
+}
+
+// TestRunNonExistingCmd checks that 'docker run busybox /bin/foo' exits with error msg 127 and contains 'no such file or directory'
+func (s *DockerSuite) TestRunNonExistingCmd(c *check.C) {
+	runCmd := exec.Command(dockerBinary, "run", "busybox", "/bin/foo")
+	out, exit, err := runCommandWithOutput(runCmd)
+	if !(err != nil && exit == 127 && strings.Contains(out, syscall.ENOENT.Error())) {
+		c.Fatalf("Run non-existing image should have errored with 'no such file or directory' code 127, but we got out: %s, exit: %d, err: %s", out, exit, err)
+	}
+}
+
+// TestCmdCannotBeInvoked checks that 'docker run busybox /etc' exits with 126 and contains 'permission denied'
+func (s *DockerSuite) TestCmdCannotBeInvoked(c *check.C) {
+	runCmd := exec.Command(dockerBinary, "run", "busybox", "/etc")
+	out, exit, err := runCommandWithOutput(runCmd)
+	if !(err != nil && exit == 126 && strings.Contains(out, syscall.EACCES.Error())) {
+		c.Fatalf("Run non-executable cmd should have errored with 'permission denied' code 126, but we got out: %s, exit: %d, err: %s", out, exit, err)
+	}
+}
+
+// TestRunNonExistingImage checks that 'docker run foo' exits with error msg 126 and contains  'Unable to find image'
+func (s *DockerSuite) TestRunNonExistingImage(c *check.C) {
+	runCmd := exec.Command(dockerBinary, "run", "foo")
+	out, exit, err := runCommandWithOutput(runCmd)
+	if !(err != nil && exit == 125 && strings.Contains(out, "Unable to find image")) {
+		c.Fatalf("Run non-existing image should have errored with 'Unable to find image' code 125, but we got out: %s, exit: %d, err: %s", out, exit, err)
+	}
+}
+
+// TestDockerFails checks that 'docker run -foo busybox' exits with 125 to signal docker run failed
+func (s *DockerSuite) TestDockerFails(c *check.C) {
+	runCmd := exec.Command(dockerBinary, "run", "-foo", "busybox")
+	_, exit, err := runCommandWithOutput(runCmd)
+	if !(err != nil && exit == 125) {
+		c.Fatalf("Docker run with flag not defined should exit with 125, but we got exit: %d, err: %s", exit, err)
 	}
 }
