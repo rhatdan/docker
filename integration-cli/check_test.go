@@ -61,3 +61,26 @@ func (s *DockerDaemonSuite) TearDownTest(c *check.C) {
 	s.d.Stop()
 	s.ds.TearDownTest(c)
 }
+
+type DockerRegistriesSuite struct {
+	ds   *DockerSuite
+	reg1 *testRegistryV2
+	reg2 *testRegistryV2
+}
+
+func init() {
+	check.Suite(&DockerRegistriesSuite{
+		ds: &DockerSuite{},
+	})
+}
+
+func (s *DockerRegistriesSuite) SetUpTest(c *check.C) {
+	s.reg1 = setupRegistryAt(c, privateRegistryURLs[0])
+	s.reg2 = setupRegistryAt(c, privateRegistryURLs[1])
+}
+
+func (s *DockerRegistriesSuite) TearDownTest(c *check.C) {
+	s.reg2.Close()
+	s.reg1.Close()
+	s.ds.TearDownTest(c)
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
@@ -29,6 +30,7 @@ type ImagePushConfig struct {
 	MetaHeaders map[string][]string
 	AuthConfig  *cliconfig.AuthConfig
 	Tag         string
+	Force       bool
 	OutStream   io.Writer
 }
 
@@ -492,13 +494,37 @@ func (s *TagStore) pushV2Image(r *registry.Session, img *image.Image, endpoint *
 // FIXME: Allow to interrupt current push when new push of same image is done.
 func (s *TagStore) Push(localName string, imagePushConfig *ImagePushConfig) error {
 	var (
-		sf = streamformatter.NewJSONStreamFormatter()
+		sf        = streamformatter.NewJSONStreamFormatter()
+		localRepo Repository
 	)
 
 	// Resolve the Repository name from fqn to RepositoryInfo
 	repoInfo, err := s.registryService.ResolveRepository(localName)
 	if err != nil {
 		return err
+	}
+
+	// If we're not using a custom registry, we know the restrictions
+	// applied to repository names and can warn the user in advance.
+	// Custom repositories can have different rules, and we must also
+	// allow pushing by image ID.
+	if repoInfo.Official {
+		username := imagePushConfig.AuthConfig.Username
+		if username == "" {
+			username = "<user>"
+		}
+		name := localName
+		parts := strings.Split(repoInfo.LocalName, "/")
+		if len(parts) > 0 {
+			name = parts[len(parts)-1]
+		}
+		return fmt.Errorf("You cannot push a \"root\" repository. Please rename your repository to <user>/<repo> (ex: %s/%s)", username, name)
+	}
+
+	if repoInfo.Index.Official && s.ConfirmDefPush && !imagePushConfig.Force {
+		return fmt.Errorf("Error: Status 403 trying to push repository %s to official registry: needs to be forced", localName)
+	} else if repoInfo.Index.Official && !s.ConfirmDefPush && imagePushConfig.Force {
+		logrus.Infof("Push of %s to official registry has been forced", localName)
 	}
 
 	if _, err := s.poolAdd("push", repoInfo.LocalName); err != nil {
@@ -528,11 +554,14 @@ func (s *TagStore) Push(localName string, imagePushConfig *ImagePushConfig) erro
 	}
 
 	imagePushConfig.OutStream.Write(sf.FormatStatus("", "The push refers to a repository [%s] (len: %d)", repoInfo.CanonicalName, reposLen))
-
-	// If it fails, try to get the repository
-	localRepo, exists := s.Repositories[repoInfo.LocalName]
-	if !exists {
-		return fmt.Errorf("Repository does not exist: %s", repoInfo.LocalName)
+	matching := s.getRepositoryList(localName)
+	for _, namedRepo := range matching {
+		for _, localRepo = range namedRepo {
+			break
+		}
+	}
+	if localRepo == nil {
+		return fmt.Errorf("Repository does not exist: %s", localName)
 	}
 
 	if repoInfo.Index.Official || endpoint.Version == registry.APIVersion2 {

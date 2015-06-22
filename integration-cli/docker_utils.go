@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,10 @@ func enableUserlandProxy() bool {
 		}
 	}
 	return true
+}
+
+type LocalImageEntry struct {
+	name, tag, id string
 }
 
 // NewDaemon returns a Daemon instance to be used for testing.
@@ -298,6 +303,88 @@ func (d *Daemon) CmdWithArgs(daemonArgs []string, name string, arg ...string) (s
 
 func (d *Daemon) LogfileName() string {
 	return d.logFile.Name()
+}
+
+func (d *Daemon) buildImageWithOut(name, dockerfile string, useCache bool) (string, string, error) {
+	args := []string{"--host", d.sock(), "build", "-t", name}
+	if !useCache {
+		args = append(args, "--no-cache")
+	}
+	args = append(args, "-")
+	c := exec.Command(dockerBinary, args...)
+	c.Stdin = strings.NewReader(dockerfile)
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return "", string(out), fmt.Errorf("failed to build the image: %s", out)
+	}
+	id, err := d.inspectField(name, "Id")
+	if err != nil {
+		return "", string(out), err
+	}
+	return id, string(out), nil
+}
+
+// List images of given Docker daemon and return it in a map[repoName]=*LocaleImageEntry.
+func (d *Daemon) getImages(c *check.C, args ...string) map[string]*LocalImageEntry {
+	reImageEntry := regexp.MustCompile(`(?m)^([[:alnum:]/.:_-]+)\s+(\w+)\s+([a-fA-F0-9]+)\s+`)
+	result := make(map[string]*LocalImageEntry)
+
+	out, err := d.Cmd("images", args...)
+	if err != nil {
+		c.Fatalf("failed to list images: %v", err)
+	}
+	matches := reImageEntry.FindAllStringSubmatch(out, -1)
+	if matches != nil {
+		for i, match := range matches {
+			if i < 1 && match[1] == "REPOSITORY" {
+				continue // skip header
+			}
+			result[match[1]] = &LocalImageEntry{match[1], match[2], match[3]}
+		}
+	}
+	return result
+}
+
+// List images of given Docker daemon and assert expected values. Unless
+// expectedImageCount is negative, assert the number of images of Docker
+// daemon. Unless repoName is empty, assert it exists and return its matching
+// LocalImageEntry. Unless expectedImageId is empty, assert that image ID of
+// given repoName matches this one.
+func (d *Daemon) getAndTestImageEntry(c *check.C, expectedImageCount int, repoName, expectedImageId string) *LocalImageEntry {
+	images := d.getImages(c)
+	if expectedImageCount >= 0 && len(images) != expectedImageCount {
+		switch expectedImageCount {
+		case 0:
+			c.Fatalf("expected empty local image database, got %d images", len(images))
+		case 1:
+			c.Fatalf("expected exactly 1 local image, got %d", len(images))
+		default:
+			c.Fatalf("expected exactly %d local images, got %d", expectedImageCount, len(images))
+		}
+	}
+	if repoName != "" {
+		if img, ok := images[repoName]; !ok {
+			keys := make([]string, 0, len(images))
+			for k := range images {
+				keys = append(keys, k)
+			}
+			c.Fatalf("%s missing in list of images: %v", repoName, keys)
+		} else if expectedImageId != "" && img.id != expectedImageId {
+			c.Fatalf("image ID of %s does not match expected (%s != %s)", repoName, img.id, expectedImageId)
+		} else {
+			return img
+		}
+	}
+	return nil
+}
+
+func (d *Daemon) inspectField(name, field string) (string, error) {
+	format := fmt.Sprintf("{{.%s}}", field)
+	out, err := d.Cmd("inspect", "-f", format, name)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect %s: %s", name, out)
+	}
+	return strings.TrimSpace(out), nil
 }
 
 func daemonHost() string {
@@ -1173,9 +1260,9 @@ func daemonTime(c *check.C) time.Time {
 	return dt
 }
 
-func setupRegistry(c *check.C) *testRegistryV2 {
+func setupRegistryAt(c *check.C, url string) *testRegistryV2 {
 	testRequires(c, RegistryHosting)
-	reg, err := newTestRegistryV2(c)
+	reg, err := newTestRegistryV2At(c, url)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -1191,7 +1278,12 @@ func setupRegistry(c *check.C) *testRegistryV2 {
 	if err != nil {
 		c.Fatal("Timeout waiting for test registry to become available")
 	}
+
 	return reg
+}
+
+func setupRegistry(c *check.C) *testRegistryV2 {
+	return setupRegistryAt(c, privateRegistryURLs[0])
 }
 
 // appendBaseEnv appends the minimum set of environment variables to exec the

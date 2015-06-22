@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"text/template"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api/types"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/pkg/parsers"
+	"github.com/docker/docker/registry"
 )
 
 // CmdInspect displays low-level information on one or more containers or images.
@@ -18,6 +23,7 @@ import (
 func (cli *DockerCli) CmdInspect(args ...string) error {
 	cmd := cli.Subcmd("inspect", []string{"CONTAINER|IMAGE [CONTAINER|IMAGE...]"}, "Return low-level information on a container or image", true)
 	tmplStr := cmd.String([]string{"f", "#format", "-format"}, "", "Format the output using the given go template")
+	remote := cmd.Bool([]string{"r", "-remote"}, false, "Inspect remote images")
 	cmd.Require(flag.Min, 1)
 
 	cmd.ParseFlags(args, true)
@@ -37,22 +43,73 @@ func (cli *DockerCli) CmdInspect(args ...string) error {
 	isImage := false
 
 	for _, name := range cmd.Args() {
-		obj, _, err := readBody(cli.call("GET", "/containers/"+name+"/json", nil, nil))
-		if err != nil {
-			obj, _, err = readBody(cli.call("GET", "/images/"+name+"/json", nil, nil))
+		var (
+			err        error
+			stream     io.ReadCloser
+			hdr        http.Header
+			statusCode int
+		)
+		if !*remote {
+			stream, hdr, statusCode, err = cli.call("GET", "/containers/"+name+"/json", nil, nil)
+		}
+		if *remote || err != nil {
+			if *remote {
+				taglessRemote, _ := parsers.ParseRepositoryTag(name)
+				// Resolve the Repository name from fqn to RepositoryInfo
+				repoInfo, err := registry.ParseRepositoryInfo(taglessRemote)
+				if err != nil {
+					return err
+				}
+				v := url.Values{}
+				v.Set("remote", "1")
+				stream, statusCode, err = cli.clientRequestAttemptLogin("GET", "/images/"+name+"/json?"+v.Encode(), nil, nil, repoInfo.Index, "inspect")
+			} else {
+				stream, hdr, statusCode, err = cli.call("GET", "/images/"+name+"/json", nil, nil)
+			}
 			isImage = true
-			if err != nil {
-				if strings.Contains(err.Error(), "No such") {
-					fmt.Fprintf(cli.err, "Error: No such image or container: %s\n", name)
-				} else {
+			if err != nil || statusCode != http.StatusOK {
+				if (err != nil && strings.Contains(err.Error(), "No such")) || statusCode == http.StatusNotFound {
+					if *remote {
+						fmt.Fprintf(cli.err, "Error: No such image: %s\n", name)
+					} else {
+						fmt.Fprintf(cli.err, "Error: No such image or container: %s\n", name)
+					}
+				} else if err != nil {
 					fmt.Fprintf(cli.err, "%s", err)
+				} else {
+					fmt.Fprintf(cli.err, "Image lookup failed with status %d (%s)\n", statusCode, http.StatusText(statusCode))
 				}
 				status = 1
 				continue
 			}
 		}
+		obj, _, err := readBody(stream, hdr, statusCode, err)
 
 		if tmpl == nil {
+			if *remote {
+				rdr := bytes.NewReader(obj)
+				dec := json.NewDecoder(rdr)
+
+				remoteImage := types.RemoteImageInspect{}
+				if err := dec.Decode(&remoteImage); err != nil {
+					fmt.Fprintf(cli.err, "%s\n", err)
+				} else {
+					_, ref := registry.SplitReposName(name, false)
+					if remoteImage.Tag != "" {
+						ref += ":" + remoteImage.Tag
+					}
+					if remoteImage.Digest != "" {
+						ref += "@" + remoteImage.Digest
+					}
+					logrus.Debugf("Inspecting image %s from %s registry", ref, remoteImage.Registry)
+					encoded, err := json.Marshal(&remoteImage.ImageInspectBase)
+					if err != nil {
+						fmt.Fprintf(cli.err, "%s\n", err)
+					} else {
+						obj = encoded
+					}
+				}
+			}
 			if err = json.Indent(indented, obj, "", "    "); err != nil {
 				fmt.Fprintf(cli.err, "%s\n", err)
 				status = 1
@@ -63,13 +120,32 @@ func (cli *DockerCli) CmdInspect(args ...string) error {
 			dec := json.NewDecoder(rdr)
 
 			if isImage {
-				inspPtr := types.ImageInspect{}
-				if err := dec.Decode(&inspPtr); err != nil {
-					fmt.Fprintf(cli.err, "%s\n", err)
-					status = 1
-					continue
+				if *remote {
+					remoteImage := types.RemoteImageInspect{}
+					if err := dec.Decode(&remoteImage); err != nil {
+						fmt.Fprintf(cli.err, "%s\n", err)
+						status = 1
+						continue
+					}
+					_, ref := registry.SplitReposName(name, false)
+					if remoteImage.Tag != "" {
+						ref += ":" + remoteImage.Tag
+					}
+					if remoteImage.Digest != "" {
+						ref += "@" + remoteImage.Digest
+					}
+					logrus.Debugf("Inspecting image %s from %s registry", ref, remoteImage.Registry)
+					err = tmpl.Execute(cli.out, &remoteImage.ImageInspectBase)
+				} else {
+					inspPtr := types.ImageInspect{}
+					if err := dec.Decode(&inspPtr); err != nil {
+						fmt.Fprintf(cli.err, "%s\n", err)
+						status = 1
+						continue
+					}
+					err = tmpl.Execute(cli.out, inspPtr)
 				}
-				if err := tmpl.Execute(cli.out, inspPtr); err != nil {
+				if err != nil {
 					rdr.Seek(0, 0)
 					var raw interface{}
 					if err := dec.Decode(&raw); err != nil {

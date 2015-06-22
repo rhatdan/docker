@@ -128,7 +128,7 @@ func TestManifestTarsumCache(t *testing.T) {
 	if err := store.graph.Register(img, archive); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Tag(testManifestImageName, testManifestTag, testManifestImageID, false); err != nil {
+	if err := store.Tag(testManifestImageName, testManifestTag, testManifestImageID, false, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -194,7 +194,7 @@ func TestManifestDigestCheck(t *testing.T) {
 	if err := store.graph.Register(img, archive); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Tag(testManifestImageName, testManifestTag, testManifestImageID, false); err != nil {
+	if err := store.Tag(testManifestImageName, testManifestTag, testManifestImageID, false, true); err != nil {
 		t.Fatal(err)
 	}
 

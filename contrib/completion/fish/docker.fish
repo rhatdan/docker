@@ -43,9 +43,12 @@ function __fish_print_docker_repositories --description 'Print a list of docker 
 end
 
 # common options
+complete -c docker -f -n '__fish_docker_no_subcommand' -l add-registry -d 'Query given registry before a public one'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l api-cors-header -d "Set CORS headers in the remote API. Default is cors disabled"
 complete -c docker -f -n '__fish_docker_no_subcommand' -s b -l bridge -d 'Attach containers to a pre-existing network bridge'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l bip -d "Use this CIDR notation address for the network bridge's IP, not compatible with -b"
+complete -c docker -f -n '__fish_docker_no_subcommand' -l block-registry -d "Don't contact given registry"
+complete -c docker -f -n '__fish_docker_no_subcommand' -l confirm-def-push -d 'Confirm a push to default registry'
 complete -c docker -f -n '__fish_docker_no_subcommand' -s D -l debug -d 'Enable debug mode'
 complete -c docker -f -n '__fish_docker_no_subcommand' -s d -l daemon -d 'Enable daemon mode'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l dns -d 'Force Docker to use specific DNS servers'
@@ -205,6 +208,7 @@ complete -c docker -f -n '__fish_docker_no_subcommand' -a info -d 'Display syste
 complete -c docker -f -n '__fish_docker_no_subcommand' -a inspect -d 'Return low-level information on a container or image'
 complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -s f -l format -d 'Format the output using the given go template.'
 complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -l help -d 'Print usage'
+complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -s r -l remote -d 'Inspect remote images'
 complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -a '(__fish_print_docker_images)' -d "Image"
 complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -a '(__fish_print_docker_containers all)' -d "Container"
 
@@ -269,6 +273,7 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from pull' -a '(__fish_print
 
 # push
 complete -c docker -f -n '__fish_docker_no_subcommand' -a push -d 'Push an image or a repository to a Docker registry server'
+complete -c docker -A -f -n '__fish_seen_subcommand_from push' -s f -l force -d 'Push an image or a repository to the registry'
 complete -c docker -A -f -n '__fish_seen_subcommand_from push' -l help -d 'Print usage'
 complete -c docker -A -f -n '__fish_seen_subcommand_from push' -a '(__fish_print_docker_images)' -d "Image"
 complete -c docker -A -f -n '__fish_seen_subcommand_from push' -a '(__fish_print_docker_repositories)' -d "Repository"
@@ -377,6 +382,7 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from stop' -a '(__fish_print
 # tag
 complete -c docker -f -n '__fish_docker_no_subcommand' -a tag -d 'Tag an image into a repository'
 complete -c docker -A -f -n '__fish_seen_subcommand_from tag' -s f -l force -d 'Force'
+complete -c docker -A -f -n '__fish_seen_subcommand_from tag' -s l -l list -d 'List tags of remote repositories'
 complete -c docker -A -f -n '__fish_seen_subcommand_from tag' -l help -d 'Print usage'
 
 # top
