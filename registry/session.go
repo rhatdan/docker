@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,10 @@ import (
 	"github.com/docker/docker/pkg/httputils"
 	"github.com/docker/docker/pkg/tarsum"
 	"github.com/docker/docker/pkg/transport"
+)
+
+var (
+	reURLScheme = regexp.MustCompile(`^[^:]+://`)
 )
 
 type Session struct {
@@ -132,6 +137,17 @@ func (tr *authTransport) CancelRequest(req *http.Request) {
 
 // TODO(tiborvass): remove authConfig param once registry client v2 is vendored
 func NewSession(client *http.Client, authConfig *cliconfig.AuthConfig, endpoint *Endpoint) (r *Session, err error) {
+	if authConfig != nil && authConfig.ServerAddress != "" {
+		serverAddress := authConfig.ServerAddress
+		if !reURLScheme.MatchString(serverAddress) {
+			serverAddress = "http://" + serverAddress
+		}
+		parsed, err := url.Parse(serverAddress)
+		if err == nil && parsed.Host != endpoint.URL.Host {
+			logrus.Infof("authConfig does not conform to given endpoint (%s != %s)", parsed.Host, endpoint.URL.Host)
+			*authConfig = cliconfig.AuthConfig{}
+		}
+	}
 	r = &Session{
 		authConfig:    authConfig,
 		client:        client,
