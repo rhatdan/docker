@@ -1,8 +1,8 @@
-diff --git a/Dockerfile b/Dockerfile
-index 434c0d2..5c9a238 100644
---- a/Dockerfile
-+++ b/Dockerfile
-@@ -23,16 +23,20 @@
+Index: docker/Dockerfile
+===================================================================
+--- docker.orig/Dockerfile
++++ docker/Dockerfile
+@@ -23,39 +23,30 @@
  # the case. Therefore, you don't have to disable it anymore.
  #
  
@@ -10,7 +10,7 @@ index 434c0d2..5c9a238 100644
 +FROM fedora
  MAINTAINER Tianon Gravi <admwiggin@gmail.com> (@tianon)
  
--RUN	apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys E871F18B51E0147C77796AC81196BA81F6B0FC61
+-RUN	apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net --recv-keys E871F18B51E0147C77796AC81196BA81F6B0FC61
 -RUN	echo deb http://ppa.launchpad.net/zfs-native/stable/ubuntu trusty main > /etc/apt/sources.list.d/zfs.list
 -
 -# Packaged dependencies
@@ -23,16 +23,17 @@ index 434c0d2..5c9a238 100644
 +	glibc-static \
 +	libcap-devel \
 +	libsqlite3x-devel \
-+        make \
++	make \
 +	python-websocket-client \
 +	ruby \
-+	ruby-dev \
++	ruby-devel \
 +	tar \
  	automake \
- 	bash-completion \
- 	btrfs-tools \
-@@ -41,21 +45,14 @@ RUN apt-get update && apt-get install -y \
- 	dpkg-sig \
+-	bash-completion \
+-	btrfs-tools \
+-	build-essential \
+ 	curl \
+-	dpkg-sig \
  	git \
  	iptables \
 -	libapparmor-dev \
@@ -43,17 +44,19 @@ index 434c0d2..5c9a238 100644
  	python-mock \
  	python-pip \
 -	python-websocket \
- 	reprepro \
+-	reprepro \
 -	ruby1.9.1 \
 -	ruby1.9.1-dev \
- 	s3cmd=1.1.0* \
- 	ubuntu-zfs \
- 	libzfs-dev \
+-	s3cmd=1.1.0* \
+-	ubuntu-zfs \
+-	libzfs-dev \
 -	--no-install-recommends
++	findutils \
++	s3cmd
  
  # Get lvm2 source for compiling statically
  RUN git clone -b v2_02_103 https://git.fedorahosted.org/git/lvm2.git /usr/local/lvm2
-@@ -151,7 +148,7 @@ RUN useradd --create-home --gid docker unprivilegeduser
+@@ -152,7 +143,7 @@ RUN useradd --create-home --gid docker u
  
  VOLUME /var/lib/docker
  WORKDIR /go/src/github.com/docker/docker
