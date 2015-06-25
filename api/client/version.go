@@ -9,6 +9,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/autogen/dockerversion"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/pkg/rpm"
 	"github.com/docker/docker/utils"
 )
 
@@ -29,6 +30,9 @@ func (cli *DockerCli) CmdVersion(args ...string) error {
 	}
 	fmt.Fprintf(cli.out, " API version:  %s\n", api.Version)
 	fmt.Fprintf(cli.out, " Go version:   %s\n", runtime.Version())
+	if out, err := rpm.Version("/usr/bin/docker"); err == nil {
+		fmt.Fprintf(cli.out, "Package Version: %s\n", out)
+	}
 	if dockerversion.GITCOMMIT != "" {
 		fmt.Fprintf(cli.out, " Git commit:   %s\n", dockerversion.GITCOMMIT)
 	}
@@ -64,6 +68,9 @@ func (cli *DockerCli) CmdVersion(args ...string) error {
 		fmt.Fprintf(cli.out, " Built:        %s\n", v.BuildTime)
 	}
 	fmt.Fprintf(cli.out, " OS/Arch:      %s/%s\n", v.Os, v.Arch)
+	if v.PackageVersion != "" {
+		fmt.Fprintf(cli.out, "Package Version: %s\n", v.PackageVersion)
+	}
 	if v.Experimental {
 		fmt.Fprintf(cli.out, " Experimental: true\n")
 	}
