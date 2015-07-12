@@ -47,7 +47,7 @@ Docker container using standard localhost addressing such as `localhost:8000` or
 ![Linux Architecture Diagram](/installation/images/linux_docker_host.svg)
 
 In an OS X installation, the `docker` daemon is running inside a Linux VM called
-`default`. The `default` is a lightweight Linux VM made specifically to run
+`docker-vm`. The `docker-vm` is a lightweight Linux VM made specifically to run
 the Docker daemon on Mac OS X. The VM runs completely from RAM, is a small ~24MB
 download, and boots in approximately 5s.
 
@@ -72,38 +72,38 @@ installer.
 and choosing "Open" from the pop-up menu.
 
     The installer launches the "Install Docker Toolbox" dialog.
-
+    
     ![Install Docker Toolbox](/installation/images/mac-welcome-page.png)
 
 4. Press "Continue" to install the toolbox.
 
     The installer presents you with options to customize the standard
     installation. 
-
+  
     ![Standard install](/installation/images/mac-page-two.png)
-
+  
     By default, the standard Docker Toolbox installation:
-
+  
     * installs binaries for the Docker tools in `/usr/local/bin` 
     * makes these binaries available to all users 
     * updates any existing VirtualBox installation 
-
+  
     Change these defaults by pressing "Customize" or "Change
     Install Location."  
 
 5. Press "Install" to perform the standard installation.
 
      The system prompts you for your password.
-
+   
      ![Password prompt](/installation/images/mac-password-prompt.png)
-
+   
 6. Provide your password to continue with the installation.
 
      When it completes, the installer provides you with some information you can
      use to complete some common tasks.
-
+   
      ![All finished](/installation/images/mac-page-finished.png)
-
+   
 7. Press "Close" to exit.
 
 
@@ -130,13 +130,13 @@ There are two ways to use the installed tools, from the Docker Quickstart Termin
     The application:
 
     * opens a terminal window
-    * creates a VM called `default` if it doesn't exists, starts the VM if it does
+    * creates a VM called `docker-vm` if it doesn't exists, starts the VM if it does
     * points the terminal environment to this VM
 
     Once the launch completes, the Docker Quickstart Terminal reports:
-
+    
      ![All finished](/installation/images/mac-success.png)
-
+     
     Now, you can run `docker` commands. 
 
 3. Verify your setup succeeded by running the `hello-world` container.
@@ -178,46 +178,47 @@ different shell such as C Shell but the commands are the same.
 
 1. Create a new Docker VM.
 
-        $ docker-machine create --driver virtualbox default
+        $ docker-machine create --driver virtualbox docker-vm
         Creating VirtualBox VM...
         Creating SSH key...
         Starting VirtualBox VM...
         Starting VM...
-        To see how to connect Docker to this machine, run: docker-machine env default
+        To see how to connect Docker to this machine, run: docker-machine env docker-vm
 
-    This creates a new `default` in VirtualBox.
-
-    ![default](/installation/images/default.png)
+    This creates a new `docker-vm` in VirtualBox.
+    
+    ![docker-vm](/installation/images/docker-vm.png)
 
     The command also creates a machine configuration in the
-    `~/.docker/machine/machines/default` directory. You only need to run the
+    `~/.docker/machine/machines/docker-vm` directory. You only need to run the
     `create` command once. Then, you can use `docker-machine` to start, stop,
     query, and otherwise manage the VM from the command line.
-
+    
+>>>>>>> Docker Toolbox Updates fixes #14561
 2. List your available machines.
 
         $ docker-machine ls
         NAME                ACTIVE   DRIVER       STATE     URL                         SWARM
-        default             *        virtualbox   Running   tcp://192.168.99.101:2376  
-
+        docker-vm        *        virtualbox   Running   tcp://192.168.99.101:2376  
+        
     If you have previously installed the deprecated Boot2Docker application or
     run the Docker Quickstart Terminal, you may have a `dev` VM as well.  When you
-    created `default`, the `docker-machine` command provided instructions
+    created `docker-vm`, the `docker-machine` command provided instructions
     for learning how to connect the VM.
 
 3. Get the environment commands for your new VM.
 
-        $ docker-machine env default
+        $ docker-machine env docker-vm
         export DOCKER_TLS_VERIFY="1"
         export DOCKER_HOST="tcp://192.168.99.101:2376"
-        export DOCKER_CERT_PATH="/Users/mary/.docker/machine/machines/default"
-        export DOCKER_MACHINE_NAME="default"
+        export DOCKER_CERT_PATH="/Users/mary/.docker/machine/machines/docker-vm"
+        export DOCKER_MACHINE_NAME="docker-vm"
         # Run this command to configure your shell: 
-        # eval "$(docker-machine env default)"
+        # eval "$(docker-machine env docker-vm)"
+    
+4. Connect your shell to the `docker-vm` machine.
 
-4. Connect your shell to the `default` machine.
-
-        $ eval "$(docker-machine env default)"
+        $ eval "$(docker-machine env docker-vm)"
 
 5. Run the `hello-world` container to verify your setup.
 
@@ -227,28 +228,14 @@ different shell such as C Shell but the commands are the same.
 ## Learn about your Toolbox installation
 
 Toolbox installs the Docker Engine binary, the Docker binary on your system. When you
-use the Docker Quickstart Terminal or create a `default` manually, Docker
-Machine updates the `~/.docker/machine/machines/default` folder to your
+use the Docker Quickstart Terminal or create a `docker-vm` manually, Docker
+Machine updates the `~/.docker/machine/machines/docker-vm` folder to your
 system. This folder contains the configuration for the VM.
 
 You can create multiple VMs on your system with Docker Machine. So, you may have
 more than one VM folder if you have more than one VM. To remove a VM, use the
 `docker-machine rm <machine-name>` command.
-
-## Migrate from Boot2Docker
-
-If you were using Boot2Docker previously, you have a pre-existing Docker
-`boot2docker-vm` VM on your local system.  To allow Docker Machine to manage
-this older VM, you can migrate it.
-
-1. Open a terminal or the Docker CLI on your system.
-
-2. Type the following command.
-
-        $ docker-machine create -d virtualbox --virtualbox-import-boot2docker-vm boot2docker-vm docker-vm
-
-3. Use the `docker-machine` command to interact with the migrated VM.  
-
+      
 The `docker-machine` subcommands are slightly different than the `boot2docker`
 subcommands. The table below lists the equivalent `docker-machine` subcommand
 and what it does:
@@ -402,13 +389,13 @@ To uninstall, do the following:
         NAME                ACTIVE   DRIVER       STATE     URL                         SWARM
         dev                 *        virtualbox   Running   tcp://192.168.99.100:2376   
         my-docker-machine            virtualbox   Stopped                               
-        default                      virtualbox   Stopped  
+        docker-vm                 virtualbox   Stopped  
 
 2. Remove each machine.
 
         $ docker-machine rm dev
         Successfully removed dev
-
+    
      Removing a machine deletes its VM from VirtualBox and from the
      `~/.docker/machine/machines` directory.
 
@@ -417,7 +404,7 @@ To uninstall, do the following:
 4. Remove the `docker`, `docker-compose`, and `docker-machine` commands from the `/usr/local/bin` folder.
 
         $ rm /usr/local/bin/docker
-
+      
 5. Delete the `~/.docker` folder from your system.
 
 
