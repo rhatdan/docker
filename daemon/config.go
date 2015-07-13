@@ -3,6 +3,7 @@ package daemon
 import (
 	"github.com/docker/docker/opts"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/registry"
 	"github.com/docker/docker/runconfig"
 )
 
@@ -14,26 +15,28 @@ const (
 // CommonConfig defines the configuration of a docker daemon which are
 // common across platforms.
 type CommonConfig struct {
-	AutoRestart    bool
-	Context        map[string][]string
-	CorsHeaders    string
-	DisableBridge  bool
-	Dns            []string
-	DnsSearch      []string
-	EnableCors     bool
-	ExecDriver     string
-	ExecOptions    []string
-	ExecRoot       string
-	GraphDriver    string
-	GraphOptions   []string
-	Labels         []string
-	LogConfig      runconfig.LogConfig
-	Mtu            int
-	Pidfile        string
-	Root           string
-	TrustKeyPath   string
-	DefaultNetwork string
-	NetworkKVStore string
+	AutoRestart          bool
+	Context              map[string][]string
+	CorsHeaders          string
+	DisableBridge        bool
+	Dns                  []string
+	DnsSearch            []string
+	EnableCors           bool
+	ExecDriver           string
+	ExecOptions          []string
+	ExecRoot             string
+	GraphDriver          string
+	GraphOptions         []string
+	Labels               []string
+	LogConfig            runconfig.LogConfig
+	Mtu                  int
+	Pidfile              string
+	Root                 string
+	TrustKeyPath         string
+	DefaultNetwork       string
+	NetworkKVStore       string
+	BlockedRegistries    opts.ListOpts
+	AdditionalRegistries opts.ListOpts
 }
 
 // InstallCommonFlags adds command-line options to the top-level flag parser for
@@ -58,4 +61,8 @@ func (config *Config) InstallCommonFlags() {
 	opts.LabelListVar(&config.Labels, []string{"-label"}, "Set key=value labels to the daemon")
 	flag.StringVar(&config.LogConfig.Type, []string{"-log-driver"}, "json-file", "Default driver for container logs")
 	opts.LogOptsVar(config.LogConfig.Config, []string{"-log-opt"}, "Set log driver options")
+	config.BlockedRegistries = opts.NewListOpts(registry.ValidateIndexName)
+	flag.Var(&config.BlockedRegistries, []string{"-block-registry"}, "Don't contact given registry")
+	config.AdditionalRegistries = opts.NewListOpts(registry.ValidateIndexName)
+	flag.Var(&config.AdditionalRegistries, []string{"-add-registry"}, "Registry to query before a public one")
 }
