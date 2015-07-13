@@ -222,6 +222,6 @@ func (container *Container) CleanupStorage() error {
 	return nil
 }
 
-func (container *Container) registerMachine() {
+func (container *Container) registerMachine() error {
 	return nil
 }

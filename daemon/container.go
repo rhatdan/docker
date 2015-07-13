@@ -783,8 +783,7 @@ func (container *Container) waitForStart() error {
 		return err
 	}
 
-	container.registerMachine()
-	return nil
+	return container.registerMachine()
 }
 
 func (container *Container) GetProcessLabel() string {

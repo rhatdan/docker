@@ -1127,11 +1127,17 @@ where the container could have exited before the call gets made.  This
 call requires the container.Pid.  Therefore we just log the situation
 rather then fail the container
 */
-func (container *Container) registerMachine() {
+func (container *Container) registerMachine() error {
 	err := systemd.RegisterMachine(container.Name[1:], container.ID, container.Pid, "/")
 	if err != nil {
-		logrus.Errorf("Unable to RegisterMachine %s for %s: %s", container.Name[1:], container.ID, err)
+		if strings.Contains(err.Error(), "Failed to determine unit of process") {
+			return nil
+		} else {
+			logrus.Errorf("Unable to RegisterMachine %s for %s: %s", container.Name[1:], container.ID, err)
+			return err
+		}
 	}
+	return nil
 }
 
 func (container *Container) terminateMachine() {
