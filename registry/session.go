@@ -146,7 +146,7 @@ func NewSession(client *http.Client, authConfig *cliconfig.AuthConfig, endpoint 
 
 	// If we're working with a standalone private registry over HTTPS, send Basic Auth headers
 	// alongside all our requests.
-	if endpoint.VersionString(1) != IndexServerAddress() && endpoint.URL.Scheme == "https" {
+	if endpoint.VersionString(1) != INDEXSERVER && endpoint.URL.Scheme == "https" {
 		info, err := endpoint.Ping()
 		if err != nil {
 			return nil, err
@@ -283,13 +283,26 @@ func (r *Session) GetRemoteImageLayer(imgID, registry string, imgSize int64) (io
 	return res.Body, nil
 }
 
-func (r *Session) GetRemoteTag(registries []string, repository string, askedTag string) (string, error) {
-	if strings.Count(repository, "/") == 0 {
-		// This will be removed once the Registry supports auto-resolution on
-		// the "library" namespace
-		repository = "library/" + repository
+func isEndpointBlocked(endpoint string) bool {
+	if parsedURL, err := url.Parse(endpoint); err == nil {
+		if !IsIndexBlocked(parsedURL.Host) {
+			return false
+		}
 	}
+	return true
+}
+
+func (r *Session) GetRemoteTag(registries []string, repository string, askedTag string) (string, error) {
 	for _, host := range registries {
+		if strings.Count(repository, "/") == 0 {
+			// This will be removed once the Registry supports auto-resolution on
+			// the "library" namespace
+			repository = "library/" + repository
+		}
+		if isEndpointBlocked(host) {
+			logrus.Errorf("Cannot query blocked registry at %s for remote tags.", host)
+			continue
+		}
 		endpoint := fmt.Sprintf("%srepositories/%s/tags/%s", host, repository, askedTag)
 		res, err := r.client.Get(endpoint)
 		if err != nil {
@@ -316,12 +329,16 @@ func (r *Session) GetRemoteTag(registries []string, repository string, askedTag 
 }
 
 func (r *Session) GetRemoteTags(registries []string, repository string) (map[string]string, error) {
-	if strings.Count(repository, "/") == 0 {
-		// This will be removed once the Registry supports auto-resolution on
-		// the "library" namespace
-		repository = "library/" + repository
-	}
 	for _, host := range registries {
+		if host == INDEXSERVER && strings.Count(repository, "/") == 0 {
+			// This will be removed once the Registry supports auto-resolution on
+			// the "library" namespace
+			repository = "library/" + repository
+		}
+		if isEndpointBlocked(host) {
+			logrus.Errorf("Cannot query blocked registry at %s for remote tags.", host)
+			continue
+		}
 		endpoint := fmt.Sprintf("%srepositories/%s/tags", host, repository)
 		res, err := r.client.Get(endpoint)
 		if err != nil {
