@@ -354,7 +354,7 @@ func (store *TagStore) SetDigest(repoName, digest, imageName string, keepUnquali
 func (store *TagStore) getRepositoryList(repoName string) (result []map[string]Repository) {
 	if r, exists := store.Repositories[repoName]; exists {
 		result = []map[string]Repository{
-			map[string]Repository{repoName: r},
+			{repoName: r},
 		}
 	}
 	if r, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
@@ -400,15 +400,6 @@ func (store *TagStore) Get(repoName string) (Repository, error) {
 }
 
 func (store *TagStore) GetImage(repoName, refOrID string) (*Image, error) {
-	repo, err := store.Get(repoName)
-
-	if err != nil {
-		return nil, err
-	}
-	if repo == nil {
-		return nil, nil
-	}
-
 	store.Lock()
 	defer store.Unlock()
 

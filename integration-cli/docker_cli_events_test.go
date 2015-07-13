@@ -788,7 +788,7 @@ func (s *DockerSuite) TestEventsDefaultEmpty(c *check.C) {
 func (s *DockerRegistrySuite) TestEventsImageFilterPush(c *check.C) {
 	testRequires(c, Network)
 	since := daemonTime(c).Unix()
-	repoName := fmt.Sprintf("%v/dockercli/testf", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/testf", s.reg.url)
 
 	runCmd := exec.Command(dockerBinary, "run", "-d", "busybox", "top")
 	out, _, err := runCommandWithOutput(runCmd)
