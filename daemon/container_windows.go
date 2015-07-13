@@ -191,6 +191,7 @@ func (container *Container) DisableLink(name string) {
 func (container *Container) UnmountVolumes(forceSyscall bool) error {
 	return nil
 }
+<<<<<<< HEAD
 
 func (container *Container) PrepareStorage() error {
 	if wd, ok := container.daemon.driver.(*windows.WindowsGraphDriver); ok {
@@ -221,3 +222,10 @@ func (container *Container) CleanupStorage() error {
 	}
 	return nil
 }
+||||||| parent of d6a335d... Have docker register its machine with systemd
+=======
+
+func (container *Container) registerMachine() {
+	return nil
+}
+>>>>>>> d6a335d... Have docker register its machine with systemd
