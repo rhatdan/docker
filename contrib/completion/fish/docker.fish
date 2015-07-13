@@ -208,6 +208,7 @@ complete -c docker -f -n '__fish_docker_no_subcommand' -a info -d 'Display syste
 complete -c docker -f -n '__fish_docker_no_subcommand' -a inspect -d 'Return low-level information on a container or image'
 complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -s f -l format -d 'Format the output using the given go template.'
 complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -l help -d 'Print usage'
+complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -s r -l remote -d 'Inspect remote images'
 complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -a '(__fish_print_docker_images)' -d "Image"
 complete -c docker -A -f -n '__fish_seen_subcommand_from inspect' -a '(__fish_print_docker_containers all)' -d "Container"
 
@@ -381,6 +382,7 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from stop' -a '(__fish_print
 # tag
 complete -c docker -f -n '__fish_docker_no_subcommand' -a tag -d 'Tag an image into a repository'
 complete -c docker -A -f -n '__fish_seen_subcommand_from tag' -s f -l force -d 'Force'
+complete -c docker -A -f -n '__fish_seen_subcommand_from tag' -s l -l list -d 'List tags of remote repositories'
 complete -c docker -A -f -n '__fish_seen_subcommand_from tag' -l help -d 'Print usage'
 
 # top
