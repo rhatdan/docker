@@ -347,7 +347,7 @@ func (s *DockerRegistrySuite) TestInspectRemoteRepository(c *check.C) {
 		remoteValue []interface{}
 	)
 	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
-	// tag the image to upload it to the private registry
+	// tag the image and upload it to the private registry
 	tagCmd := exec.Command(dockerBinary, "tag", "busybox", repoName)
 	if out, _, err := runCommandWithOutput(tagCmd); err != nil {
 		c.Fatalf("image tagging failed: %s, %v", out, err)
@@ -396,5 +396,83 @@ func (s *DockerRegistrySuite) TestInspectRemoteRepository(c *check.C) {
 
 	if remoteOut != remoteOut2 {
 		c.Fatalf("remote inspect should produce identical output as before:\nfirst run: %s\n\nsecond run: %s", remoteOut, remoteOut2)
+	}
+}
+
+func (s *DockerRegistrySuite) TestInspectImageFromAdditionalRegistry(c *check.C) {
+	var (
+		localValue  []interface{}
+		remoteValue []interface{}
+	)
+	d := NewDaemon(c)
+	daemonArgs := []string{"--add-registry=" + s.reg.url}
+	if err := d.StartWithBusybox(daemonArgs...); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing { %s } flags: %v", strings.Join(daemonArgs, ", "), err)
+	}
+	defer d.Stop()
+
+	repoName := fmt.Sprintf("dockercli/busybox")
+	fqn := s.reg.url + "/" + repoName
+	// tag the image and upload it to the private registry
+	if out, err := d.Cmd("tag", "busybox", fqn); err != nil {
+		c.Fatalf("image tagging failed: %s, %v", out, err)
+	}
+
+	localOut, err := d.Cmd("inspect", repoName)
+	if err != nil {
+		c.Fatalf("failed to inspect local busybox image: %s, %v", localOut, err)
+	}
+
+	remoteOut, err := d.Cmd("inspect", "-r", repoName)
+	if err == nil {
+		c.Fatalf("inspect of remote image should have failed: %s", remoteOut)
+	}
+
+	if out, err := d.Cmd("push", fqn); err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", fqn, err, out)
+	}
+
+	remoteOut, err = d.Cmd("inspect", "-r", repoName)
+	if err != nil {
+		c.Fatalf("failed to inspect remote image: %s, %v", localOut, err)
+	}
+
+	if err = json.Unmarshal([]byte(localOut), &localValue); err != nil {
+		c.Fatalf("failed to parse result for local busybox image: %v", err)
+	}
+	if err = json.Unmarshal([]byte(remoteOut), &remoteValue); err != nil {
+		c.Fatalf("failed to parse result for local busybox image: %v", err)
+	}
+	compareInspectValues(c, "a", localValue, remoteValue)
+
+	deleteImages(fqn)
+
+	remoteOut2, err := d.Cmd("inspect", "-r", fqn)
+	if err != nil {
+		c.Fatalf("failed to inspect remote busybox image: %s, %v", remoteOut2, err)
+	}
+
+	if remoteOut != remoteOut2 {
+		c.Fatalf("remote inspect should produce identical output as before:\nfirst run: %s\n\nsecond run: %s", remoteOut, remoteOut2)
+	}
+}
+
+func (s *DockerRegistrySuite) TestInspectNonExistentRepository(c *check.C) {
+	repoName := fmt.Sprintf("%s/foo/non-existent", s.reg.url)
+
+	inspectCmd := exec.Command(dockerBinary, "inspect", repoName)
+	out, _, err := runCommandWithOutput(inspectCmd)
+	if err == nil {
+		c.Error("inspecting non-existent image should have failed", out)
+	} else if !strings.Contains(strings.ToLower(out), "no such image or container") {
+		c.Errorf("got unexpected error message: %v", out)
+	}
+
+	inspectCmd = exec.Command(dockerBinary, "inspect", "-r", repoName)
+	out, _, err = runCommandWithOutput(inspectCmd)
+	if err == nil {
+		c.Error("inspecting non-existent image should have failed", out)
+	} else if !strings.Contains(strings.ToLower(out), "no such image:") {
+		c.Errorf("got unexpected error message: %v", out)
 	}
 }

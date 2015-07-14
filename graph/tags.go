@@ -364,7 +364,7 @@ func (store *TagStore) SetDigest(repoName, digest, imageName string, keepUnquali
 func (store *TagStore) getRepositoryList(repoName string) (result []map[string]Repository) {
 	if r, exists := store.Repositories[repoName]; exists {
 		result = []map[string]Repository{
-			map[string]Repository{repoName: r},
+			{repoName: r},
 		}
 	}
 	if r, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
@@ -410,27 +410,25 @@ func (store *TagStore) Get(repoName string) (Repository, error) {
 }
 
 func (store *TagStore) GetImage(repoName, refOrID string) (*Image, error) {
-	repo, err := store.Get(repoName)
-
-	if err != nil {
-		return nil, err
-	}
-	if repo == nil {
-		return nil, nil
-	}
-
 	store.Lock()
 	defer store.Unlock()
-	if imgID, exists := repo[refOrID]; exists {
-		return store.graph.Get(imgID)
-	}
 
-	// If no matching tag is found, search through images for a matching image id
-	// iff it looks like a short ID or would look like a short ID
-	if stringid.IsShortID(stringid.TruncateID(refOrID)) {
-		for _, revision := range repo {
-			if strings.HasPrefix(revision, refOrID) {
+	matching := store.getRepositoryList(repoName)
+	for _, namedRepo := range matching {
+		for _, repoRefs := range namedRepo {
+			if revision, exists := repoRefs[refOrID]; exists {
 				return store.graph.Get(revision)
+			}
+		}
+	}
+	// If no matching reference is found, search through images for a matching
+	// image id
+	for _, namedRepo := range matching {
+		for _, repoRefs := range namedRepo {
+			for _, revision := range repoRefs {
+				if strings.HasPrefix(revision, refOrID) {
+					return store.graph.Get(revision)
+				}
 			}
 		}
 	}

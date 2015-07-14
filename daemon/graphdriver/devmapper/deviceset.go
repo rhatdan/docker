@@ -1358,11 +1358,10 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 	if devices.thinPoolDevice == "" {
 		if devices.metadataLoopFile != "" || devices.dataLoopFile != "" {
 			logrus.Errorf("WARNING: No --storage-opt dm.thinpooldev specified, using loopback; this configuration is strongly discouraged for production use")
-		}  else {
+		} else {
 			logrus.Warnf("--storage-opt dm.thinpooldev is preferred over --storage-opt dm.datadev or dm.metadatadev")
 		}
-	}		
-
+	}
 
 	// Pool already exists and caller did not pass us a pool. That means
 	// we probably created pool earlier and could not remove it as some

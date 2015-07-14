@@ -15,6 +15,8 @@ import (
 	"github.com/docker/docker/utils"
 )
 
+// LookupRemoteConfig allows you to pass transport-related data to LookupRemote
+// function.
 type LookupRemoteConfig struct {
 	MetaHeaders map[string][]string
 	AuthConfig  *cliconfig.AuthConfig

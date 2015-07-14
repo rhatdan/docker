@@ -78,9 +78,10 @@ func (cli *DockerCli) CmdInspect(args ...string) error {
 
 		if obj == nil && (*inspectType == "" || *inspectType == "image") {
 			if *remote {
+				var repoInfo *registry.RepositoryInfo
 				taglessRemote, _ := parsers.ParseRepositoryTag(name)
 				// Resolve the Repository name from fqn to RepositoryInfo
-				repoInfo, err := registry.ParseRepositoryInfo(taglessRemote)
+				repoInfo, err = registry.ParseRepositoryInfo(taglessRemote)
 				if err != nil {
 					return err
 				}
@@ -91,9 +92,10 @@ func (cli *DockerCli) CmdInspect(args ...string) error {
 				stream, hdr, statusCode, err = cli.call("GET", "/images/"+name+"/json", nil, nil)
 			}
 			obj, _, err = readBody(stream, hdr, statusCode, err)
+
 			isImage = true
 			if err != nil {
-				if strings.Contains(err.Error(), "No such") {
+				if strings.Contains(err.Error(), "No such") || strings.Contains(strings.ToLower(err.Error()), "not found") {
 					if *inspectType == "" || !*remote {
 						fmt.Fprintf(cli.err, "Error: No such image or container: %s\n", name)
 					} else {
