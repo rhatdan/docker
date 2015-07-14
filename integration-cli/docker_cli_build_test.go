@@ -5425,7 +5425,7 @@ func (s *DockerRegistrySuite) TestBuildWithAdditionalRegistry(c *check.C) {
 		c.Fatal(err)
 	}
 	if !strings.HasPrefix(res, helloWorldId) {
-		c.Fatal("built image %s should have docker.io/hello-world(id=%s) as a parent, not %s", name, helloWorldId, res)
+		c.Fatalf("built image %s should have docker.io/hello-world(id=%s) as a parent, not %s", name, helloWorldId, res)
 	}
 
 	// push busybox to additional registry as "library/hello-world" and remove all local images
@@ -5457,7 +5457,7 @@ func (s *DockerRegistrySuite) TestBuildWithAdditionalRegistry(c *check.C) {
 		c.Fatal(err)
 	}
 	if !strings.HasPrefix(res, busyboxId) {
-		c.Fatal("built image %s should have busybox image (id=%s) as a parent, not %s", name, busyboxId, res)
+		c.Fatalf("built image %s should have busybox image (id=%s) as a parent, not %s", name, busyboxId, res)
 	}
 
 	// build again with docker.io explicitly specified
@@ -5475,7 +5475,7 @@ func (s *DockerRegistrySuite) TestBuildWithAdditionalRegistry(c *check.C) {
 		c.Fatal(err)
 	}
 	if !strings.HasPrefix(res, helloWorldId) {
-		c.Fatal("built image %s should have docker.io/hello-world(id=%s) as a parent, not %s", name, helloWorldId, res)
+		c.Fatalf("built image %s should have docker.io/hello-world(id=%s) as a parent, not %s", name, helloWorldId, res)
 	}
 
 	// build again from additional registry explicitly specified
@@ -5496,7 +5496,7 @@ func (s *DockerRegistrySuite) TestBuildWithAdditionalRegistry(c *check.C) {
 		c.Fatal(err)
 	}
 	if !strings.HasPrefix(res, busyboxId) {
-		c.Fatal("built image %s should have busybox(id=%s) as a parent, not %s", name, busyboxId, res)
+		c.Fatalf("built image %s should have busybox(id=%s) as a parent, not %s", name, busyboxId, res)
 	}
 }
 
@@ -5523,7 +5523,7 @@ func (s *DockerRegistrySuite) doTestBuildWithPublicRegistryBlocked(c *check.C, n
   ENV test %s
   `, name), true)
 	if err == nil {
-		c.Fatal("build should have failed because of public registry being blocked")
+		c.Fatalf("build should have failed because of public registry being blocked")
 	}
 
 	// now base the image on local busybox image
@@ -5538,7 +5538,7 @@ func (s *DockerRegistrySuite) doTestBuildWithPublicRegistryBlocked(c *check.C, n
 	if res, err := d.inspectField(name, "Parent"); err != nil {
 		c.Fatal(err)
 	} else if !strings.HasPrefix(res, busyboxId) {
-		c.Fatal("built image %s should have busybox(id=%s) as a parent, not %s", name, busyboxId, res)
+		c.Fatalf("built image %s should have busybox(id=%s) as a parent, not %s", name, busyboxId, res)
 	}
 
 	if out, err := d.Cmd("tag", "busybox", s.reg.url+"/library/busybox"); err != nil {
@@ -5571,7 +5571,7 @@ func (s *DockerRegistrySuite) doTestBuildWithPublicRegistryBlocked(c *check.C, n
 		if res, err := d.inspectField(name, "Parent"); err != nil {
 			c.Fatal(err)
 		} else if !strings.HasPrefix(res, busyboxId) {
-			c.Fatal("built image %s should have busybox image (id=%s) as a parent, not %s", name, busyboxId, res)
+			c.Fatalf("built image %s should have busybox image (id=%s) as a parent, not %s", name, busyboxId, res)
 		}
 	}
 }
