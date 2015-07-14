@@ -40,6 +40,8 @@ var (
 	DMLogLevel                   int  = devicemapper.LogLevelFatal
 	DriverDeferredRemovalSupport bool = false
 	EnableDeferredRemoval        bool = false
+	WarnOnLoopback               bool = true
+	LoopbackInUse                bool
 )
 
 const deviceSetMetaFile string = "deviceset-metadata"
@@ -1364,6 +1366,14 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 		}
 	}
 
+	if devices.thinPoolDevice == "" {
+		if devices.metadataLoopFile != "" || devices.dataLoopFile != "" {
+			logrus.Errorf("WARNING: No --storage-opt dm.thinpooldev specified, using loopback; this configuration is strongly discouraged for production use")
+		} else {
+			logrus.Warnf("--storage-opt dm.thinpooldev is preferred over --storage-opt dm.datadev or dm.metadatadev")
+		}
+	}
+
 	// If we didn't just create the data or metadata image, we need to
 	// load the transaction id and migrate old metadata
 	if !createdLoopback {
@@ -1945,6 +1955,8 @@ func NewDeviceSet(root string, doInit bool, options []string) (*DeviceSet, error
 		}
 		key = strings.ToLower(key)
 		switch key {
+		case "dm.no_warn_on_loop_devices":
+			WarnOnLoopback = false
 		case "dm.basesize":
 			size, err := units.RAMInBytes(val)
 			if err != nil {
