@@ -24,6 +24,7 @@ import (
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/cliconfig"
 	"github.com/docker/docker/daemon"
+	"github.com/docker/docker/daemon/graphdriver/devmapper"
 	"github.com/docker/docker/graph"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/jsonmessage"
@@ -305,6 +306,10 @@ func (s *Server) postContainersKill(version version.Version, w http.ResponseWrit
 		if version.GreaterThanOrEqualTo("1.20") || !isStopped {
 			return fmt.Errorf("Cannot kill container %s: %v", name, err)
 		}
+	}
+
+	if devmapper.WarnOnLoopback && devmapper.LoopbackInUse {
+		fmt.Fprintln(w, "Usage of loopback devices is strongly discouraged for production use. Either use `--storage-opt dm.thinpooldev` or use `--storage-opt dm.no_warn_on_loop_devices=true` to suppress this warning.")
 	}
 
 	w.WriteHeader(http.StatusNoContent)
