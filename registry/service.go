@@ -232,7 +232,7 @@ func (s *Service) Search(term string, authConfig *cliconfig.AuthConfig, headers 
 			}
 			go searchRoutine(tmp, resultChan)
 		}
-		for _ = range RegistryList {
+		for range RegistryList {
 			err = <-resultChan
 			if err == nil {
 				successfulSearch = true
