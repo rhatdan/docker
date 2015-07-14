@@ -1234,6 +1234,63 @@ func (devices *DeviceSet) loadThinPoolLoopBackInfo() error {
 	return nil
 }
 
+// Determine the major and minor number of loopback device
+func getLoopMajorMinor(file *os.File) (uint64, uint64, error) {
+	stat, err := file.Stat()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	Dev := stat.Sys().(*syscall.Stat_t).Rdev
+	majorNum := major(Dev)
+	minorNum := minor(Dev)
+
+	logrus.Debugf("devmapper: Major:Minor for device: %s is:%v:%v", file.Name(), majorNum, minorNum)
+	return majorNum, minorNum, nil
+}
+
+func (devices *DeviceSet) loadThinPoolProperties() error {
+	poolDataMajor, poolDataMinor, poolMetadataMajor, poolMetadataMinor, err := devices.getThinPoolDataMetaMajMin()
+	if err != nil {
+		return err
+	}
+
+	dirname := devices.loopbackDir()
+
+	// data device has not been passed in. So there should be a data file
+	// which is being mounted as loop device.
+	if devices.dataDevice == "" {
+		datafilename := path.Join(dirname, "data")
+		dataLoopDevice, dataMajor, dataMinor, err := getLoopFileDeviceMajMin(datafilename)
+		if err != nil {
+			return err
+		}
+
+		// Compare the two
+		if poolDataMajor == dataMajor && poolDataMinor == dataMinor {
+			devices.dataDevice = dataLoopDevice
+			devices.dataLoopFile = datafilename
+		}
+
+	}
+
+	// metadata device has not been passed in. So there should be a
+	// metadata file which is being mounted as loop device.
+	if devices.metadataDevice == "" {
+		metadatafilename := path.Join(dirname, "metadata")
+		metadataLoopDevice, metadataMajor, metadataMinor, err := getLoopFileDeviceMajMin(metadatafilename)
+		if err != nil {
+			return err
+		}
+		if poolMetadataMajor == metadataMajor && poolMetadataMinor == metadataMinor {
+			devices.metadataDevice = metadataLoopDevice
+			devices.metadataLoopFile = metadatafilename
+		}
+	}
+
+	return nil
+}
+
 func (devices *DeviceSet) initDevmapper(doInit bool) error {
 	// give ourselves to libdm as a log handler
 	devicemapper.LogInit(devices)
@@ -1394,6 +1451,17 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 			logrus.Errorf("WARNING: No --storage-opt dm.thinpooldev specified, using loopback; this configuration is strongly discouraged for production use")
 		} else {
 			logrus.Warnf("--storage-opt dm.thinpooldev is preferred over --storage-opt dm.datadev or dm.metadatadev")
+		}
+	}
+
+	// Pool already exists and caller did not pass us a pool. That means
+	// we probably created pool earlier and could not remove it as some
+	// containers were still using it. Detect some of the properties of
+	// pool, like is it using loop devices.
+	if info.Exists != 0 && devices.thinPoolDevice == "" {
+		if err := devices.loadThinPoolProperties(); err != nil {
+			logrus.Debugf("Failed to load thin pool properties:%v", err)
+			return err
 		}
 	}
 
