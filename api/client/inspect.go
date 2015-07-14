@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"text/template"
@@ -56,11 +55,9 @@ func (cli *DockerCli) CmdInspect(args ...string) error {
 
 	for _, name := range cmd.Args() {
 		var (
-			err        error
-			stream     io.ReadCloser
-			hdr        http.Header
-			statusCode int
-			isImage    = false
+			err     error
+			resp    = &serverResponse{}
+			isImage = false
 		)
 
 		if *inspectType == "" || *inspectType == "container" {
@@ -83,15 +80,22 @@ func (cli *DockerCli) CmdInspect(args ...string) error {
 				// Resolve the Repository name from fqn to RepositoryInfo
 				repoInfo, err = registry.ParseRepositoryInfo(taglessRemote)
 				if err != nil {
-					return err
+					fmt.Fprintf(cli.err, "%s", err)
+					status = 1
+					continue
 				}
 				v := url.Values{}
 				v.Set("remote", "1")
-				stream, statusCode, err = cli.clientRequestAttemptLogin("GET", "/images/"+name+"/json?"+v.Encode(), nil, nil, repoInfo.Index, "inspect")
+				body, statusCode, respErr := cli.clientRequestAttemptLogin("GET", "/images/"+name+"/json?"+v.Encode(), nil, nil, repoInfo.Index, "inspect")
+				if respErr == nil {
+					resp = &serverResponse{body: body, statusCode: statusCode}
+				} else {
+					err = respErr
+				}
 			} else {
-				stream, hdr, statusCode, err = cli.call("GET", "/images/"+name+"/json", nil, nil)
+				resp, err = cli.call("GET", "/images/"+name+"/json", nil, nil)
 			}
-			obj, _, err = readBody(stream, hdr, statusCode, err)
+			obj, _, err = readBody(resp, err)
 
 			isImage = true
 			if err != nil {
