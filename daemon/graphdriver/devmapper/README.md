@@ -3,12 +3,21 @@
 ### Theory of operation
 
 The device mapper graphdriver uses the device mapper thin provisioning
-module (dm-thinp) to implement CoW snapshots. For each devicemapper
-graph location (typically `/var/lib/docker/devicemapper`, $graph below)
-a thin pool is created based on two block devices, one for data and
-one for metadata.  By default these block devices are created
-automatically by using loopback mounts of automatically created sparse
-files.
+module (dm-thinp) to implement CoW snapshots.  The preferred model is
+to have a thin pool reserved outside of Docker, and passed to the
+daemon via the `--storage-opt dm.thinpooldev` option.
+
+As a fallback if no thin pool is provided, loopback files will be
+created.  Loopback is very slow, but can be used without any
+pre-configuration of storage.  It is *strongly recommended* to not use
+loopback in production.  Ensure your docker daemon has a
+`--storage-opt dm.thinpooldev` argument provided.
+
+In loopback, each devicemapper graph location (typically
+`/var/lib/docker/devicemapper`, $graph below) a thin pool is created
+based on two block devices, one for data and one for metadata.  By
+default these block devices are created automatically by using
+loopback mounts of automatically created sparse files.
 
 The default loopback files used are `$graph/devicemapper/data` and
 `$graph/devicemapper/metadata`. Additional metadata required to map
