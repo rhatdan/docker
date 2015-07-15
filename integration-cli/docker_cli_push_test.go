@@ -2,10 +2,13 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,7 +17,7 @@ import (
 
 // pulling an image from the central registry should work
 func (s *DockerRegistrySuite) TestPushBusyboxImage(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
 	// tag the image to upload it to the private registry
 	tagCmd := exec.Command(dockerBinary, "tag", "busybox", repoName)
 	if out, _, err := runCommandWithOutput(tagCmd); err != nil {
@@ -36,7 +39,7 @@ func (s *DockerSuite) TestPushUnprefixedRepo(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushUntagged(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
 
 	expected := "Repository does not exist"
 	pushCmd := exec.Command(dockerBinary, "push", repoName)
@@ -48,7 +51,7 @@ func (s *DockerRegistrySuite) TestPushUntagged(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushBadTag(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox:latest", s.reg.url)
 
 	expected := "does not exist"
 	pushCmd := exec.Command(dockerBinary, "push", repoName)
@@ -60,9 +63,9 @@ func (s *DockerRegistrySuite) TestPushBadTag(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushMultipleTags(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
-	repoTag1 := fmt.Sprintf("%v/dockercli/busybox:t1", privateRegistryURL)
-	repoTag2 := fmt.Sprintf("%v/dockercli/busybox:t2", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
+	repoTag1 := fmt.Sprintf("%v/dockercli/busybox:t1", s.reg.url)
+	repoTag2 := fmt.Sprintf("%v/dockercli/busybox:t2", s.reg.url)
 	// tag the image and upload it to the private registry
 	tagCmd1 := exec.Command(dockerBinary, "tag", "busybox", repoTag1)
 	if out, _, err := runCommandWithOutput(tagCmd1); err != nil {
@@ -80,7 +83,7 @@ func (s *DockerRegistrySuite) TestPushMultipleTags(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushInterrupt(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
 	// tag the image and upload it to the private registry
 	if out, _, err := runCommandWithOutput(exec.Command(dockerBinary, "tag", "busybox", repoName)); err != nil {
 		c.Fatalf("image tagging failed: %s, %v", out, err)
@@ -110,7 +113,7 @@ func (s *DockerRegistrySuite) TestPushInterrupt(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushEmptyLayer(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/emptylayer", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/emptylayer", s.reg.url)
 	emptyTarball, err := ioutil.TempFile("", "empty_tarball")
 	if err != nil {
 		c.Fatalf("Unable to create test file: %v", err)
@@ -136,5 +139,55 @@ func (s *DockerRegistrySuite) TestPushEmptyLayer(c *check.C) {
 	pushCmd := exec.Command(dockerBinary, "push", repoName)
 	if out, _, err := runCommandWithOutput(pushCmd); err != nil {
 		c.Fatalf("pushing the image to the private registry has failed: %s, %v", out, err)
+	}
+}
+
+func (s *DockerSuite) TestPushOfficialImage(c *check.C) {
+	var reErr = regexp.MustCompile(`rename your repository to[^:]*:\s*<user>/busybox\b`)
+
+	// push busybox to public registry as "library/busybox"
+	cmd := exec.Command(dockerBinary, "push", "library/busybox")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		c.Fatalf("Failed to get stdout pipe for process: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		c.Fatalf("Failed to get stderr pipe for process: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		c.Fatalf("Failed to start pushing to public registry: %v", err)
+	}
+	outReader := bufio.NewReader(stdout)
+	errReader := bufio.NewReader(stderr)
+	line, isPrefix, err := errReader.ReadLine()
+	if err != nil {
+		c.Fatalf("Failed to read farewell: %v", err)
+	}
+	if isPrefix {
+		c.Errorf("Got unexpectedly long output.")
+	}
+	if !reErr.Match(line) {
+		c.Errorf("Got unexpected output %q", line)
+	}
+	if line, _, err = outReader.ReadLine(); err != io.EOF {
+		c.Errorf("Expected EOF, not: %q", line)
+	}
+	for ; err != io.EOF; line, _, err = errReader.ReadLine() {
+		c.Errorf("Expected no message on stderr, got: %q", string(line))
+	}
+
+	// Wait for command to finish with short timeout.
+	finish := make(chan struct{})
+	go func() {
+		if err := cmd.Wait(); err == nil {
+			c.Error("Push command should have failed.")
+		}
+		close(finish)
+	}()
+	select {
+	case <-finish:
+	case <-time.After(1 * time.Second):
+		c.Fatalf("Docker push failed to exit.")
 	}
 }

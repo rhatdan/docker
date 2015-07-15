@@ -3229,3 +3229,96 @@ func (s *DockerSuite) TestVolumeFromMixedRWOptions(c *check.C) {
 		c.Fatalf("Expected RW volume was RO")
 	}
 }
+
+func (s *DockerSuite) TestRunContainerNetModeWithExposePort(c *check.C) {
+	cmd := exec.Command(dockerBinary, "run", "-d", "--name", "parent", "busybox", "top")
+	out, _, err := runCommandWithOutput(cmd)
+	if err != nil {
+		c.Fatalf("failed to run container: %v, output: %q", err, out)
+	}
+
+	cmd = exec.Command(dockerBinary, "run", "-p", "5000:5000", "--net=container:parent", "busybox")
+	out, _, err = runCommandWithOutput(cmd)
+	if err == nil || !strings.Contains(out, "Conflicting options: -p, -P, --publish-all, --publish and the network mode (--net)") {
+		c.Fatalf("run --net=container with -p should error out")
+	}
+
+	cmd = exec.Command(dockerBinary, "run", "-P", "--net=container:parent", "busybox")
+	out, _, err = runCommandWithOutput(cmd)
+	if err == nil || !strings.Contains(out, "Conflicting options: -p, -P, --publish-all, --publish and the network mode (--net)") {
+		c.Fatalf("run --net=container with -P should error out")
+	}
+
+	cmd = exec.Command(dockerBinary, "run", "--expose", "5000", "--net=container:parent", "busybox")
+	out, _, err = runCommandWithOutput(cmd)
+	if err == nil || !strings.Contains(out, "Conflicting options: --expose and the network mode (--expose)") {
+		c.Fatalf("run --net=container with --expose should error out")
+	}
+}
+
+func (s *DockerRegistrySuite) TestRunWithAdditionalRegistry(c *check.C) {
+	d := NewDaemon(c)
+	if err := d.StartWithBusybox("--add-registry=" + s.reg.url); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing add-registry=%s: %v", s.reg.url, err)
+	}
+	defer d.Stop()
+
+	busyboxId := d.getAndTestImageEntry(c, 1, "busybox", "").id
+
+	// push busybox to additional registry as "library/hello-world" and remove all local images
+	if out, err := d.Cmd("tag", "busybox", s.reg.url+"/busybox"); err != nil {
+		c.Fatalf("failed to tag image busybox: error %v, output %q", err, out)
+	}
+	if out, err := d.Cmd("rmi", "busybox"); err != nil {
+		c.Fatalf("failed to remove image busybox: %v, output: %s", err, out)
+	}
+	d.getAndTestImageEntry(c, 1, s.reg.url+"/busybox", busyboxId)
+
+	// try to run fully qualified image
+	if out, err := d.Cmd("run", "-t", s.reg.url+"/busybox", "sh", "-c", "echo foo"); err != nil {
+		c.Fatalf("failed to run %s/busybox image: %v, output: %s", s.reg.url, err, out)
+	} else if strings.TrimSpace(out) != "foo" {
+		c.Fatalf("got unexpected output: %q", out)
+	}
+
+	// try to run unqualified
+	if out, err := d.Cmd("run", "-t", "busybox", "sh", "-c", "echo foo"); err != nil {
+		c.Fatalf("failed to run busybox image: %v, output: %s", err, out)
+	} else if out != "foo\r\n" {
+		c.Fatalf("got unexpected output: %q", out)
+	}
+
+	// try to run hello world from additional registry
+	if out, err := d.Cmd("run", "-t", s.reg.url+"/library/hello-world", "sh", "-c", "echo foo"); err == nil {
+		c.Fatalf("running container from image %s/library/hello-world should have failed; output: %s", s.reg.url, out)
+	}
+
+	// try to run hello-world from official registry
+	if out, err := d.Cmd("run", "-t", "library/hello-world"); err != nil {
+		c.Fatalf("failed to run library/hello-world image: %v, output: %s", err, out)
+	} else if strings.HasSuffix(strings.TrimSpace(out), "foo") {
+		c.Fatalf("got unexpected output")
+	}
+	d.getAndTestImageEntry(c, 2, "docker.io/hello-world", "")
+
+	// push busybox to additional registry as "library/hello-world" and remove all local images
+	if out, err := d.Cmd("tag", s.reg.url+"/busybox", s.reg.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", s.reg.url+"/busybox", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg.url+"/library/hello-world", err, out)
+	}
+	args := []string{"-f", "busybox", "hello-world", "library/hello-world"}
+	if out, err := d.Cmd("rmi", args...); err != nil {
+		c.Fatalf("failed to remove images %v: %v, output: %s", args[1:], err, out)
+	}
+	d.getAndTestImageEntry(c, 0, "", "")
+
+	// now try to run unqualified hello-world again - this time we should pull from additional registry
+	if out, err := d.Cmd("run", "-t", "library/hello-world", "sh", "-c", "echo foo"); err != nil {
+		c.Fatalf("failed to run library/hello-world image: %v, output: %s", err, out)
+	} else if !strings.HasSuffix(strings.TrimSpace(out), "\nfoo") {
+		c.Fatalf("got unexpected output: %q", out)
+	}
+	d.getAndTestImageEntry(c, 1, s.reg.url+"/library/hello-world", busyboxId)
+}

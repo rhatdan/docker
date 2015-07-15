@@ -27,7 +27,7 @@ func getV2Builder(e *Endpoint) *v2.URLBuilder {
 func (r *Session) V2RegistryEndpoint(index *IndexInfo) (ep *Endpoint, err error) {
 	// TODO check if should use Mirror
 	if index.Official {
-		ep, err = newEndpoint(REGISTRYSERVER, true, nil)
+		ep, err = newEndpoint(RegistryServerAddress(index.Name), true, nil)
 		if err != nil {
 			return
 		}
