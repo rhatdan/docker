@@ -177,7 +177,7 @@ func Build(d *daemon.Daemon, buildConfig *Config) error {
 	}
 
 	if repoName != "" {
-		return d.Repositories().Tag(repoName, tag, id, true)
+		return d.Repositories().Tag(repoName, tag, id, true, true)
 	}
 	return nil
 }
