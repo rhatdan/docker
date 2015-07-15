@@ -14,12 +14,18 @@ import (
 	"github.com/docker/docker/registry"
 )
 
-func (cli *DockerCli) listRemoteTags(names ...string) error {
+func (cli *DockerCli) listTags(justRemotes bool, names ...string) error {
 	var (
+		repoInfo     *registry.RepositoryInfo
 		err          error
 		rdr          io.ReadCloser
 		repoTagLists []*types.RepositoryTagList
+		v            = url.Values{}
 	)
+
+	if justRemotes {
+		v.Set("remote", "1")
+	}
 
 	for _, name := range names {
 		_, tag := parsers.ParseRepositoryTag(name)
@@ -28,19 +34,19 @@ func (cli *DockerCli) listRemoteTags(names ...string) error {
 			continue
 		}
 		// Resolve the Repository name from fqn to RepositoryInfo
-		repoInfo, err := registry.ParseRepositoryInfo(name)
+		repoInfo, err = registry.ParseRepositoryInfo(name)
 		if err != nil {
 			logrus.Warnf("Failed to parse repository info %q: %v", name, err)
 			continue
 		}
-		rdr, _, err = cli.clientRequestAttemptLogin("GET", "/images/"+name+"/tags", nil, nil, repoInfo.Index, "tag")
+		rdr, _, err = cli.clientRequestAttemptLogin("GET", "/images/"+name+"/tags?"+v.Encode(), nil, nil, repoInfo.Index, "tag")
 		if err != nil {
 			logrus.Warnf("Failed to get remote tag list for %q: %v", name, err)
 			continue
 		}
 
 		tagList := types.RepositoryTagList{}
-		if err := json.NewDecoder(rdr).Decode(&tagList); err != nil {
+		if err = json.NewDecoder(rdr).Decode(&tagList); err != nil {
 			logrus.Warnf("Failed to decode remote tag list for %q: %v", name, err)
 			continue
 		}
@@ -70,7 +76,8 @@ func (cli *DockerCli) listRemoteTags(names ...string) error {
 func (cli *DockerCli) CmdTag(args ...string) error {
 	cmd := cli.Subcmd("tag", "IMAGE[:TAG] [REGISTRYHOST/][USERNAME/]NAME[:TAG]\n       docker tag -l [REGISTRYHOST/][USERNAME/]NAME...", "Tag an image or list remote tags", true)
 	force := cmd.Bool([]string{"f", "#force", "-force"}, false, "Force")
-	list := cmd.Bool([]string{"l", "#list", "-list"}, false, "List tags of remote repositories")
+	list := cmd.Bool([]string{"l", "#list", "-list"}, false, "List repository tags")
+	remote := cmd.Bool([]string{"r", "#remote", "-remote"}, false, "Force listing of remote repositories only")
 	cmd.Require(flag.Min, 1)
 
 	cmd.ParseFlags(args, true)
@@ -79,7 +86,7 @@ func (cli *DockerCli) CmdTag(args ...string) error {
 	}
 
 	if *list {
-		return cli.listRemoteTags(cmd.Args()...)
+		return cli.listTags(*remote, cmd.Args()...)
 	} else {
 		var (
 			repository, tag = parsers.ParseRepositoryTag(cmd.Arg(1))

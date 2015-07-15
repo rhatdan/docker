@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/daemon/events"
 	"github.com/docker/docker/daemon/graphdriver"
 	_ "github.com/docker/docker/daemon/graphdriver/vfs" // import the vfs driver so it is used in the tests
+	"github.com/docker/docker/image"
 	"github.com/docker/docker/registry"
 	"github.com/docker/docker/trust"
 	"github.com/docker/docker/utils"

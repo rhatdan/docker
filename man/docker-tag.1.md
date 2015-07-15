@@ -10,6 +10,7 @@ docker-tag - Tag an image or list remote tags
 IMAGE[:TAG] [REGISTRY_HOST/][USERNAME/]NAME[:TAG]  
 **docker tag**
 **-l**|**--list**[=*false*]
+[**-r**|**--remote**[=*false*]]
 [REGISTRYHOST/][USERNAME/]NAME...  
 **docker tag**
 [**--help**]
@@ -29,7 +30,10 @@ listed.
    When set to true, force the alias. The default is *false*.
 
 **-l**, **--list**=*true*|*false*
-   List tags of remote repositories. The default is *false*.
+   List repository tags. The default is *false*.
+
+**-r**, **--remote**=*true*|*false*
+   Force listing of remote repositories only. Default is *false*.
 
 **REGISTRYHOST**
    The hostname of the registry if required. This may also include the port
