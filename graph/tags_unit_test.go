@@ -13,7 +13,6 @@ import (
 	"github.com/docker/docker/daemon/events"
 	"github.com/docker/docker/daemon/graphdriver"
 	_ "github.com/docker/docker/daemon/graphdriver/vfs" // import the vfs driver so it is used in the tests
-	"github.com/docker/docker/image"
 	"github.com/docker/docker/registry"
 	"github.com/docker/docker/trust"
 	"github.com/docker/docker/utils"
@@ -285,86 +284,86 @@ func TestValidateDigest(t *testing.T) {
 }
 
 type setRefCase struct {
-	imageID        string
-	dest           string
-	destRef        string
-	refIsDigest    bool
-	preserveName   bool
-	shallSucceed   bool
-	expectedResult string
+	imageID         string
+	dest            string
+	destRef         string
+	refIsDigest     bool
+	keepUnqualified bool
+	shallSucceed    bool
+	expectedResult  string
 }
 
 var setRefCases = []setRefCase{
-	setRefCase{testLocalImageID, testLocalImageName, "", false, false, true, "docker.io/" + testLocalImageName},
-	setRefCase{testLocalImageID, testLocalImageName, "", false, true, false, ""},
-	setRefCase{testLocalImageID, testLocalImageName, "latest", false, false, true, "docker.io/" + testLocalImageName},
-	setRefCase{testLocalImageID, testLocalImageName, "latest", false, true, false, ""},
-	setRefCase{testLocalImageID, testLocalImageName, "foo", false, false, true, "docker.io/" + testLocalImageName},
-	setRefCase{testLocalImageID, testLocalImageName, "foo", false, true, true, testLocalImageName},
-	setRefCase{testLocalImageID, testLocalImageName, "bar", true, true, false, ""},
-	setRefCase{testLocalImageID, testLocalImageName, testPrivateImageDigest, true, true, true, testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "", false, false, true, "42.42.42.42:5001/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "", false, true, true, "42.42.42.42:5001/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "latest", false, false, true, "42.42.42.42:5001/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "latest", false, true, true, "42.42.42.42:5001/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "foo", false, false, true, "42.42.42.42:5001/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "foo", false, true, true, "42.42.42.42:5001/" + testLocalImageName},
-	setRefCase{testLocalImageID, testPrivateImageName, "", false, false, false, ""},
-	setRefCase{testLocalImageID, testPrivateImageName, "", false, true, false, ""},
-	setRefCase{testLocalImageID, testPrivateImageName, "latest", false, false, false, ""},
-	setRefCase{testLocalImageID, testPrivateImageName, "latest", false, true, false, ""},
-	setRefCase{testLocalImageID, testPrivateImageName, "foo", false, false, true, testPrivateImageName},
-	setRefCase{testLocalImageID, testPrivateImageName, "foo", false, true, true, testPrivateImageName},
-	setRefCase{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "", false, false, true, testPrivateIndexName + "/" + testLocalImageName},
-	setRefCase{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "", false, true, true, testPrivateIndexName + "/" + testLocalImageName},
-	setRefCase{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "latest", false, false, true, testPrivateIndexName + "/" + testLocalImageName},
-	setRefCase{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "latest", false, true, true, testPrivateIndexName + "/" + testLocalImageName},
-	setRefCase{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "foo", false, false, true, testPrivateIndexName + "/" + testLocalImageName},
-	setRefCase{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "foo", false, true, true, testPrivateIndexName + "/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "", false, false, true, "42.42.42.42:5001/library/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "", false, true, true, "42.42.42.42:5001/library/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "latest", false, false, true, "42.42.42.42:5001/library/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "latest", false, true, true, "42.42.42.42:5001/library/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "foo", false, false, true, "42.42.42.42:5001/library/" + testLocalImageName},
-	setRefCase{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "foo", false, true, true, "42.42.42.42:5001/library/" + testLocalImageName},
-	setRefCase{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "", false, true, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "latest", false, true, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "foo", false, true, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, testPrivateRemoteName, "", false, true, true, testPrivateRemoteName},
-	setRefCase{testPrivateImageID, testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, testPrivateRemoteName, "latest", false, true, true, testPrivateRemoteName},
-	setRefCase{testPrivateImageID, testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, testPrivateRemoteName, "foo", false, true, true, testPrivateRemoteName},
-	setRefCase{testPrivateImageID, testPrivateRemoteName, "bar", true, true, false, ""},
-	setRefCase{testPrivateImageID, testPrivateRemoteName, testPrivateImageDigest, true, true, true, testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "", false, true, true, "docker.io/library/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "latest", false, true, true, "docker.io/library/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "foo", false, true, true, "docker.io/library/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "", false, true, true, "index.docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "latest", false, true, true, "index.docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "foo", false, true, true, "index.docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "", false, true, true, "index.docker.io/library/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "latest", false, true, true, "index.docker.io/library/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "foo", false, true, true, "index.docker.io/library/" + testPrivateRemoteName},
-	setRefCase{testPrivateImageID, testLocalImageName, "", false, false, true, "docker.io/" + testLocalImageName},
-	setRefCase{testPrivateImageID, testLocalImageName, "", false, true, false, ""},
-	setRefCase{testPrivateImageID, testLocalImageName, "latest", false, false, true, "docker.io/" + testLocalImageName},
-	setRefCase{testPrivateImageID, testLocalImageName, "latest", false, true, false, ""},
-	setRefCase{testPrivateImageID, testLocalImageName, "foo", false, false, true, "docker.io/" + testLocalImageName},
-	setRefCase{testPrivateImageID, testLocalImageName, "foo", false, true, true, testLocalImageName},
+	{testLocalImageID, testLocalImageName, "", false, false, true, "docker.io/" + testLocalImageName},
+	{testLocalImageID, testLocalImageName, "", false, true, false, ""},
+	{testLocalImageID, testLocalImageName, "latest", false, false, true, "docker.io/" + testLocalImageName},
+	{testLocalImageID, testLocalImageName, "latest", false, true, false, ""},
+	{testLocalImageID, testLocalImageName, "foo", false, false, true, "docker.io/" + testLocalImageName},
+	{testLocalImageID, testLocalImageName, "foo", false, true, true, testLocalImageName},
+	{testLocalImageID, testLocalImageName, "bar", true, true, false, ""},
+	{testLocalImageID, testLocalImageName, testPrivateImageDigest, true, true, true, testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "", false, false, true, "42.42.42.42:5001/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "", false, true, true, "42.42.42.42:5001/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "latest", false, false, true, "42.42.42.42:5001/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "latest", false, true, true, "42.42.42.42:5001/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "foo", false, false, true, "42.42.42.42:5001/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/" + testLocalImageName, "foo", false, true, true, "42.42.42.42:5001/" + testLocalImageName},
+	{testLocalImageID, testPrivateImageName, "", false, false, false, ""},
+	{testLocalImageID, testPrivateImageName, "", false, true, false, ""},
+	{testLocalImageID, testPrivateImageName, "latest", false, false, false, ""},
+	{testLocalImageID, testPrivateImageName, "latest", false, true, false, ""},
+	{testLocalImageID, testPrivateImageName, "foo", false, false, true, testPrivateImageName},
+	{testLocalImageID, testPrivateImageName, "foo", false, true, true, testPrivateImageName},
+	{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "", false, false, true, testPrivateIndexName + "/" + testLocalImageName},
+	{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "", false, true, true, testPrivateIndexName + "/" + testLocalImageName},
+	{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "latest", false, false, true, testPrivateIndexName + "/" + testLocalImageName},
+	{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "latest", false, true, true, testPrivateIndexName + "/" + testLocalImageName},
+	{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "foo", false, false, true, testPrivateIndexName + "/" + testLocalImageName},
+	{testLocalImageID, testPrivateIndexName + "/" + testLocalImageName, "foo", false, true, true, testPrivateIndexName + "/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "", false, false, true, "42.42.42.42:5001/library/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "", false, true, true, "42.42.42.42:5001/library/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "latest", false, false, true, "42.42.42.42:5001/library/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "latest", false, true, true, "42.42.42.42:5001/library/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "foo", false, false, true, "42.42.42.42:5001/library/" + testLocalImageName},
+	{testLocalImageID, "42.42.42.42:5001/library/" + testLocalImageName, "foo", false, true, true, "42.42.42.42:5001/library/" + testLocalImageName},
+	{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "", false, true, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "latest", false, true, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/" + testPrivateRemoteName, "foo", false, true, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, testPrivateRemoteName, "", false, true, true, testPrivateRemoteName},
+	{testPrivateImageID, testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, testPrivateRemoteName, "latest", false, true, true, testPrivateRemoteName},
+	{testPrivateImageID, testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, testPrivateRemoteName, "foo", false, true, true, testPrivateRemoteName},
+	{testPrivateImageID, testPrivateRemoteName, "bar", true, true, false, ""},
+	{testPrivateImageID, testPrivateRemoteName, testPrivateImageDigest, true, true, true, testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "", false, true, true, "docker.io/library/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "latest", false, true, true, "docker.io/library/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "docker.io/library/" + testPrivateRemoteName, "foo", false, true, true, "docker.io/library/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "", false, true, true, "index.docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "latest", false, true, true, "index.docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/" + testPrivateRemoteName, "foo", false, true, true, "index.docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "", false, true, true, "index.docker.io/library/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "latest", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "latest", false, true, true, "index.docker.io/library/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "foo", false, false, true, "docker.io/" + testPrivateRemoteName},
+	{testPrivateImageID, "index.docker.io/library/" + testPrivateRemoteName, "foo", false, true, true, "index.docker.io/library/" + testPrivateRemoteName},
+	{testPrivateImageID, testLocalImageName, "", false, false, true, "docker.io/" + testLocalImageName},
+	{testPrivateImageID, testLocalImageName, "", false, true, false, ""},
+	{testPrivateImageID, testLocalImageName, "latest", false, false, true, "docker.io/" + testLocalImageName},
+	{testPrivateImageID, testLocalImageName, "latest", false, true, false, ""},
+	{testPrivateImageID, testLocalImageName, "foo", false, false, true, "docker.io/" + testLocalImageName},
+	{testPrivateImageID, testLocalImageName, "foo", false, true, true, testLocalImageName},
 }
 
 func runSetTagCases(t *testing.T, store *TagStore, additionalRegistry string) {
@@ -391,7 +390,7 @@ func runSetTagCases(t *testing.T, store *TagStore, additionalRegistry string) {
 				}
 				dest := testCase.dest
 				expectedResult := testCase.expectedResult
-				if !registry.RepositoryNameHasIndex(testCase.dest) && !testCase.preserveName && additionalRegistry != "" {
+				if !registry.RepositoryNameHasIndex(testCase.dest) && !testCase.keepUnqualified && additionalRegistry != "" {
 					_, remoteName := registry.SplitReposName(expectedResult, false)
 					expectedResult = additionalRegistry + "/" + remoteName
 				}
@@ -401,9 +400,9 @@ func runSetTagCases(t *testing.T, store *TagStore, additionalRegistry string) {
 				}
 
 				if testCase.refIsDigest {
-					err = store.SetDigest(testCase.dest, testCase.destRef, taggedSource, testCase.preserveName)
+					err = store.SetDigest(testCase.dest, testCase.destRef, taggedSource, testCase.keepUnqualified)
 				} else {
-					err = store.Tag(testCase.dest, testCase.destRef, taggedSource, false, testCase.preserveName)
+					err = store.Tag(testCase.dest, testCase.destRef, taggedSource, false, testCase.keepUnqualified)
 				}
 
 				if err == nil && !testCase.shallSucceed {
