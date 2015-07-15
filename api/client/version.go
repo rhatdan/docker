@@ -9,6 +9,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/autogen/dockerversion"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/pkg/rpm"
 	"github.com/docker/docker/utils"
 )
 
@@ -27,6 +28,9 @@ func (cli *DockerCli) CmdVersion(args ...string) error {
 		fmt.Fprintf(cli.out, "Client version: %s\n", dockerversion.VERSION)
 	}
 	fmt.Fprintf(cli.out, "Client API version: %s\n", api.Version)
+	if out, err := rpm.Version("/usr/bin/docker"); err == nil {
+		fmt.Fprintf(cli.out, "Package Version (client): %s\n", out)
+	}
 	fmt.Fprintf(cli.out, "Go version (client): %s\n", runtime.Version())
 	if dockerversion.GITCOMMIT != "" {
 		fmt.Fprintf(cli.out, "Git commit (client): %s\n", dockerversion.GITCOMMIT)
@@ -50,6 +54,9 @@ func (cli *DockerCli) CmdVersion(args ...string) error {
 	fmt.Fprintf(cli.out, "Server version: %s\n", v.Version)
 	if v.ApiVersion != "" {
 		fmt.Fprintf(cli.out, "Server API version: %s\n", v.ApiVersion)
+	}
+	if v.PackageVersion != "" {
+		fmt.Fprintf(cli.out, "Package Version (server): %s\n", v.PackageVersion)
 	}
 	fmt.Fprintf(cli.out, "Go version (server): %s\n", v.GoVersion)
 	fmt.Fprintf(cli.out, "Git commit (server): %s\n", v.GitCommit)
