@@ -365,7 +365,7 @@ func (store *TagStore) SetDigest(repoName, digest, imageName string, keepUnquali
 func (store *TagStore) getRepositoryList(repoName string) (result []map[string]Repository) {
 	if r, exists := store.Repositories[repoName]; exists {
 		result = []map[string]Repository{
-			map[string]Repository{repoName: r},
+			{repoName: r},
 		}
 	}
 	if r, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
