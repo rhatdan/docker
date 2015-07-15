@@ -15,6 +15,8 @@ import (
 	"github.com/docker/docker/utils"
 )
 
+// LookupRemoteConfig allows you to pass transport-related data to LookupRemote
+// function.
 type LookupRemoteConfig struct {
 	MetaHeaders map[string][]string
 	AuthConfig  *cliconfig.AuthConfig
@@ -269,7 +271,7 @@ func (s *TagStore) pullJSONFromRegistry(r *registry.Session, repoInfo *registry.
 	}
 	if askedTag == "" {
 		// fallback to any tag in the repository
-		for tag, _ := range tagsList {
+		for tag := range tagsList {
 			askedTag = tag
 			break
 		}
