@@ -195,12 +195,18 @@ func tagLinesEqual(expected, actual []string, allowEmptyImageID bool) bool {
 	return true
 }
 
-func assertTagListEqual(c *check.C, d *Daemon, allowEmptyImageID bool, names []string, expectedString string) {
+func assertTagListEqual(c *check.C, d *Daemon, remote, allowEmptyImageID bool, names []string, expectedString string) {
 	var (
 		reLine = regexp.MustCompile(`^(\S+)\s+(\S+)\s+(\w+)?`)
 		reLog  = regexp.MustCompile(`(DEBU|WARN|ERR|INFO|FATA)|(level=(warn|info|err|fata|debu))`)
 	)
-	out, err := d.Cmd("tag", append([]string{"-l"}, names...)...)
+	args := []string{"-l"}
+	if remote {
+		args = append(args, "-r")
+	}
+	args = append(args, names...)
+	out, err := d.Cmd("tag", args...)
+
 	if err != nil {
 		c.Fatalf("Failed to list remote tags for %s: %v", strings.Join(names, " "), err)
 	}
@@ -238,14 +244,12 @@ func assertTagListEqual(c *check.C, d *Daemon, allowEmptyImageID bool, names []s
 		for i, strs := range actual {
 			c.Logf("		#%3d: %s", i, strings.Join(strs, "\t"))
 		}
-		//time.Sleep(time.Minute * 10000)
 	} else {
 		errorReported := false
 		for i := range actual {
 			if !tagLinesEqual(expected[i], actual[i], allowEmptyImageID) {
 				if !errorReported {
 					c.Errorf("Expected line #%3d: %s", i, strings.Join(expected[i], "\t"))
-					//time.Sleep(time.Minute * 10000)
 					errorReported = true
 				} else {
 					c.Logf("Expected line #%3d: %s", i, strings.Join(expected[i], "\t"))
@@ -311,36 +315,43 @@ func (s *DockerRegistriesSuite) TestTagListRemoteRepository(c *check.C) {
 		}
 	}
 	localTags := []string{}
+	imgNames := []string{"busy", "hell"}
 	for ri, reg := range []*testRegistryV2{s.reg1, s.reg2} {
 		for i := 0; i < 5; i++ {
-			imgNames := []string{"busy", "hell"}
+			tag := fmt.Sprintf("%s/foo/busybox:%d.%d-%s", reg.url, ri+1, i+1, imgNames[i/3])
+			localTags = append(localTags, tag)
 			if (ri+i)%3 == 0 {
 				continue // upload 2/3 of registries
 			}
-			tag := fmt.Sprintf("%s/foo/busybox:%d.%d-%s", reg.url, ri+1, i+1, imgNames[i/3])
 			if out, err := d.Cmd("push", tag); err != nil {
 				c.Fatalf("push of %q should have succeeded: %v, output: %s", tag, err, out)
 			}
-			localTags = append(localTags, tag)
 		}
 	}
 
-	assertTagListEqual(c, d, true, []string{s.reg1.url + "/foo/busybox"},
+	assertTagListEqual(c, d, true, true, []string{s.reg1.url + "/foo/busybox"},
 		fmt.Sprintf("%s/foo/busybox		1.2-busy		%s\n", s.reg1.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		1.3-busy		%s\n", s.reg1.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		1.5-hell		%s\n", s.reg1.url, helloWorldID))
 
-	assertTagListEqual(c, d, true, []string{s.reg2.url + "/foo/busybox"},
+	assertTagListEqual(c, d, true, true, []string{s.reg2.url + "/foo/busybox"},
 		fmt.Sprintf("%s/foo/busybox		2.1-busy		%s\n", s.reg2.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		2.2-busy		%s\n", s.reg2.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		2.4-hell		%s\n", s.reg2.url, helloWorldID)+
 			fmt.Sprintf("%s/foo/busybox		2.5-hell		%s\n", s.reg2.url, helloWorldID))
 
-	assertTagListEqual(c, d, true, []string{"foo/busybox"},
+	assertTagListEqual(c, d, true, true, []string{"foo/busybox"},
 		fmt.Sprintf("%s/foo/busybox		2.1-busy		%s\n", s.reg2.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		2.2-busy		%s\n", s.reg2.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		2.4-hell		%s\n", s.reg2.url, helloWorldID)+
 			fmt.Sprintf("%s/foo/busybox		2.5-hell		%s\n", s.reg2.url, helloWorldID))
+
+	assertTagListEqual(c, d, false, true, []string{s.reg1.url + "/foo/busybox"},
+		fmt.Sprintf("%s/foo/busybox		1.1-busy		%s\n", s.reg1.url, busyboxID)+
+			fmt.Sprintf("%s/foo/busybox		1.2-busy		%s\n", s.reg1.url, busyboxID)+
+			fmt.Sprintf("%s/foo/busybox		1.3-busy		%s\n", s.reg1.url, busyboxID)+
+			fmt.Sprintf("%s/foo/busybox		1.4-hell		%s\n", s.reg1.url, helloWorldID)+
+			fmt.Sprintf("%s/foo/busybox		1.5-hell		%s\n", s.reg1.url, helloWorldID))
 
 	// now delete all local images
 	if out, err := d.Cmd("rmi", localTags...); err != nil {
@@ -348,7 +359,7 @@ func (s *DockerRegistriesSuite) TestTagListRemoteRepository(c *check.C) {
 	}
 
 	// and try again
-	assertTagListEqual(c, d, true, []string{"foo/busybox", s.reg1.url + "/foo/busybox"},
+	assertTagListEqual(c, d, true, true, []string{"foo/busybox", s.reg1.url + "/foo/busybox"},
 		fmt.Sprintf("%s/foo/busybox		2.1-busy		%s\n", s.reg2.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		2.2-busy		%s\n", s.reg2.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		2.4-hell		%s\n", s.reg2.url, helloWorldID)+
@@ -358,8 +369,37 @@ func (s *DockerRegistriesSuite) TestTagListRemoteRepository(c *check.C) {
 			fmt.Sprintf("%s/foo/busybox		1.5-hell		%s\n", s.reg1.url, helloWorldID))
 
 	// skip over bad repositories
-	assertTagListEqual(c, d, true, []string{"foo/.us&box", "notexistent/busybox", s.reg1.url + "/foo/busybox"},
+	assertTagListEqual(c, d, true, true, []string{"foo/.us&box", "notexistent/busybox", s.reg1.url + "/foo/busybox"},
 		fmt.Sprintf("%s/foo/busybox		1.2-busy		%s\n", s.reg1.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		1.3-busy		%s\n", s.reg1.url, busyboxID)+
 			fmt.Sprintf("%s/foo/busybox		1.5-hell		%s\n", s.reg1.url, helloWorldID))
+
+	assertTagListEqual(c, d, false, true, []string{s.reg1.url + "/foo/busybox"},
+		fmt.Sprintf("%s/foo/busybox		1.2-busy		%s\n", s.reg1.url, busyboxID)+
+			fmt.Sprintf("%s/foo/busybox		1.3-busy		%s\n", s.reg1.url, busyboxID)+
+			fmt.Sprintf("%s/foo/busybox		1.5-hell		%s\n", s.reg1.url, helloWorldID))
+}
+
+func (s *DockerRegistrySuite) TestTagListNotExistentRepository(c *check.C) {
+	d := NewDaemon(c)
+	if err := d.StartWithBusybox(); err != nil {
+		c.Fatalf("we should have been able to start the daemon: %v", err)
+	}
+	defer d.Stop()
+
+	busyboxID := d.getAndTestImageEntry(c, 1, "busybox", "").id
+
+	dest := fmt.Sprintf("%s/foo/busybox", s.reg.url)
+	if out, err := d.Cmd("tag", "busybox", dest); err != nil {
+		c.Fatalf("failed to tag image %q as %q: error %v, output %q", "busybox", dest, err, out)
+	}
+	// list remote tags - shall list nothing
+	out, err := d.Cmd("tag", "-lr", dest)
+	if err == nil {
+		c.Errorf("listing of not existent remote repository should have failed: %v", out)
+	}
+
+	// list local tags
+	assertTagListEqual(c, d, false, true, []string{dest},
+		fmt.Sprintf("%s/foo/busybox		latest		%s\n", s.reg.url, busyboxID))
 }

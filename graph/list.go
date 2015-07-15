@@ -39,7 +39,7 @@ func (r ByTagName) Len() int           { return len(r) }
 func (r ByTagName) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r ByTagName) Less(i, j int) bool { return r[i].Tag < r[j].Tag }
 
-type TagsConfig struct {
+type RemoteTagsConfig struct {
 	MetaHeaders map[string][]string
 	AuthConfig  *cliconfig.AuthConfig
 }
@@ -182,7 +182,34 @@ func (s *TagStore) Images(config *ImagesConfig) ([]*types.Image, error) {
 	return images, nil
 }
 
-func (s *TagStore) Tags(name string, config *TagsConfig) (*types.RepositoryTagList, error) {
+func (s *TagStore) Tags(name string) (*types.RepositoryTagList, error) {
+	var tagList *types.RepositoryTagList
+
+	// Resolve the Repository name from fqn to RepositoryInfo
+	repos := s.getRepositoryList(name)
+	if len(repos) < 1 {
+		return nil, fmt.Errorf("no such repository %q", name)
+	}
+
+	for repoName, repo := range repos[0] {
+		tagList = &types.RepositoryTagList{
+			Name:    repoName,
+			TagList: make([]*types.RepositoryTag, 0, len(repo)),
+		}
+
+		for ref, id := range repo {
+			tagList.TagList = append(tagList.TagList, &types.RepositoryTag{
+				Tag:     ref,
+				ImageID: id,
+			})
+		}
+	}
+
+	sort.Sort(ByTagName(tagList.TagList))
+	return tagList, nil
+}
+
+func (s *TagStore) RemoteTags(name string, config *RemoteTagsConfig) (*types.RepositoryTagList, error) {
 	var (
 		tagList *types.RepositoryTagList
 		err     error
@@ -204,7 +231,7 @@ func (s *TagStore) Tags(name string, config *TagsConfig) (*types.RepositoryTagLi
 	return tagList, err
 }
 
-func (s *TagStore) getRemoteTagList(name string, config *TagsConfig) (*types.RepositoryTagList, error) {
+func (s *TagStore) getRemoteTagList(name string, config *RemoteTagsConfig) (*types.RepositoryTagList, error) {
 	// Resolve the Repository name from fqn to RepositoryInfo
 	repoInfo, err := s.registryService.ResolveRepository(name)
 	if err != nil {
