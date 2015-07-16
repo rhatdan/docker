@@ -17,7 +17,7 @@ import (
 // path does not refer to a directory.
 var ErrExtractPointNotDirectory = errors.New("extraction point is not a directory")
 
-// ContainerCopy performs a depracated operation of archiving the resource at
+// ContainerCopy performs a deprecated operation of archiving the resource at
 // the specified path in the conatiner identified by the given name.
 func (daemon *Daemon) ContainerCopy(name string, res string) (io.ReadCloser, error) {
 	container, err := daemon.Get(name)
@@ -25,7 +25,7 @@ func (daemon *Daemon) ContainerCopy(name string, res string) (io.ReadCloser, err
 		return nil, err
 	}
 
-	if res[0] == '/' {
+	if res[0] == '/' || res[0] == '\\' {
 		res = res[1:]
 	}
 
@@ -147,7 +147,13 @@ func (container *Container) StatPath(path string) (stat *types.ContainerPathStat
 		return nil, err
 	}
 
-	resolvedPath, absPath, err := container.resolvePath(path)
+	// Consider the given path as an absolute path in the container.
+	absPath := path
+	if !filepath.IsAbs(absPath) {
+		absPath = archive.PreserveTrailingDotOrSeparator(filepath.Join(string(os.PathSeparator), path), path)
+	}
+
+	resolvedPath, err := container.GetResourcePath(absPath)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +193,13 @@ func (container *Container) ArchivePath(path string) (content io.ReadCloser, sta
 		return nil, nil, err
 	}
 
-	resolvedPath, absPath, err := container.resolvePath(path)
+	// Consider the given path as an absolute path in the container.
+	absPath := path
+	if !filepath.IsAbs(absPath) {
+		absPath = archive.PreserveTrailingDotOrSeparator(filepath.Join(string(os.PathSeparator), path), path)
+	}
+
+	resolvedPath, err := container.GetResourcePath(absPath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -251,7 +263,10 @@ func (container *Container) ExtractToDir(path string, noOverwriteDirNonDir bool,
 	// that you can extract an archive to a symlink that points to a directory.
 
 	// Consider the given path as an absolute path in the container.
-	absPath := archive.PreserveTrailingDotOrSeparator(filepath.Join(string(filepath.Separator), path), path)
+	absPath := path
+	if !filepath.IsAbs(absPath) {
+		absPath = archive.PreserveTrailingDotOrSeparator(filepath.Join(string(os.PathSeparator), path), path)
+	}
 
 	// This will evaluate the last path element if it is a symlink.
 	resolvedPath, err := container.GetResourcePath(absPath)
@@ -279,9 +294,11 @@ func (container *Container) ExtractToDir(path string, noOverwriteDirNonDir bool,
 	if err != nil {
 		return err
 	}
-	// Make it an absolute path.
-	absPath = filepath.Join(string(filepath.Separator), baseRel)
+	absPath = filepath.Join(string(os.PathSeparator), baseRel)
 
+	// Need to check if the path is in a volume. If it is, it cannot be in a
+	// read-only volume. If it is not in a volume, the container cannot be
+	// configured with a read-only rootfs.
 	toVolume, err := checkIfPathIsInAVolume(container, absPath)
 	if err != nil {
 		return err
