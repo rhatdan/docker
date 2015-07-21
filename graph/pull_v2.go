@@ -96,7 +96,7 @@ func (p *v2Puller) pullV2Repository(tag string) (err error) {
 		layersDownloaded = layersDownloaded || pulledNew
 	}
 
-	WriteStatus(taggedName, p.config.OutStream, p.sf, layersDownloaded)
+	writeStatus(taggedName, p.config.OutStream, p.sf, layersDownloaded)
 
 	return nil
 }

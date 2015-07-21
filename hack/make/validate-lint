@@ -31,6 +31,7 @@ packages=(
 	daemon/network
 	docker
 	dockerinit
+	graph
 	image
 	integration-cli
 	pkg/chrootarchive
