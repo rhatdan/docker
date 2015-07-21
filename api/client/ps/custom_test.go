@@ -12,7 +12,7 @@ import (
 )
 
 func TestContainerContextID(t *testing.T) {
-	containerId := stringid.GenerateNonCryptoID()
+	containerID := stringid.GenerateRandomID()
 	unix := time.Now().Unix()
 
 	var ctx containerContext
@@ -23,7 +23,7 @@ func TestContainerContextID(t *testing.T) {
 		expHeader string
 		call      func() string
 	}{
-		{types.Container{ID: containerId}, true, stringid.TruncateID(containerId), idHeader, ctx.ID},
+		{types.Container{ID: containerID}, true, stringid.TruncateID(containerID), idHeader, ctx.ID},
 		{types.Container{Names: []string{"/foobar_baz"}}, true, "foobar_baz", namesHeader, ctx.Names},
 		{types.Container{Image: "ubuntu"}, true, "ubuntu", imageHeader, ctx.Image},
 		{types.Container{Image: ""}, true, "<no image>", imageHeader, ctx.Image},
