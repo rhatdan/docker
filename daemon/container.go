@@ -66,6 +66,8 @@ type CommonContainer struct {
 	ImageID                  string `json:"Image"`
 	NetworkSettings          *network.Settings
 	ResolvConfPath           string
+	ShmPath                  string
+	MqueuePath               string
 	HostnamePath             string
 	HostsPath                string
 	LogPath                  string
@@ -282,10 +284,21 @@ func (container *Container) Start() (err error) {
 		return err
 	}
 
+	defer func() {
+		// Now the container is running, unmount the ipc on the host
+		container.unmountIpcMounts()
+	}()
+
+	if err := container.setupIpcDirs(); err != nil {
+		return err
+	}
+
 	mounts, err := container.setupMounts()
 	if err != nil {
 		return err
 	}
+
+	fmt.Println(mounts)
 
 	container.command.Mounts = mounts
 	return container.waitForStart()
@@ -1091,6 +1104,24 @@ func copyEscapable(dst io.Writer, src io.ReadCloser) (written int64, err error) 
 	return written, err
 }
 
+func (container *Container) ipcMounts() []execdriver.Mount {
+	var mounts []execdriver.Mount
+	label.SetFileLabel(container.ShmPath, container.MountLabel)
+	mounts = append(mounts, execdriver.Mount{
+		Source:      container.ShmPath,
+		Destination: "/dev/shm",
+		Writable:    true,
+		Private:     true,
+	})
+	label.SetFileLabel(container.MqueuePath, container.MountLabel)
+	mounts = append(mounts, execdriver.Mount{
+		Source:      container.MqueuePath,
+		Destination: "/dev/mqueue",
+		Writable:    true,
+		Private:     true,
+	})
+	return mounts
+}
 func (container *Container) networkMounts() []execdriver.Mount {
 	var mounts []execdriver.Mount
 	if container.ResolvConfPath != "" {

@@ -33,6 +33,7 @@ import (
 	"github.com/docker/libnetwork/types"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/devices"
+	"github.com/opencontainers/runc/libcontainer/label"
 )
 
 const DefaultPathEnv = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -201,6 +202,17 @@ func populateCommand(c *Container, env []string) error {
 
 	ipc := &execdriver.Ipc{}
 
+	var err error
+	c.ShmPath, err = c.GetRootResourcePath("shm")
+	if err != nil {
+		return err
+	}
+
+	c.MqueuePath, err = c.GetRootResourcePath("mqueue")
+	if err != nil {
+		return err
+	}
+
 	if c.hostConfig.IpcMode.IsContainer() {
 		ic, err := c.getIpcContainer()
 		if err != nil {
@@ -209,6 +221,10 @@ func populateCommand(c *Container, env []string) error {
 		ipc.ContainerID = ic.ID
 	} else {
 		ipc.HostIpc = c.hostConfig.IpcMode.IsHost()
+		if ipc.HostIpc {
+			c.ShmPath = "/dev/shm"
+			c.MqueuePath = "/dev/mqueue"
+		}
 	}
 
 	pid := &execdriver.Pid{}
@@ -1129,4 +1145,63 @@ func (container *Container) PrepareStorage() error {
 
 func (container *Container) CleanupStorage() error {
 	return nil
+}
+
+func (container *Container) shmPath() (string, error) {
+	return container.GetRootResourcePath("shm")
+}
+func (container *Container) mqueuePath() (string, error) {
+	return container.GetRootResourcePath("mqueue")
+}
+func (container *Container) setupIpcDirs() error {
+	shmPath, err := container.shmPath()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(shmPath, 0700); err != nil {
+		return err
+	}
+
+	if err := syscall.Mount("tmpfs", shmPath, "tmpfs", uintptr(syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV), label.FormatMountLabel("mode=1777,size=65536k", container.GetMountLabel())); err != nil {
+		return fmt.Errorf("mounting shm tmpfs: %s", err)
+	}
+
+	mqueuePath, err := container.mqueuePath()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(mqueuePath, 0700); err != nil {
+		return err
+	}
+
+	if err := syscall.Mount("mqueue", mqueuePath, "mqueue", uintptr(syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV), ""); err != nil {
+		return fmt.Errorf("mounting mqueue mqueue : %s", err)
+	}
+
+	return nil
+}
+func (container *Container) unmountIpcMounts() {
+	shmPath, err := container.shmPath()
+	if err != nil {
+		logrus.Errorf("%v: Shm Path does not exist: %v", container.ID, err)
+		return
+	}
+
+	if err := syscall.Unmount(shmPath, syscall.MNT_DETACH); err != nil {
+		logrus.Errorf("%v: Failed to umount %s filesystem: %v", container.ID, shmPath, err)
+		return
+	}
+
+	mqueuePath, err := container.mqueuePath()
+	if err != nil {
+		logrus.Errorf("%v: Mqueue Path does not exist: %v", container.ID, err)
+		return
+	}
+
+	if err := syscall.Unmount(mqueuePath, syscall.MNT_DETACH); err != nil {
+		logrus.Errorf("%v: Failed to umount %s filesystem: %v", container.ID, mqueuePath, err)
+		return
+	}
 }

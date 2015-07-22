@@ -45,6 +45,7 @@ func (container *Container) setupMounts() ([]execdriver.Mount, error) {
 	}
 
 	mounts = sortMounts(mounts)
+	mounts = append(mounts, container.ipcMounts()...)
 	return append(mounts, container.networkMounts()...), nil
 }
 
