@@ -31,7 +31,8 @@ func newLink(parentIP, childIP string, ports []types.TransportPort, bridge strin
 }
 
 func (l *link) Enable() error {
-	// -A == iptables append flag
+	// -A == iptables append flag, -I = iptables insert flag
+	iptables.OnReloaded(func() { linkContainers("-A", l.parentIP, l.childIP, l.ports, l.bridge, false) })
 	return linkContainers("-A", l.parentIP, l.childIP, l.ports, l.bridge, false)
 }
 
