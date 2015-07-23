@@ -34,6 +34,7 @@ import (
 	"github.com/docker/docker/pkg/sockets"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/docker/pkg/streamformatter"
+	"github.com/docker/docker/pkg/ulimit"
 	"github.com/docker/docker/pkg/version"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
@@ -629,6 +630,17 @@ func (s *Server) getContainersLogs(version version.Version, w http.ResponseWrite
 		closeNotifier = notifier.CloseNotify()
 	}
 
+	c, err := s.daemon.Get(vars["name"])
+	if err != nil {
+		return err
+	}
+
+	outStream := ioutils.NewWriteFlusher(w)
+	// write an empty chunk of data (this is to ensure that the
+	// HTTP Response is sent immediatly, even if the container has
+	// not yet produced any data)
+	outStream.Write(nil)
+
 	logsConfig := &daemon.ContainerLogsConfig{
 		Follow:     boolValue(r, "follow"),
 		Timestamps: boolValue(r, "timestamps"),
@@ -636,11 +648,11 @@ func (s *Server) getContainersLogs(version version.Version, w http.ResponseWrite
 		Tail:       r.Form.Get("tail"),
 		UseStdout:  stdout,
 		UseStderr:  stderr,
-		OutStream:  ioutils.NewWriteFlusher(w),
+		OutStream:  outStream,
 		Stop:       closeNotifier,
 	}
 
-	if err := s.daemon.ContainerLogs(vars["name"], logsConfig); err != nil {
+	if err := s.daemon.ContainerLogs(c, logsConfig); err != nil {
 		fmt.Fprintf(w, "Error running logs job: %s\n", err)
 	}
 
@@ -1283,6 +1295,15 @@ func (s *Server) postBuild(version version.Version, w http.ResponseWriter, r *ht
 	buildConfig.CPUSetMems = r.FormValue("cpusetmems")
 	buildConfig.CgroupParent = r.FormValue("cgroupparent")
 
+	var buildUlimits = []*ulimit.Ulimit{}
+	ulimitsJson := r.FormValue("ulimits")
+	if ulimitsJson != "" {
+		if err := json.NewDecoder(strings.NewReader(ulimitsJson)).Decode(&buildUlimits); err != nil {
+			return err
+		}
+		buildConfig.Ulimits = buildUlimits
+	}
+
 	// Job cancellation. Note: not all job types support this.
 	if closeNotifier, ok := w.(http.CloseNotifier); ok {
 		finished := make(chan struct{})
@@ -1365,24 +1386,12 @@ func setContainerPathStatHeader(stat *types.ContainerPathStat, header http.Heade
 }
 
 func (s *Server) headContainersArchive(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	if vars == nil {
-		return fmt.Errorf("Missing parameter")
-	}
-	if err := parseForm(r); err != nil {
+	v, err := archiveFormValues(r, vars)
+	if err != nil {
 		return err
 	}
 
-	name := vars["name"]
-	path := r.Form.Get("path")
-
-	switch {
-	case name == "":
-		return fmt.Errorf("bad parameter: 'name' cannot be empty")
-	case path == "":
-		return fmt.Errorf("bad parameter: 'path' cannot be empty")
-	}
-
-	stat, err := s.daemon.ContainerStatPath(name, path)
+	stat, err := s.daemon.ContainerStatPath(v.name, v.path)
 	if err != nil {
 		return err
 	}
@@ -1391,24 +1400,12 @@ func (s *Server) headContainersArchive(version version.Version, w http.ResponseW
 }
 
 func (s *Server) getContainersArchive(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	if vars == nil {
-		return fmt.Errorf("Missing parameter")
-	}
-	if err := parseForm(r); err != nil {
+	v, err := archiveFormValues(r, vars)
+	if err != nil {
 		return err
 	}
 
-	name := vars["name"]
-	path := r.Form.Get("path")
-
-	switch {
-	case name == "":
-		return fmt.Errorf("bad parameter: 'name' cannot be empty")
-	case path == "":
-		return fmt.Errorf("bad parameter: 'path' cannot be empty")
-	}
-
-	tarArchive, stat, err := s.daemon.ContainerArchivePath(name, path)
+	tarArchive, stat, err := s.daemon.ContainerArchivePath(v.name, v.path)
 	if err != nil {
 		return err
 	}
@@ -1425,26 +1422,13 @@ func (s *Server) getContainersArchive(version version.Version, w http.ResponseWr
 }
 
 func (s *Server) putContainersArchive(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	if vars == nil {
-		return fmt.Errorf("Missing parameter")
-	}
-	if err := parseForm(r); err != nil {
+	v, err := archiveFormValues(r, vars)
+	if err != nil {
 		return err
 	}
 
-	name := vars["name"]
-	path := r.Form.Get("path")
-
 	noOverwriteDirNonDir := boolValue(r, "noOverwriteDirNonDir")
-
-	switch {
-	case name == "":
-		return fmt.Errorf("bad parameter: 'name' cannot be empty")
-	case path == "":
-		return fmt.Errorf("bad parameter: 'path' cannot be empty")
-	}
-
-	return s.daemon.ContainerExtractToDir(name, path, noOverwriteDirNonDir, r.Body)
+	return s.daemon.ContainerExtractToDir(v.name, v.path, noOverwriteDirNonDir, r.Body)
 }
 
 func (s *Server) postContainerExecCreate(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
