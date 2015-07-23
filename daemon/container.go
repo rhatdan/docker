@@ -844,8 +844,6 @@ func (container *Container) Exec(execConfig *execConfig) error {
 	container.Lock()
 	defer container.Unlock()
 
-	waitStart := make(chan struct{})
-
 	callback := func(processConfig *execdriver.ProcessConfig, pid int) {
 		if processConfig.Tty {
 			// The callback is called after the process Start()
@@ -855,7 +853,7 @@ func (container *Container) Exec(execConfig *execConfig) error {
 				c.Close()
 			}
 		}
-		close(waitStart)
+		close(execConfig.waitStart)
 	}
 
 	// We use a callback here instead of a goroutine and an chan for
@@ -864,7 +862,7 @@ func (container *Container) Exec(execConfig *execConfig) error {
 
 	// Exec should not return until the process is actually running
 	select {
-	case <-waitStart:
+	case <-execConfig.waitStart:
 	case err := <-cErr:
 		return err
 	}
