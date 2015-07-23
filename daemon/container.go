@@ -1104,8 +1104,12 @@ func copyEscapable(dst io.Writer, src io.ReadCloser) (written int64, err error) 
 
 func (container *Container) networkMounts() []execdriver.Mount {
 	var mounts []execdriver.Mount
+	mode := "Z"
+	if container.hostConfig.NetworkMode.IsContainer() {
+		mode = "z"
+	}
 	if container.ResolvConfPath != "" {
-		label.SetFileLabel(container.ResolvConfPath, container.MountLabel)
+		label.Relabel(container.ResolvConfPath, container.MountLabel, mode)
 		mounts = append(mounts, execdriver.Mount{
 			Source:      container.ResolvConfPath,
 			Destination: "/etc/resolv.conf",
@@ -1114,7 +1118,7 @@ func (container *Container) networkMounts() []execdriver.Mount {
 		})
 	}
 	if container.HostnamePath != "" {
-		label.SetFileLabel(container.HostnamePath, container.MountLabel)
+		label.Relabel(container.HostnamePath, container.MountLabel, mode)
 		mounts = append(mounts, execdriver.Mount{
 			Source:      container.HostnamePath,
 			Destination: "/etc/hostname",
@@ -1123,7 +1127,7 @@ func (container *Container) networkMounts() []execdriver.Mount {
 		})
 	}
 	if container.HostsPath != "" {
-		label.SetFileLabel(container.HostsPath, container.MountLabel)
+		label.Relabel(container.HostsPath, container.MountLabel, mode)
 		mounts = append(mounts, execdriver.Mount{
 			Source:      container.HostsPath,
 			Destination: "/etc/hosts",
