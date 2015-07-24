@@ -147,13 +147,7 @@ func (container *Container) StatPath(path string) (stat *types.ContainerPathStat
 		return nil, err
 	}
 
-	// Consider the given path as an absolute path in the container.
-	absPath := path
-	if !filepath.IsAbs(absPath) {
-		absPath = archive.PreserveTrailingDotOrSeparator(filepath.Join(string(os.PathSeparator), path), path)
-	}
-
-	resolvedPath, err := container.GetResourcePath(absPath)
+	resolvedPath, absPath, err := container.resolvePath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -193,13 +187,7 @@ func (container *Container) ArchivePath(path string) (content io.ReadCloser, sta
 		return nil, nil, err
 	}
 
-	// Consider the given path as an absolute path in the container.
-	absPath := path
-	if !filepath.IsAbs(absPath) {
-		absPath = archive.PreserveTrailingDotOrSeparator(filepath.Join(string(os.PathSeparator), path), path)
-	}
-
-	resolvedPath, err := container.GetResourcePath(absPath)
+	resolvedPath, absPath, err := container.resolvePath(path)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -263,10 +251,7 @@ func (container *Container) ExtractToDir(path string, noOverwriteDirNonDir bool,
 	// that you can extract an archive to a symlink that points to a directory.
 
 	// Consider the given path as an absolute path in the container.
-	absPath := path
-	if !filepath.IsAbs(absPath) {
-		absPath = archive.PreserveTrailingDotOrSeparator(filepath.Join(string(os.PathSeparator), path), path)
-	}
+	absPath := archive.PreserveTrailingDotOrSeparator(filepath.Join(string(filepath.Separator), path), path)
 
 	// This will evaluate the last path element if it is a symlink.
 	resolvedPath, err := container.GetResourcePath(absPath)
@@ -294,11 +279,9 @@ func (container *Container) ExtractToDir(path string, noOverwriteDirNonDir bool,
 	if err != nil {
 		return err
 	}
-	absPath = filepath.Join(string(os.PathSeparator), baseRel)
+	// Make it an absolute path.
+	absPath = filepath.Join(string(filepath.Separator), baseRel)
 
-	// Need to check if the path is in a volume. If it is, it cannot be in a
-	// read-only volume. If it is not in a volume, the container cannot be
-	// configured with a read-only rootfs.
 	toVolume, err := checkIfPathIsInAVolume(container, absPath)
 	if err != nil {
 		return err
