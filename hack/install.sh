@@ -301,7 +301,7 @@ do_install() {
 			exit 0
 			;;
 
-		fedora|centos|oraclelinux)
+		fedora|centos)
 			$sh_c "cat >/etc/yum.repos.d/docker-${repo}.repo" <<-EOF
 			[docker-${repo}-repo]
 			name=Docker ${repo} Repository
