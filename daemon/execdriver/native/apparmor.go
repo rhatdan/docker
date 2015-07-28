@@ -45,11 +45,12 @@ profile {{.Name}} flags=(attach_disconnected,mediate_deleted) {
   deny @{PROC}/sysrq-trigger rwklx,
   deny @{PROC}/mem rwklx,
   deny @{PROC}/kmem rwklx,
-  deny @{PROC}/kcore rwklx,
+  deny @{PROC}/kore rwklx,
   deny @{PROC}/sys/kernel/[^s][^h][^m]* wklx,
   deny @{PROC}/sys/kernel/*/** wklx,
 
   deny mount,
+  deny ptrace,
 
   deny /sys/[^f]*/** wklx,
   deny /sys/f[^s]*/** wklx,

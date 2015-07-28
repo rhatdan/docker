@@ -2397,7 +2397,10 @@ func (s *DockerSuite) TestRunWriteToProcAsound(c *check.C) {
 func (s *DockerSuite) TestRunReadProcTimer(c *check.C) {
 	testRequires(c, NativeExecDriver)
 	out, code, err := dockerCmdWithError("run", "busybox", "cat", "/proc/timer_stats")
-	if err != nil || code != 0 {
+	if code != 0 {
+		return
+	}
+	if err != nil {
 		c.Fatal(err)
 	}
 	if strings.Trim(out, "\n ") != "" {
@@ -2414,7 +2417,10 @@ func (s *DockerSuite) TestRunReadProcLatency(c *check.C) {
 		return
 	}
 	out, code, err := dockerCmdWithError("run", "busybox", "cat", "/proc/latency_stats")
-	if err != nil || code != 0 {
+	if code != 0 {
+		return
+	}
+	if err != nil {
 		c.Fatal(err)
 	}
 	if strings.Trim(out, "\n ") != "" {
@@ -2434,11 +2440,7 @@ func (s *DockerSuite) TestRunReadFilteredProc(c *check.C) {
 		name := fmt.Sprintf("procsieve-%d", i)
 		shellCmd := fmt.Sprintf("exec 3<%s", filePath)
 
-		out, exitCode, err := dockerCmdWithError(c, "run", "--privileged", "--security-opt", "apparmor:docker-default", "--name", name, "busybox", "sh", "-c", shellCmd)
-		if exitCode != 0 {
-			return
-		}
-		if err != nil {
+		if out, exitCode, err := dockerCmdWithError("run", "--privileged", "--security-opt", "apparmor:docker-default", "--name", name, "busybox", "sh", "-c", shellCmd); err == nil || exitCode == 0 {
 			c.Fatalf("Open FD for read should have failed with permission denied, got: %s, %v", out, err)
 		}
 	}

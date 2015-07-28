@@ -59,11 +59,11 @@ func NewDriver(root, initPath string, options []string) (*Driver, error) {
 
 	if apparmor.IsEnabled() {
 		if err := installAppArmorProfile(); err != nil {
-			apparmorProfiles := []string{"docker-default"}
+			apparmor_profiles := []string{"docker-default", "docker-unconfined"}
 
 			// Allow daemon to run if loading failed, but are active
 			// (possibly through another run, manually, or via system startup)
-			for _, policy := range apparmorProfiles {
+			for _, policy := range apparmor_profiles {
 				if err := hasAppArmorProfileLoaded(policy); err != nil {
 					return nil, fmt.Errorf("AppArmor enabled on system but the %s profile could not be loaded.", policy)
 				}
