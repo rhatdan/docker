@@ -213,11 +213,8 @@ do_install() {
 
 
 	esac
+		
 
-	# Check if this is a forked Linux distro
-	check_forked
-
-	# Run setup for each distro accordingly
 	case "$lsb_dist" in
 		amzn)
 			(
@@ -301,8 +298,8 @@ do_install() {
 			exit 0
 			;;
 
-		fedora|centos)
-			$sh_c "cat >/etc/yum.repos.d/docker-${repo}.repo" <<-EOF
+		fedora|centos|oraclelinux)
+			cat >/etc/yum.repos.d/docker-${repo}.repo <<-EOF
 			[docker-${repo}-repo]
 			name=Docker ${repo} Repository
 			baseurl=https://yum.dockerproject.org/repo/${repo}/${lsb_dist}/${dist_version}
