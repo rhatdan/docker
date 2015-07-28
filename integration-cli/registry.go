@@ -15,10 +15,11 @@ const v2binary = "registry-v2"
 
 type testRegistryV2 struct {
 	cmd *exec.Cmd
+	url string
 	dir string
 }
 
-func newTestRegistryV2(c *check.C) (*testRegistryV2, error) {
+func newTestRegistryV2At(c *check.C, url string) (*testRegistryV2, error) {
 	template := `version: 0.1
 loglevel: debug
 storage:
@@ -35,7 +36,7 @@ http:
 	if err != nil {
 		return nil, err
 	}
-	if _, err := fmt.Fprintf(config, template, tmp, privateRegistryURL); err != nil {
+	if _, err := fmt.Fprintf(config, template, tmp, url); err != nil {
 		os.RemoveAll(tmp)
 		return nil, err
 	}
@@ -50,13 +51,18 @@ http:
 	}
 	return &testRegistryV2{
 		cmd: cmd,
+		url: url,
 		dir: tmp,
 	}, nil
 }
 
+func newTestRegistryV2(c *check.C) (*testRegistryV2, error) {
+	return newTestRegistryV2At(c, privateRegistryURLs[0])
+}
+
 func (t *testRegistryV2) Ping() error {
 	// We always ping through HTTP for our test registry.
-	resp, err := http.Get(fmt.Sprintf("http://%s/v2/", privateRegistryURL))
+	resp, err := http.Get(fmt.Sprintf("http://%s/v2/", t.url))
 	if err != nil {
 		return err
 	}
