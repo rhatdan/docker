@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 )
 
 // Errors used or returned by this file.
@@ -103,7 +103,7 @@ func TarResourceRebase(sourcePath, rebaseName string) (content Archive, err erro
 
 	filter := []string{sourceBase}
 
-	log.Debugf("copying %q from %q", sourceBase, sourceDir)
+	logrus.Debugf("copying %q from %q", sourceBase, sourceDir)
 
 	return TarWithOptions(sourceDir, &TarOptions{
 		Compression:      Uncompressed,
