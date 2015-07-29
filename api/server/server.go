@@ -209,6 +209,7 @@ func httpError(w http.ResponseWriter, err error) {
 		"impossible":            http.StatusNotAcceptable,
 		"wrong login/password":  http.StatusUnauthorized,
 		"hasn't been activated": http.StatusForbidden,
+		"needs to be forced":    http.StatusForbidden,
 	} {
 		if strings.Contains(errStr, keyword) {
 			statusCode = status
@@ -676,7 +677,7 @@ func (s *Server) postImagesTag(version version.Version, w http.ResponseWriter, r
 	tag := r.Form.Get("tag")
 	force := boolValue(r, "force")
 	name := vars["name"]
-	if err := s.daemon.Repositories().Tag(repo, tag, name, force); err != nil {
+	if err := s.daemon.Repositories().Tag(repo, tag, name, force, true); err != nil {
 		return err
 	}
 	s.daemon.EventsService.Log("tag", utils.ImageReference(repo, tag), "")
@@ -831,11 +832,11 @@ func (s *Server) getImagesSearch(version version.Version, w http.ResponseWriter,
 			headers[k] = v
 		}
 	}
-	query, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers)
+	results, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers, boolValue(r, "noIndex"))
 	if err != nil {
 		return err
 	}
-	return writeJSON(w, http.StatusOK, query.Results)
+	return writeJSON(w, http.StatusOK, results)
 }
 
 func (s *Server) postImagesPush(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -875,6 +876,7 @@ func (s *Server) postImagesPush(version version.Version, w http.ResponseWriter, 
 		MetaHeaders: metaHeaders,
 		AuthConfig:  authConfig,
 		Tag:         r.Form.Get("tag"),
+		Force:       boolValue(r, "force"),
 		OutStream:   output,
 	}
 
@@ -1248,12 +1250,88 @@ func (s *Server) getImagesByName(version version.Version, w http.ResponseWriter,
 		return fmt.Errorf("Missing parameter")
 	}
 
-	imageInspect, err := s.daemon.Repositories().Lookup(vars["name"])
+	name := vars["name"]
+
+	if boolValue(r, "remote") {
+		authEncoded := r.Header.Get("X-Registry-Auth")
+		authConfig := &cliconfig.AuthConfig{}
+		if authEncoded != "" {
+			authJson := base64.NewDecoder(base64.URLEncoding, strings.NewReader(authEncoded))
+			if err := json.NewDecoder(authJson).Decode(authConfig); err != nil {
+				// for a pull it is not an error if no auth was given
+				// to increase compatibility with the existing api it is defaulting to be empty
+				authConfig = &cliconfig.AuthConfig{}
+			}
+		}
+
+		image, tag := parsers.ParseRepositoryTag(name)
+		metaHeaders := map[string][]string{}
+		for k, v := range r.Header {
+			if strings.HasPrefix(k, "X-Meta-") {
+				metaHeaders[k] = v
+			}
+		}
+		lookupRemoteConfig := &graph.LookupRemoteConfig{
+			MetaHeaders: metaHeaders,
+			AuthConfig:  authConfig,
+		}
+		imageInspect, err := s.daemon.Repositories().LookupRemote(image, tag, lookupRemoteConfig)
+		if err != nil {
+			return err
+		}
+		return writeJSON(w, http.StatusOK, imageInspect)
+	} else {
+		imageInspect, err := s.daemon.Repositories().Lookup(name)
+		if err != nil {
+			return err
+		}
+		return writeJSON(w, http.StatusOK, imageInspect)
+	}
+}
+
+func (s *Server) getImagesTags(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	name := vars["name"]
+	authEncoded := r.Header.Get("X-Registry-Auth")
+	authConfig := &cliconfig.AuthConfig{}
+	if authEncoded != "" {
+		authJson := base64.NewDecoder(base64.URLEncoding, strings.NewReader(authEncoded))
+		if err := json.NewDecoder(authJson).Decode(authConfig); err != nil {
+			// for a pull it is not an error if no auth was given
+			// to increase compatibility with the existing api it is defaulting to be empty
+			authConfig = &cliconfig.AuthConfig{}
+		}
+	}
+
+	var (
+		tagList *types.RepositoryTagList
+		err     error
+	)
+	if !boolValue(r, "remote") {
+		tagList, err = s.daemon.Repositories().Tags(name)
+		if err != nil {
+			logrus.Warnf("failed to get local tags for %q", name)
+		}
+	}
+	if tagList == nil || err != nil {
+		metaHeaders := map[string][]string{}
+		for k, v := range r.Header {
+			if strings.HasPrefix(k, "X-Meta-") {
+				metaHeaders[k] = v
+			}
+		}
+		tagsConfig := &graph.RemoteTagsConfig{
+			MetaHeaders: metaHeaders,
+			AuthConfig:  authConfig,
+		}
+		tagList, err = s.daemon.Repositories().RemoteTags(name, tagsConfig)
+		if err != nil {
+			logrus.Warnf("failed to get remote tags for %q: %v", name, err)
+		}
+	}
 	if err != nil {
 		return err
 	}
-
-	return writeJSON(w, http.StatusOK, imageInspect)
+	return writeJSON(w, http.StatusOK, tagList)
 }
 
 func (s *Server) postBuild(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -1643,6 +1721,7 @@ func createRouter(s *Server) *mux.Router {
 			"/images/{name:.*}/get":           s.getImagesGet,
 			"/images/{name:.*}/history":       s.getImagesHistory,
 			"/images/{name:.*}/json":          s.getImagesByName,
+			"/images/{name:.*}/tags":          s.getImagesTags,
 			"/containers/ps":                  s.getContainersJSON,
 			"/containers/json":                s.getContainersJSON,
 			"/containers/{name:.*}/export":    s.getContainersExport,
