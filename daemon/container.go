@@ -279,6 +279,24 @@ func (container *Container) Start() (err error) {
 		return err
 	}
 
+	defer func() {
+		// Now the container is running, unmount the secrets on the host
+		secretsPath, err := container.secretsPath()
+		if err != nil {
+			logrus.Errorf("%v: Secrets Path does not exist: %v", container.ID, err)
+			return
+		}
+
+		if err := syscall.Unmount(secretsPath, syscall.MNT_DETACH); err != nil {
+			logrus.Errorf("%v: Failed to umount %s filesystem: %v", container.ID, secretsPath, err)
+			return
+		}
+	}()
+
+	if err := container.setupSecretFiles(); err != nil {
+		return err
+	}
+
 	mounts, err := container.setupMounts()
 	if err != nil {
 		return err
