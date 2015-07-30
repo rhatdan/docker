@@ -156,6 +156,7 @@ type Config struct {
 	MacAddress      string                // Mac Address of the container
 	OnBuild         []string              // ONBUILD metadata that were defined on the image Dockerfile
 	Labels          map[string]string     // List of labels set to this container
+	Init            string
 }
 
 // DecodeContainerConfig decodes a json encoded config into a ContainerConfigWrapper

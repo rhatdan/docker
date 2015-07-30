@@ -1073,6 +1073,7 @@ _docker_run() {
 		--expose
 		--group-add
 		--hostname -h
+		--init
 		--ipc
 		--label-file
 		--label -l
@@ -1157,6 +1158,10 @@ _docker_run() {
 		--env|-e)
 			COMPREPLY=( $( compgen -e -- "$cur" ) )
 			compopt -o nospace
+			return
+			;;
+		--init)
+			COMPREPLY=( $( compgen -W 'systemd' -- "$cur" ) )
 			return
 			;;
 		--ipc)
