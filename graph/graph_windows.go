@@ -120,7 +120,7 @@ func (graph *Graph) storeImage(img *image.Image, layerData archive.Reader, root 
 		}
 	}
 
-	if err := graph.saveSize(root, int(img.Size)); err != nil {
+	if err := graph.saveSize(root, img.Size); err != nil {
 		return err
 	}
 
