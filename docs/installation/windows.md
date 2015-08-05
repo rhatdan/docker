@@ -107,57 +107,6 @@ installer.
 2. Click the installer link to download.
 
 3. Install Docker Toolbox by double-clicking the installer.
-<<<<<<< HEAD
-
-    The installer launches the "Setup - Docker Toolbox" dialog.
-
-    ![Install Docker Toolbox](/installation/images/win-welcome.png)
-
-4. Press "Next" to install the toolbox.
-
-    The installer presents you with options to customize the standard
-    installation. By default, the standard Docker Toolbox installation:
-
-    * installs executables for the Docker tools in `C:\Program Files\Docker Toolbox` 
-    * updates any existing VirtualBox installation 
-    * adds a Docker Inc. folder to your program shortcuts
-    * updates your `PATH` environment variable
-    * adds desktop icons for the Docker Quickstart Terminal and Kitematic
-
-    This installation assumes the defaults are acceptable.
-
-5. Press "Next" until you reach the "Ready to Install" page.
-
-     The system prompts you for your password.
-
-     ![Install](/installation/images/win-page-6.png)
-
-6. Press "Install"  to continue with the installation.
-
-     When it completes, the installer provides you with some information you can
-     use to complete some common tasks.
-
-     ![All finished](/installation/images/windows-finish.png)
-
-7. Press "Close" to exit.
-
-## Running a Docker Container
-
-To run a Docker container, you:
-
-* create a new (or start an existing) Docker virtual machine 
-* switch your environment to your new VM
-* use the `docker` client to create, load, and manage containers
-
-Once you create a machine, you can reuse it as often as you like. Like any
-VirtualBox VM, it maintains its configuration between uses.
-
-There are several ways to use the installed tools, from the Docker Quickstart Terminal or
-[from your shell](#from-your-shell).
-
-### From the Docker Quickstart Terminal
-
-=======
 
     The installer launches the "Setup - Docker Toolbox" dialog.
     
@@ -208,17 +157,12 @@ There are several ways to use the installed tools, from the Docker Quickstart Te
 
 ### From the Docker Quickstart Terminal
 
->>>>>>> Docker Toolbox Updates fixes #14561
 1. Find the Docker Quickstart Terminal icon on your Desktop and double-click to launch it.
 
     The application:
 
     * opens a terminal window
-<<<<<<< HEAD
-    * creates a `default` if it doesn't exist, starts the VM if it does
-=======
     * creates a `docker-vm` if it doesn't exist, starts the VM if it does
->>>>>>> Docker Toolbox Updates fixes #14561
     * points the terminal environment to this VM
 
     Once the launch completes, you can run `docker` commands. 
@@ -263,51 +207,20 @@ There are several ways to use the installed tools, from the Docker Quickstart Te
 2. Add this to the `%PATH%` environment variable by running:
 
         set PATH=%PATH%;"c:\Program Files (x86)\Git\bin"
-<<<<<<< HEAD
-
-3. Create a new Docker VM.
-
-        docker-machine create --driver virtualbox my-default
-=======
         
 3. Create a new Docker VM.
 
         docker-machine create --driver virtualbox my-docker-vm
->>>>>>> Docker Toolbox Updates fixes #14561
         Creating VirtualBox VM...
         Creating SSH key...
         Starting VirtualBox VM...
         Starting VM...
-<<<<<<< HEAD
-        To see how to connect Docker to this machine, run: docker-machine env my-default
-=======
         To see how to connect Docker to this machine, run: docker-machine env my-docker-vm
->>>>>>> Docker Toolbox Updates fixes #14561
 
     The command also creates a machine configuration in the
     `C:\USERS\USERNAME\.docker\machine\machines` directory. You only need to run the `create`
     command once. Then, you can use `docker-machine` to start, stop, query, and
     otherwise manage the VM from the command line.
-<<<<<<< HEAD
-
-4. List your available machines.
-
-        C:\Users\mary> docker-machine ls
-        NAME                ACTIVE   DRIVER       STATE     URL                         SWARM
-        my-default        *        virtualbox   Running   tcp://192.168.99.101:2376  
-
-    If you have previously installed the deprecated Boot2Docker application or
-    run the Docker Quickstart Terminal, you may have a `dev` VM as well.  
-
-5. Get the environment commands for your new VM.
-
-        C:\Users\mary> docker-machine env --shell cmd my-default
-
-6. Connect your shell to the `my-default` machine.
-
-        C:\Users\mary> eval "$(docker-machine env my-default)"
-
-=======
     
 4. List your available machines.
 
@@ -326,7 +239,6 @@ There are several ways to use the installed tools, from the Docker Quickstart Te
 
         C:\Users\mary> eval "$(docker-machine env my-docker-vm)"
 
->>>>>>> Docker Toolbox Updates fixes #14561
 7. Run the `hello-world` container to verify your setup.
 
         C:\Users\mary> docker run hello-world
@@ -334,34 +246,6 @@ There are several ways to use the installed tools, from the Docker Quickstart Te
 ## Using Docker from PowerShell
 
 1. Launch a Windows PowerShell window.
-<<<<<<< HEAD
-
-2. Add `ssh.exe` to your PATH:
-
-        PS C:\Users\mary> $Env:Path = "${Env:Path};c:\Program Files (x86)\Git\bin"
-
-3. Create a new Docker VM.
-
-        PS C:\Users\mary> docker-machine create --driver virtualbox my-default
-
-4. List your available machines.
-
-        C:\Users\mary> docker-machine ls
-        NAME                ACTIVE   DRIVER       STATE     URL                         SWARM
-        my-default        *        virtualbox   Running   tcp://192.168.99.101:2376  
-
-5. Get the environment commands for your new VM.
-
-        C:\Users\mary> docker-machine env --shell powershell my-default
-
-6. Connect your shell to the `my-default` machine.
-
-        C:\Users\mary> eval "$(docker-machine env my-default)"
-
-7. Run the `hello-world` container to verify your setup.
-
-        C:\Users\mary> docker run hello-world
-=======
 
 2. Add `ssh.exe` to your PATH:
 
@@ -429,69 +313,7 @@ and what it does:
 
 To upgrade Docker Toolbox, download an re-run [the Docker Toolbox
 installer](https://www.docker.com/toolbox).
->>>>>>> Docker Toolbox Updates fixes #14561
 
-
-<<<<<<< HEAD
-## Learn about your Toolbox installation
-=======
-If you are curious, the username for the Docker default user is `docker`
-and the password is `tcuser`.
->>>>>>> Docker Toolbox Updates fixes #14561
-
-Toolbox installs the Docker Engine binary in the `C:\Program Files\Docker
-Toolbox` directory. When you use the Docker Quickstart Terminal or create a
-`default` manually, Docker Machine updates the
-`C:\USERS\USERNAME\.docker\machine\machines\default` folder to your
-system. This folder contains the configuration for the VM.
-
-You can create multiple VMs on your system with Docker Machine. So, you may have
-more than one VM folder if you have more than one VM. To remove a VM, use the
-`docker-machine rm <machine-name>` command.
-
-## Migrate from Boot2Docker
-
-If you were using Boot2Docker previously, you have a pre-existing Docker
-`boot2docker-vm` VM on your local system.  To allow Docker Machine to manage
-this older VM, you can migrate it.
-
-1. Open a terminal or the Docker CLI on your system.
-
-2. Type the following command.
-
-        $ docker-machine create -d virtualbox --virtualbox-import-boot2docker-vm boot2docker-vm docker-vm
-
-3. Use the `docker-machine` command to interact with the migrated VM.  
-
-The `docker-machine` subcommands are slightly different than the `boot2docker`
-subcommands. The table below lists the equivalent `docker-machine` subcommand
-and what it does:
-
-|  `boot2docker` | `docker-machine` | `docker-machine` description                             |
-|----------------|------------------|----------------------------------------------------------|
-| init           | create           | Creates a new docker host.                               |
-| up             | start            | Starts a stopped machine.                                |
-| ssh            | ssh              | Runs a command or interactive ssh session on the machine.|
-| save           | -                | Not applicable.                                          |
-| down           | stop             | Stops a running machine.                                 |
-| poweroff       | stop             | Stops a running machine.                                 |
-| reset          | restart          | Restarts a running machine.                              |
-| config         | inspect          | Prints machine configuration details.                    |
-| status         | ls               | Lists all machines and their status.                     |
-| info           | inspect          | Displays a machine's details.                            |
-| ip             | ip               | Displays the machine's ip address.                       |
-| shellinit      | env              | Displays shell commands needed to configure your shell to interact with a machine |
-| delete         | rm               | Removes a machine.                                       |
-| download       | -                | Not applicable.                                          |
-| upgrade        | upgrade          | Upgrades a machine's Docker client to the latest stable release. |
-
-
-## Upgrade Docker Toolbox
-
-To upgrade Docker Toolbox, download an re-run [the Docker Toolbox
-installer](https://www.docker.com/toolbox).
-
-## Container port redirection
 
 If you are curious, the username for the Docker default user is `docker` and the
 password is `tcuser`. The latest version of `docker-machine` sets up a host only
@@ -509,7 +331,11 @@ reported to you using:
 Typically, the IP is 192.168.59.103, but it could get changed by VirtualBox's
 DHCP implementation.
 
-## Login with PUTTY instead of using the CMD
+3. Use the `docker-machine` command to interact with the migrated VM.  
+
+The `docker-machine` subcommands are slightly different than the `boot2docker`
+subcommands. The table below lists the equivalent `docker-machine` subcommand
+and what it does:
 
 Docker Machine generates and uses the public/private key pair in your
 `%USERPROFILE%\.ssh` directory so to log in you need to use the private key from
