@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/pkg/stringid"
 )
 
-func TestContainerContextID(t *testing.T) {
+func TestContainerPsContext(t *testing.T) {
 	containerID := stringid.GenerateRandomID()
 	unix := time.Now().Unix()
 
