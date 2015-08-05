@@ -419,9 +419,9 @@ func (s *Server) getImagesSearch(ctx context.Context, w http.ResponseWriter, r *
 			headers[k] = v
 		}
 	}
-	query, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers)
+	results, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers, boolValue(r, "noIndex"))
 	if err != nil {
 		return err
 	}
-	return writeJSON(w, http.StatusOK, query.Results)
+	return writeJSON(w, http.StatusOK, results)
 }
