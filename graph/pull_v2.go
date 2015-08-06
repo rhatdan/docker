@@ -109,6 +109,7 @@ type downloadInfo struct {
 	layer   distribution.ReadSeekCloser
 	size    int64
 	err     chan error
+	out     io.Writer // Download progress is written here.
 }
 
 type errVerification struct{}
