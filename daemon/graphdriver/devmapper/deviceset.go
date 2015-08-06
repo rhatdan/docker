@@ -40,6 +40,8 @@ var (
 	DMLogLevel                   int  = devicemapper.LogLevelFatal
 	DriverDeferredRemovalSupport bool = false
 	EnableDeferredRemoval        bool = false
+	WarnOnLoopback                    = true
+	LoopbackInUse                     = false
 )
 
 const deviceSetMetaFile string = "deviceset-metadata"
@@ -1430,6 +1432,12 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 	if !createdLoopback {
 		if err := devices.initMetaData(); err != nil {
 			return err
+		}
+	}
+
+	if devices.thinPoolDevice == "" {
+		if devices.metadataLoopFile != "" || devices.dataLoopFile != "" {
+			LoopbackInUse = true
 		}
 	}
 
