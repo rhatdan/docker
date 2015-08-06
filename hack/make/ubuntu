@@ -72,12 +72,6 @@ bundle_ubuntu() {
 		done
 	done
 
-	# Include contributed apparmor policy
-	if [ -d contrib/apparmor ]; then
-		mkdir -p "$DIR/etc/apparmor.d/"
-		cp contrib/apparmor/* "$DIR/etc/apparmor.d/"
-	fi
-
 	# Copy the binary
 	# This will fail if the binary bundle hasn't been built
 	mkdir -p "$DIR/usr/bin"
