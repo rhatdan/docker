@@ -15,22 +15,24 @@ import (
 )
 
 var VersionTemplate = `Client:
- Version:      {{.Client.Version}}
- API version:  {{.Client.ApiVersion}}
- Go version:   {{.Client.GoVersion}}
- Git commit:   {{.Client.GitCommit}}
- Built:        {{.Client.BuildTime}}
- OS/Arch:      {{.Client.Os}}/{{.Client.Arch}}{{if .Client.Experimental}}
- Experimental: {{.Client.Experimental}}{{end}}{{if .ServerOK}}
+ Version:         {{.Client.Version}}
+ API version:     {{.Client.ApiVersion}}
+ Package Version: {{.Client.PkgVersion}}
+ Go version:      {{.Client.GoVersion}}
+ Git commit:      {{.Client.GitCommit}}
+ Built:           {{.Client.BuildTime}}
+ OS/Arch:         {{.Client.Os}}/{{.Client.Arch}}{{if .Client.Experimental}}
+ Experimental:    {{.Client.Experimental}}{{end}}{{if .ServerOK}}
 
 Server:
- Version:      {{.Server.Version}}
- API version:  {{.Server.ApiVersion}}
- Go version:   {{.Server.GoVersion}}
- Git commit:   {{.Server.GitCommit}}
- Built:        {{.Server.BuildTime}}
- OS/Arch:      {{.Server.Os}}/{{.Server.Arch}}{{if .Server.Experimental}}
- Experimental: {{.Server.Experimental}}{{end}}{{end}}`
+ Version:         {{.Server.Version}}
+ API version:     {{.Server.ApiVersion}}
+ Package Version: {{.Server.PkgVersion}}
+ Go version:      {{.Server.GoVersion}}
+ Git commit:      {{.Server.GitCommit}}
+ Built:           {{.Server.BuildTime}}
+ OS/Arch:         {{.Server.Os}}/{{.Server.Arch}}{{if .Server.Experimental}}
+ Experimental:    {{.Server.Experimental}}{{end}}{{end}}`
 
 type VersionData struct {
 	Client   types.Version
