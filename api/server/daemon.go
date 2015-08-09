@@ -16,11 +16,13 @@ import (
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/parsers/filters"
 	"github.com/docker/docker/pkg/parsers/kernel"
+	"github.com/docker/docker/pkg/rpm"
 	"github.com/docker/docker/pkg/version"
 	"github.com/docker/docker/utils"
 )
 
 func (s *Server) getVersion(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	pkgVersion, _ := rpm.Version("/usr/bin/docker")
 	v := &types.Version{
 		Version:    dockerversion.VERSION,
 		APIVersion: api.Version,
@@ -29,6 +31,7 @@ func (s *Server) getVersion(version version.Version, w http.ResponseWriter, r *h
 		Os:         runtime.GOOS,
 		Arch:       runtime.GOARCH,
 		BuildTime:  dockerversion.BUILDTIME,
+		PkgVersion: pkgVersion,
 	}
 
 	if version.GreaterThanOrEqualTo("1.19") {
