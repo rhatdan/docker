@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/autogen/dockerversion"
 	Cli "github.com/docker/docker/cli"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/pkg/rpm"
 	"github.com/docker/docker/utils"
 )
 
@@ -58,6 +59,7 @@ func (cli *DockerCli) CmdVersion(args ...string) (err error) {
 			Status: "Template parsing error: " + err.Error()}
 	}
 
+	pkgVersion, _ := rpm.Version("/usr/bin/docker")
 	vd := VersionData{
 		Client: types.Version{
 			Version:      dockerversion.VERSION,
@@ -68,6 +70,7 @@ func (cli *DockerCli) CmdVersion(args ...string) (err error) {
 			Os:           runtime.GOOS,
 			Arch:         runtime.GOARCH,
 			Experimental: utils.ExperimentalBuild(),
+			PkgVersion:   pkgVersion,
 		},
 	}
 
