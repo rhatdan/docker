@@ -1953,6 +1953,8 @@ func NewDeviceSet(root string, doInit bool, options []string) (*DeviceSet, error
 		}
 		key = strings.ToLower(key)
 		switch key {
+		case "dm.no_warn_on_loop_devices":
+			WarnOnLoopback = false
 		case "dm.basesize":
 			size, err := units.RAMInBytes(val)
 			if err != nil {
