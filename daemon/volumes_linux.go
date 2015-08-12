@@ -45,6 +45,31 @@ func (container *Container) setupMounts() ([]execdriver.Mount, error) {
 		}
 	}
 
+	if container.Config.Init == "systemd" {
+		if container.MountPoints["/run"] == nil {
+			mounts = append(mounts, execdriver.Mount{Source: "tmpfs", Destination: "/run", Writable: true, Private: true})
+		}
+
+		if container.MountPoints["/sys"] == nil &&
+			container.MountPoints["/sys/fs"] == nil &&
+			container.MountPoints["/sys/fs/cgroup"] == nil {
+			mounts = append(mounts, execdriver.Mount{Source: "/sys/fs/cgroup", Destination: "/sys/fs/cgroup", Writable: false, Private: true})
+		}
+
+		if container.MountPoints["/var"] == nil &&
+			container.MountPoints["/var/log"] == nil &&
+			container.MountPoints["/var/log/journal"] == nil {
+			if journalPath, err := container.setupJournal(); err != nil {
+				return nil, err
+			} else {
+				if journalPath != "" {
+					label.Relabel(journalPath, container.MountLabel, "Z")
+					mounts = append(mounts, execdriver.Mount{Source: journalPath, Destination: journalPath, Writable: true, Private: true})
+				}
+			}
+		}
+	}
+
 	mounts = sortMounts(mounts)
 	return append(mounts, container.networkMounts()...), nil
 }
@@ -145,4 +170,14 @@ func (container *Container) setupSecretFiles() error {
 	}
 
 	return nil
+}
+
+func (container *Container) setupJournal() (string, error) {
+	path := journalPath(container.ID)
+	if path != "" {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return "", err
+		}
+	}
+	return path, nil
 }

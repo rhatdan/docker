@@ -129,6 +129,7 @@ type Config struct {
 	Env             []string
 	Cmd             *Command
 	Image           string // Name of the image as it was passed by the operator (eg. could be symbolic)
+	Init            string // Indicate init system semantics to be used when running a container
 	Volumes         map[string]struct{}
 	VolumeDriver    string
 	WorkingDir      string
