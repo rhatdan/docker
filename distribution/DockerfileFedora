@@ -24,32 +24,31 @@
 #
 
 # Cut for distribution specific
-FROM ubuntu:14.04
-MAINTAINER Tianon Gravi <admwiggin@gmail.com> (@tianon)
-
-RUN	apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys E871F18B51E0147C77796AC81196BA81F6B0FC61
-RUN	echo deb http://ppa.launchpad.net/zfs-native/stable/ubuntu trusty main > /etc/apt/sources.list.d/zfs.list
-
-# Packaged dependencies
-RUN apt-get update && apt-get install -y \
-	apparmor \
-	aufs-tools \
-	btrfs-tools \
-	build-essential \
-	createrepo \
-	dpkg-sig \
-	gcc-mingw-w64 \
-	libapparmor-dev \
-	libcap-dev \
-	libsqlite3-dev \
-	python-websocket \
-	reprepro \
-	ruby1.9.1 \
-	ruby1.9.1-dev \
-	s3cmd=1.1.0* \
-	ubuntu-zfs \
-	libzfs-dev \
-	--no-install-recommends \
+FROM fedora
+  RUN dnf -y update && dnf install -y \
+  binutils \
+  btrfs-progs-devel \
+  btrfs-progs \
+  bzip2 \
+  gcc \
+  gcc-c++ \
+  glibc-static \
+  glibc-devel \
+  glibc-headers \
+  golang-googlecode-sqlite-devel \
+  kernel-devel \
+  libcap-devel \
+  libvirt-client \
+  libguestfs-tools \
+  make \
+  net-tools \
+  php-devel \
+  python-websocket-client \
+  python-requests \
+  rpm-devel \
+  ruby \
+  ruby-devel \
+  tar \
 # End dependencies cut
 	automake \
 	bash-completion \
@@ -73,6 +72,13 @@ RUN cd /usr/local/lvm2 \
 # see https://git.fedorahosted.org/cgit/lvm2.git/tree/INSTALL
 
 # Sqlite3 install manually
+  RUN mkdir -p /usr/src/sqlite3 \
+    && curl -sSL https://www.sqlite.org/2015/sqlite-autoconf-3081002.tar.gz  | tar -v -C /usr/src/sqlite3 -xz
+  RUN cd /usr/src/sqlite3/sqlite-autoconf-3081002 \
+    && ./configure --enable-static \
+    && make \
+    && make install \
+    && ldconfig
 
 # Install lxc
 ENV LXC_VERSION 1.1.2
@@ -132,7 +138,7 @@ RUN git clone https://github.com/golang/lint.git /go/src/github.com/golang/lint 
 RUN gem install --no-rdoc --no-ri fpm --version 1.3.2
 
 # Install registry
-ENV REGISTRY_COMMIT ec87e9b6971d831f0eff752ddb54fb64693e51cd
+ENV REGISTRY_COMMIT 2317f721a3d8428215a2b65da4ae85212ed473b4
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
 	&& git clone https://github.com/docker/distribution.git "$GOPATH/src/github.com/docker/distribution" \
@@ -152,7 +158,7 @@ RUN set -x \
 	&& rm -rf "$GOPATH"
 
 # Get the "docker-py" source so we can run their integration tests
-ENV DOCKER_PY_COMMIT 139850f3f3b17357bab5ba3edfb745fb14043764
+ENV DOCKER_PY_COMMIT 8a87001d09852058f08a807ab6e8491d57ca1e88
 RUN git clone https://github.com/docker/docker-py.git /docker-py \
 	&& cd /docker-py \
 	&& git checkout -q $DOCKER_PY_COMMIT
@@ -174,7 +180,7 @@ RUN useradd --create-home --gid docker unprivilegeduser
 VOLUME /var/lib/docker
 WORKDIR /go/src/github.com/docker/docker
 #  Cut for buildtags distribution specific
-ENV DOCKER_BUILDTAGS apparmor selinux
+ENV DOCKER_BUILDTAGS selinux
 # End buildtags cut
 
 # Let us use a .bashrc file
