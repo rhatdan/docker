@@ -155,6 +155,7 @@ type Version struct {
 	KernelVersion string `json:",omitempty"`
 	Experimental  bool   `json:",omitempty"`
 	BuildTime     string `json:",omitempty"`
+	PkgVersion    string `json:",omitempty"`
 }
 
 // GET "/info"
