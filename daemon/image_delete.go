@@ -6,7 +6,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/graph"
+	"github.com/docker/docker/graph/tags"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/parsers"
 	"github.com/docker/docker/pkg/stringid"
@@ -27,20 +27,17 @@ func (daemon *Daemon) ImageDelete(name string, force, noprune bool) ([]types.Ima
 }
 
 func (daemon *Daemon) imgDeleteHelper(name string, list *[]types.ImageDelete, first, force, noprune bool) error {
-	var (
-		repoName, tag string
-		tags          = []string{}
-	)
+	if name == "" {
+		return fmt.Errorf("Image name can not be blank")
+	}
+
+	var repoName, tag string
 	repoAndTags := make(map[string][]string)
 
 	// FIXME: please respect DRY and centralize repo+tag parsing in a single central place! -- shykes
 	repoName, tag = parsers.ParseRepositoryTag(name)
 	if tag == "" {
-		tag = graph.DEFAULTTAG
-	}
-
-	if name == "" {
-		return fmt.Errorf("Image name can not be blank")
+		tag = tags.DefaultTag
 	}
 
 	img, err := daemon.Repositories().LookupImage(name)
@@ -57,7 +54,6 @@ func (daemon *Daemon) imgDeleteHelper(name string, list *[]types.ImageDelete, fi
 	}
 
 	byParents := daemon.Graph().ByParent()
-
 	repos := daemon.Repositories().ByID()[img.ID]
 
 	//If delete by id, see if the id belong only to one repository
@@ -90,7 +86,7 @@ func (daemon *Daemon) imgDeleteHelper(name string, list *[]types.ImageDelete, fi
 		return nil
 	}
 
-	if len(repos) <= 1 || (len(repoAndTags) <= 1 && deleteByID) {
+	if len(repos) <= 1 || deleteByID {
 		if err := daemon.canDeleteImage(img.ID, force); err != nil {
 			return err
 		}
@@ -111,7 +107,7 @@ func (daemon *Daemon) imgDeleteHelper(name string, list *[]types.ImageDelete, fi
 			}
 		}
 	}
-	tags = daemon.Repositories().ByID()[img.ID]
+	tags := daemon.Repositories().ByID()[img.ID]
 	if (len(tags) <= 1 && repoName == "") || len(tags) == 0 {
 		if len(byParents[img.ID]) == 0 {
 			if err := daemon.Repositories().DeleteAll(img.ID); err != nil {

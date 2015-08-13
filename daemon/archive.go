@@ -17,7 +17,7 @@ import (
 // path does not refer to a directory.
 var ErrExtractPointNotDirectory = errors.New("extraction point is not a directory")
 
-// ContainerCopy performs a depracated operation of archiving the resource at
+// ContainerCopy performs a deprecated operation of archiving the resource at
 // the specified path in the conatiner identified by the given name.
 func (daemon *Daemon) ContainerCopy(name string, res string) (io.ReadCloser, error) {
 	container, err := daemon.Get(name)
@@ -25,7 +25,7 @@ func (daemon *Daemon) ContainerCopy(name string, res string) (io.ReadCloser, err
 		return nil, err
 	}
 
-	if res[0] == '/' {
+	if res[0] == '/' || res[0] == '\\' {
 		res = res[1:]
 	}
 
@@ -95,7 +95,7 @@ func (container *Container) resolvePath(path string) (resolvedPath, absPath stri
 }
 
 // statPath is the unexported version of StatPath. Locks and mounts should
-// be aquired before calling this method and the given path should be fully
+// be acquired before calling this method and the given path should be fully
 // resolved to a path on the host corresponding to the given absolute path
 // inside the container.
 func (container *Container) statPath(resolvedPath, absPath string) (stat *types.ContainerPathStat, err error) {

@@ -1804,8 +1804,8 @@ func (s *DockerSuite) TestBuildForceRm(c *check.C) {
 // * Run a 1-year-long sleep from a docker build.
 // * When docker events sees container start, close the "docker build" command
 // * Wait for docker events to emit a dying event.
-func (s *DockerSuite) TestBuildCancelationKillsSleep(c *check.C) {
-	name := "testbuildcancelation"
+func (s *DockerSuite) TestBuildCancellationKillsSleep(c *check.C) {
+	name := "testbuildcancellation"
 
 	// (Note: one year, will never finish)
 	ctx, err := fakeContext("FROM busybox\nRUN sleep 31536000", nil)
@@ -4118,6 +4118,27 @@ func (s *DockerSuite) TestBuildFromGITWithContext(c *check.C) {
 	}
 }
 
+func (s *DockerSuite) TestBuildFromGITwithF(c *check.C) {
+	name := "testbuildfromgitwithf"
+	git, err := newFakeGit("repo", map[string]string{
+		"myApp/myDockerfile": `FROM busybox
+					RUN echo hi from Dockerfile`,
+	}, true)
+	if err != nil {
+		c.Fatal(err)
+	}
+	defer git.Close()
+
+	out, _, err := dockerCmdWithError("build", "-t", name, "--no-cache", "-f", "myApp/myDockerfile", git.RepoURL)
+	if err != nil {
+		c.Fatalf("Error on build. Out: %s\nErr: %v", out, err)
+	}
+
+	if !strings.Contains(out, "hi from Dockerfile") {
+		c.Fatalf("Missing expected output, got:\n%s", out)
+	}
+}
+
 func (s *DockerSuite) TestBuildFromRemoteTarball(c *check.C) {
 	name := "testbuildfromremotetarball"
 
@@ -4343,7 +4364,7 @@ func (s *DockerSuite) TestBuildEntrypointInheritance(c *check.C) {
 		c.Fatal(err)
 	}
 
-	if _, status, _ := dockerCmdWithError(c, "run", "parent"); status != 130 {
+	if _, status, _ := dockerCmdWithError("run", "parent"); status != 130 {
 		c.Fatalf("expected exit code 130 but received %d", status)
 	}
 
@@ -4354,7 +4375,7 @@ func (s *DockerSuite) TestBuildEntrypointInheritance(c *check.C) {
 		c.Fatal(err)
 	}
 
-	if _, status, _ := dockerCmdWithError(c, "run", "child"); status != 5 {
+	if _, status, _ := dockerCmdWithError("run", "child"); status != 5 {
 		c.Fatalf("expected exit code 5 but received %d", status)
 	}
 
@@ -4450,7 +4471,7 @@ func (s *DockerSuite) TestBuildVerifySingleQuoteFails(c *check.C) {
 		c.Fatal(err)
 	}
 
-	if _, _, err := dockerCmdWithError(c, "run", "--rm", name); err == nil {
+	if _, _, err := dockerCmdWithError("run", "--rm", name); err == nil {
 		c.Fatal("The image was not supposed to be able to run")
 	}
 
@@ -4996,7 +5017,7 @@ func (s *DockerSuite) TestBuildDockerfileOutsideContext(c *check.C) {
 		filepath.Join(ctx, "dockerfile1"),
 		filepath.Join(ctx, "dockerfile2"),
 	} {
-		out, _, err := dockerCmdWithError(c, "build", "-t", name, "--no-cache", "-f", dockerfilePath, ".")
+		out, _, err := dockerCmdWithError("build", "-t", name, "--no-cache", "-f", dockerfilePath, ".")
 		if err == nil {
 			c.Fatalf("Expected error with %s. Out: %s", dockerfilePath, out)
 		}
@@ -5010,7 +5031,7 @@ func (s *DockerSuite) TestBuildDockerfileOutsideContext(c *check.C) {
 
 	// Path to Dockerfile should be resolved relative to working directory, not relative to context.
 	// There is a Dockerfile in the context, but since there is no Dockerfile in the current directory, the following should fail
-	out, _, err := dockerCmdWithError(c, "build", "-t", name, "--no-cache", "-f", "Dockerfile", ctx)
+	out, _, err := dockerCmdWithError("build", "-t", name, "--no-cache", "-f", "Dockerfile", ctx)
 	if err == nil {
 		c.Fatalf("Expected error. Out: %s", out)
 	}
@@ -5263,7 +5284,7 @@ func (s *DockerSuite) TestBuildContainerWithCgroupParent(c *check.C) {
 	selfCgroupPaths := parseCgroupPaths(string(data))
 	_, found := selfCgroupPaths["memory"]
 	if !found {
-		c.Fatalf("unable to find self cpu cgroup path. CgroupsPath: %v", selfCgroupPaths)
+		c.Fatalf("unable to find self memory cgroup path. CgroupsPath: %v", selfCgroupPaths)
 	}
 	cmd := exec.Command(dockerBinary, "build", "--cgroup-parent", cgroupParent, "-")
 	cmd.Stdin = strings.NewReader(`
@@ -5274,6 +5295,11 @@ RUN cat /proc/self/cgroup
 	out, _, err := runCommandWithOutput(cmd)
 	if err != nil {
 		c.Fatalf("unexpected failure when running container with --cgroup-parent option - %s\n%v", string(out), err)
+	}
+	m, err := regexp.MatchString(fmt.Sprintf("memory:.*/%s/.*", cgroupParent), out)
+	c.Assert(err, check.IsNil)
+	if !m {
+		c.Fatalf("There is no expected memory cgroup with parent /%s/: %s", cgroupParent, out)
 	}
 }
 

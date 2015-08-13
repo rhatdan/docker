@@ -80,9 +80,9 @@ func (p *v1Puller) pullRepository(askedTag string) error {
 	if askedTag == "" {
 		tagsList, err = p.session.GetRemoteTags(repoData.Endpoints, p.repoInfo.RemoteName)
 	} else {
-		var tagId string
-		tagId, err = p.session.GetRemoteTag(repoData.Endpoints, p.repoInfo.RemoteName, askedTag)
-		tagsList[askedTag] = tagId
+		var tagID string
+		tagID, err = p.session.GetRemoteTag(repoData.Endpoints, p.repoInfo.RemoteName, askedTag)
+		tagsList[askedTag] = tagID
 	}
 	if err != nil {
 		if err == registry.ErrRepoNotFound && askedTag != "" {
@@ -222,7 +222,7 @@ func (p *v1Puller) pullRepository(askedTag string) error {
 	if len(askedTag) > 0 {
 		requestedTag = utils.ImageReference(p.repoInfo.LocalName, askedTag)
 	}
-	WriteStatus(requestedTag, out, p.sf, layersDownloaded)
+	writeStatus(requestedTag, out, p.sf, layersDownloaded)
 	return nil
 }
 
@@ -256,7 +256,7 @@ func (p *v1Puller) pullImage(imgID, endpoint string, token []string) (bool, erro
 			out.Write(p.sf.FormatProgress(stringid.TruncateID(id), "Pulling metadata", nil))
 			var (
 				imgJSON []byte
-				imgSize int
+				imgSize int64
 				err     error
 				img     *image.Image
 			)
@@ -290,7 +290,7 @@ func (p *v1Puller) pullImage(imgID, endpoint string, token []string) (bool, erro
 					status = fmt.Sprintf("Pulling fs layer [retries: %d]", j)
 				}
 				out.Write(p.sf.FormatProgress(stringid.TruncateID(id), status, nil))
-				layer, err := p.session.GetRemoteImageLayer(img.ID, endpoint, int64(imgSize))
+				layer, err := p.session.GetRemoteImageLayer(img.ID, endpoint, imgSize)
 				if uerr, ok := err.(*url.Error); ok {
 					err = uerr.Err
 				}

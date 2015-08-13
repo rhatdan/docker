@@ -10,18 +10,22 @@ import (
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 )
 
-// New returns a new SysInfo, using the filesystem to detect which features the kernel supports.
+// New returns a new SysInfo, using the filesystem to detect which features
+// the kernel supports. If `quiet` is `false` warnings are printed in logs
+// whenever an error occurs or misconfigurations are present.
 func New(quiet bool) *SysInfo {
 	sysInfo := &SysInfo{}
 	sysInfo.cgroupMemInfo = checkCgroupMem(quiet)
-	sysInfo.cgroupCpuInfo = checkCgroupCpu(quiet)
+	sysInfo.cgroupCPUInfo = checkCgroupCPU(quiet)
+	sysInfo.cgroupBlkioInfo = checkCgroupBlkioInfo(quiet)
+	sysInfo.cgroupCpusetInfo = checkCgroupCpusetInfo(quiet)
 
 	_, err := cgroups.FindCgroupMountpoint("devices")
 	sysInfo.CgroupDevicesEnabled = err == nil
 
 	sysInfo.IPv4ForwardingDisabled = !readProcBool("/proc/sys/net/ipv4/ip_forward")
 	sysInfo.BridgeNfCallIptablesDisabled = !readProcBool("/proc/sys/net/bridge/bridge-nf-call-iptables")
-	sysInfo.BridgeNfCallIp6tablesDisabled = !readProcBool("/proc/sys/net/bridge/bridge-nf-call-ip6tables")
+	sysInfo.BridgeNfCallIP6tablesDisabled = !readProcBool("/proc/sys/net/bridge/bridge-nf-call-ip6tables")
 
 	// Check if AppArmor is supported.
 	if _, err := os.Stat("/sys/kernel/security/apparmor"); !os.IsNotExist(err) {
@@ -58,8 +62,8 @@ func checkCgroupMem(quiet bool) *cgroupMemInfo {
 	return info
 }
 
-func checkCgroupCpu(quiet bool) *cgroupCpuInfo {
-	info := &cgroupCpuInfo{}
+func checkCgroupCPU(quiet bool) *cgroupCPUInfo {
+	info := &cgroupCPUInfo{}
 	mountPoint, err := cgroups.FindCgroupMountpoint("cpu")
 	if err != nil {
 		if !quiet {
@@ -68,15 +72,51 @@ func checkCgroupCpu(quiet bool) *cgroupCpuInfo {
 		return info
 	}
 
-	info.CpuCfsPeriod = cgroupEnabled(mountPoint, "cpu.cfs_period_us")
-	if !quiet && !info.CpuCfsPeriod {
+	info.CPUShares = cgroupEnabled(mountPoint, "cpu.shares")
+	if !quiet && !info.CPUShares {
+		logrus.Warn("Your kernel does not support cgroup cpu shares")
+	}
+
+	info.CPUCfsPeriod = cgroupEnabled(mountPoint, "cpu.cfs_period_us")
+	if !quiet && !info.CPUCfsPeriod {
 		logrus.Warn("Your kernel does not support cgroup cfs period")
 	}
 
-	info.CpuCfsQuota = cgroupEnabled(mountPoint, "cpu.cfs_quota_us")
-	if !quiet && !info.CpuCfsQuota {
+	info.CPUCfsQuota = cgroupEnabled(mountPoint, "cpu.cfs_quota_us")
+	if !quiet && !info.CPUCfsQuota {
 		logrus.Warn("Your kernel does not support cgroup cfs quotas")
 	}
+	return info
+}
+
+func checkCgroupBlkioInfo(quiet bool) *cgroupBlkioInfo {
+	info := &cgroupBlkioInfo{}
+	mountPoint, err := cgroups.FindCgroupMountpoint("blkio")
+	if err != nil {
+		if !quiet {
+			logrus.Warn(err)
+		}
+		return info
+	}
+
+	info.BlkioWeight = cgroupEnabled(mountPoint, "blkio.weight")
+	if !quiet && !info.BlkioWeight {
+		logrus.Warn("Your kernel does not support cgroup blkio weight")
+	}
+	return info
+}
+
+func checkCgroupCpusetInfo(quiet bool) *cgroupCpusetInfo {
+	info := &cgroupCpusetInfo{}
+	_, err := cgroups.FindCgroupMountpoint("cpuset")
+	if err != nil {
+		if !quiet {
+			logrus.Warn(err)
+		}
+		return info
+	}
+
+	info.Cpuset = true
 	return info
 }
 

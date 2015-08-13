@@ -39,19 +39,23 @@ To verify that everything has worked as expected:
 This command downloads and runs the `hello-world` image in a container. When the
 container runs, it prints an informational message. Then, it exits.
 
+If you need to add an HTTP Proxy, set a different directory or partition for the
+Docker runtime files, or make other customizations, read our Systemd article to
+learn how to [customize your Systemd Docker daemon options](/articles/systemd/).
+
 > **Note**:
 > If you want to enable memory and swap accounting see
-> [this](/installation/ubuntulinux/#memory-and-swap-accounting).
+> [this](/installation/ubuntulinux/#adjust-memory-and-swap-accounting).
 
 ### Uninstallation
 
 To uninstall the Docker package:
 
-    $ sudo apt-get purge docker-io
+    $ sudo apt-get purge docker.io
 
 To uninstall the Docker package and dependencies that are no longer needed:
 
-    $ sudo apt-get autoremove --purge docker-io
+    $ sudo apt-get autoremove --purge docker.io
 
 The above commands will not remove images, containers, volumes, or user created
 configuration files on your host. If you wish to delete all images, containers,

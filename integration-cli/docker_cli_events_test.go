@@ -20,7 +20,7 @@ func (s *DockerSuite) TestEventsTimestampFormats(c *check.C) {
 	image := "busybox"
 
 	// Start stopwatch, generate an event
-	time.Sleep(time.Second) // so that we don't grab events from previous test occured in the same second
+	time.Sleep(time.Second) // so that we don't grab events from previous test occurred in the same second
 	start := daemonTime(c)
 	time.Sleep(time.Second) // remote API precision is only a second, wait a while before creating an event
 	dockerCmd(c, "tag", image, "timestamptest:1")
@@ -75,7 +75,7 @@ func (s *DockerSuite) TestEventsContainerFailStartDie(c *check.C) {
 
 	out, _ := dockerCmd(c, "images", "-q")
 	image := strings.Split(out, "\n")[0]
-	if _, _, err := dockerCmdWithError(c, "run", "--name", "testeventdie", image, "blerg"); err == nil {
+	if _, _, err := dockerCmdWithError("run", "--name", "testeventdie", image, "blerg"); err == nil {
 		c.Fatalf("Container run with command blerg should have failed, but it did not")
 	}
 

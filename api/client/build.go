@@ -31,7 +31,6 @@ import (
 	"github.com/docker/docker/pkg/parsers"
 	"github.com/docker/docker/pkg/progressreader"
 	"github.com/docker/docker/pkg/streamformatter"
-	"github.com/docker/docker/pkg/symlink"
 	"github.com/docker/docker/pkg/ulimit"
 	"github.com/docker/docker/pkg/units"
 	"github.com/docker/docker/pkg/urlutil"
@@ -60,8 +59,8 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	flMemoryString := cmd.String([]string{"m", "-memory"}, "", "Memory limit")
 	flMemorySwap := cmd.String([]string{"-memory-swap"}, "", "Total memory (memory + swap), '-1' to disable swap")
 	flCPUShares := cmd.Int64([]string{"c", "-cpu-shares"}, 0, "CPU shares (relative weight)")
-	flCpuPeriod := cmd.Int64([]string{"-cpu-period"}, 0, "Limit the CPU CFS (Completely Fair Scheduler) period")
-	flCpuQuota := cmd.Int64([]string{"-cpu-quota"}, 0, "Limit the CPU CFS (Completely Fair Scheduler) quota")
+	flCPUPeriod := cmd.Int64([]string{"-cpu-period"}, 0, "Limit the CPU CFS (Completely Fair Scheduler) period")
+	flCPUQuota := cmd.Int64([]string{"-cpu-quota"}, 0, "Limit the CPU CFS (Completely Fair Scheduler) quota")
 	flCPUSetCpus := cmd.String([]string{"-cpuset-cpus"}, "", "CPUs in which to allow execution (0-3, 0,1)")
 	flCPUSetMems := cmd.String([]string{"-cpuset-mems"}, "", "MEMs in which to allow execution (0-3, 0,1)")
 	flCgroupParent := cmd.String([]string{"-cgroup-parent"}, "", "Optional parent cgroup for the container")
@@ -243,8 +242,8 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	v.Set("cpusetcpus", *flCPUSetCpus)
 	v.Set("cpusetmems", *flCPUSetMems)
 	v.Set("cpushares", strconv.FormatInt(*flCPUShares, 10))
-	v.Set("cpuquota", strconv.FormatInt(*flCpuQuota, 10))
-	v.Set("cpuperiod", strconv.FormatInt(*flCpuPeriod, 10))
+	v.Set("cpuquota", strconv.FormatInt(*flCPUQuota, 10))
+	v.Set("cpuperiod", strconv.FormatInt(*flCPUPeriod, 10))
 	v.Set("memory", strconv.FormatInt(memory, 10))
 	v.Set("memswap", strconv.FormatInt(memorySwap, 10))
 	v.Set("cgroupparent", *flCgroupParent)
@@ -252,11 +251,11 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	v.Set("dockerfile", relDockerfile)
 
 	ulimitsVar := flUlimits.GetList()
-	ulimitsJson, err := json.Marshal(ulimitsVar)
+	ulimitsJSON, err := json.Marshal(ulimitsVar)
 	if err != nil {
 		return err
 	}
-	v.Set("ulimits", string(ulimitsJson))
+	v.Set("ulimits", string(ulimitsJSON))
 
 	headers := http.Header(make(map[string][]string))
 	buf, err := json.Marshal(cli.configFile.AuthConfigs)
@@ -354,21 +353,25 @@ func getDockerfileRelPath(givenContextDir, givenDockerfile string) (absContextDi
 		absDockerfile = filepath.Join(absContextDir, absDockerfile)
 	}
 
-	// Verify that 'filename' is within the build context
-	absDockerfile, err = symlink.FollowSymlinkInScope(absDockerfile, absContextDir)
+	// Evaluate symlinks in the path to the Dockerfile too.
+	absDockerfile, err = filepath.EvalSymlinks(absDockerfile)
 	if err != nil {
-		return "", "", fmt.Errorf("The Dockerfile (%s) must be within the build context (%s)", givenDockerfile, givenContextDir)
+		return "", "", fmt.Errorf("unable to evaluate symlinks in Dockerfile path: %v", err)
 	}
 
 	if _, err := os.Lstat(absDockerfile); err != nil {
 		if os.IsNotExist(err) {
-			return "", "", fmt.Errorf("Cannot locate Dockerfile: absDockerfile: %q", absDockerfile)
+			return "", "", fmt.Errorf("Cannot locate Dockerfile: %q", absDockerfile)
 		}
 		return "", "", fmt.Errorf("unable to stat Dockerfile: %v", err)
 	}
 
 	if relDockerfile, err = filepath.Rel(absContextDir, absDockerfile); err != nil {
 		return "", "", fmt.Errorf("unable to get relative Dockerfile path: %v", err)
+	}
+
+	if strings.HasPrefix(relDockerfile, ".."+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("The Dockerfile (%s) must be within the build context (%s)", givenDockerfile, givenContextDir)
 	}
 
 	return absContextDir, relDockerfile, nil
@@ -422,7 +425,7 @@ func getContextFromReader(r io.Reader, dockerfileName string) (absContextDir, re
 	}
 
 	if err := archive.Untar(buf, absContextDir, nil); err != nil {
-		return "", "", fmt.Errorf("unable to extract stdin to temporary context direcotry: %v", err)
+		return "", "", fmt.Errorf("unable to extract stdin to temporary context directory: %v", err)
 	}
 
 	return getDockerfileRelPath(absContextDir, dockerfileName)
@@ -459,7 +462,7 @@ func getContextFromURL(out io.Writer, remoteURL, dockerfileName string) (absCont
 		In:        response.Body,
 		Out:       out,
 		Formatter: streamformatter.NewStreamFormatter(),
-		Size:      int(response.ContentLength),
+		Size:      response.ContentLength,
 		NewLines:  true,
 		ID:        "",
 		Action:    fmt.Sprintf("Downloading build context from remote url: %s", remoteURL),
@@ -544,7 +547,7 @@ func rewriteDockerfileFrom(dockerfileName string, translator func(string, regist
 			// Replace the line with a resolved "FROM repo@digest"
 			repo, tag := parsers.ParseRepositoryTag(matches[1])
 			if tag == "" {
-				tag = tags.DEFAULTTAG
+				tag = tags.DefaultTag
 			}
 
 			repoInfo, err := registry.ParseRepositoryInfo(repo)

@@ -331,7 +331,7 @@ func (s *DockerSuite) TestGetContainerStatsRmRunning(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// Now remove without `-f` and make sure we are still pulling stats
-	_, _, err = dockerCmdWithError(c, "rm", id)
+	_, _, err = dockerCmdWithError("rm", id)
 	c.Assert(err, check.Not(check.IsNil), check.Commentf("rm should have failed but didn't"))
 	_, err = buf.ReadTimeout(b, 2*time.Second)
 	c.Assert(err, check.IsNil)
@@ -1057,11 +1057,11 @@ func (s *DockerSuite) TestContainerApiCreateWithCpuSharesCpuset(c *check.C) {
 
 	c.Assert(json.Unmarshal(body, &containerJSON), check.IsNil)
 
-	out, err := inspectField(containerJSON.Id, "HostConfig.CpuShares")
+	out, err := inspectField(containerJSON.ID, "HostConfig.CpuShares")
 	c.Assert(err, check.IsNil)
 	c.Assert(out, check.Equals, "512")
 
-	outCpuset, errCpuset := inspectField(containerJSON.Id, "HostConfig.CpusetCpus")
+	outCpuset, errCpuset := inspectField(containerJSON.ID, "HostConfig.CpusetCpus")
 	c.Assert(errCpuset, check.IsNil, check.Commentf("Output: %s", outCpuset))
 	c.Assert(outCpuset, check.Equals, "0,1")
 }

@@ -14,7 +14,7 @@ func (s *DockerSuite) TestRenameStoppedContainer(c *check.C) {
 	dockerCmd(c, "wait", cleanedContainerID)
 
 	name, err := inspectField(cleanedContainerID, "Name")
-	newName := "new_name" + stringid.GenerateRandomID()
+	newName := "new_name" + stringid.GenerateNonCryptoID()
 	dockerCmd(c, "rename", "first_name", newName)
 
 	name, err = inspectField(cleanedContainerID, "Name")
@@ -30,7 +30,7 @@ func (s *DockerSuite) TestRenameStoppedContainer(c *check.C) {
 func (s *DockerSuite) TestRenameRunningContainer(c *check.C) {
 	out, _ := dockerCmd(c, "run", "--name", "first_name", "-d", "busybox", "sh")
 
-	newName := "new_name" + stringid.GenerateRandomID()
+	newName := "new_name" + stringid.GenerateNonCryptoID()
 	cleanedContainerID := strings.TrimSpace(out)
 	dockerCmd(c, "rename", "first_name", newName)
 
@@ -46,7 +46,7 @@ func (s *DockerSuite) TestRenameRunningContainer(c *check.C) {
 func (s *DockerSuite) TestRenameCheckNames(c *check.C) {
 	dockerCmd(c, "run", "--name", "first_name", "-d", "busybox", "sh")
 
-	newName := "new_name" + stringid.GenerateRandomID()
+	newName := "new_name" + stringid.GenerateNonCryptoID()
 	dockerCmd(c, "rename", "first_name", newName)
 
 	name, err := inspectField(newName, "Name")
@@ -66,11 +66,11 @@ func (s *DockerSuite) TestRenameCheckNames(c *check.C) {
 func (s *DockerSuite) TestRenameInvalidName(c *check.C) {
 	dockerCmd(c, "run", "--name", "myname", "-d", "busybox", "top")
 
-	if out, _, err := dockerCmdWithError(c, "rename", "myname", "new:invalid"); err == nil || !strings.Contains(out, "Invalid container name") {
+	if out, _, err := dockerCmdWithError("rename", "myname", "new:invalid"); err == nil || !strings.Contains(out, "Invalid container name") {
 		c.Fatalf("Renaming container to invalid name should have failed: %s\n%v", out, err)
 	}
 
-	if out, _, err := dockerCmdWithError(c, "ps", "-a"); err != nil || !strings.Contains(out, "myname") {
+	if out, _, err := dockerCmdWithError("ps", "-a"); err != nil || !strings.Contains(out, "myname") {
 		c.Fatalf("Output of docker ps should have included 'myname': %s\n%v", out, err)
 	}
 }

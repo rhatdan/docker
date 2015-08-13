@@ -82,14 +82,12 @@ func (p *v2Pusher) pushV2Repository(tag string) error {
 func (p *v2Pusher) pushV2Tag(tag string) error {
 	logrus.Debugf("Pushing repository: %s:%s", p.repo.Name(), tag)
 
-	layerId, exists := p.localRepo[tag]
+	layerID, exists := p.localRepo[tag]
 	if !exists {
 		return fmt.Errorf("tag does not exist: %s", tag)
 	}
 
-	layersSeen := make(map[string]bool)
-
-	layer, err := p.graph.Get(layerId)
+	layer, err := p.graph.Get(layerID)
 	if err != nil {
 		return err
 	}
@@ -236,7 +234,7 @@ func (p *v2Pusher) pushV2Image(bs distribution.BlobService, img *image.Image) (d
 		In:        ioutil.NopCloser(tf),
 		Out:       out,
 		Formatter: p.sf,
-		Size:      int(size),
+		Size:      size,
 		NewLines:  false,
 		ID:        stringid.TruncateID(img.ID),
 		Action:    "Pushing",

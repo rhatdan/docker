@@ -6,6 +6,7 @@ rm -rf vendor/
 source 'hack/.vendor-helpers.sh'
 
 # the following lines are in sorted order, FYI
+clone git github.com/Azure/go-ansiterm 70b2c90b260171e829f1ebd7c17f600c11858dbe
 clone git github.com/Sirupsen/logrus v0.8.2 # logrus is a common dependency among multiple deps
 clone git github.com/docker/libtrust 9cbd2a1374f46905c68a4eb3694a130610adc62a
 clone git github.com/go-check/check 64131543e7896d5bcc6bd5a76287eb75ea96c673
@@ -39,13 +40,13 @@ clone git github.com/docker/distribution 7dc8d4a26b689bd4892f2f2322dbce0b7119d68
 clone git github.com/vbatts/tar-split v0.9.4
 
 clone git github.com/docker/notary 8e8122eb5528f621afcd4e2854c47302f17392f7
-clone git github.com/endophage/gotuf a592b03b28b02bb29bb5878308fb1abed63383b5
+clone git github.com/endophage/gotuf 89ceb27829b9353dfee5ccccf7a3a9bb77008b05
 clone git github.com/tent/canonical-json-go 96e4ba3a7613a1216cbd1badca4efe382adea337
 clone git github.com/agl/ed25519 d2b94fd789ea21d12fac1a4443dd3a3f79cda72c
 
-clone git github.com/opencontainers/runc v0.0.2 # libcontainer
+clone git github.com/opencontainers/runc v0.0.3 # libcontainer
 # libcontainer deps (see src/github.com/docker/libcontainer/update-vendor.sh)
-clone git github.com/coreos/go-systemd v2
+clone git github.com/coreos/go-systemd v3
 clone git github.com/godbus/dbus v2
 clone git github.com/syndtr/gocapability 66ef2aa7a23ba682594e2b6f74cf40c0692b49fb
 clone git github.com/golang/protobuf 655cdfa588ea

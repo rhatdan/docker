@@ -10,7 +10,9 @@ import (
 	"github.com/docker/docker/api/types"
 )
 
-func (s *TagStore) LookupRaw(name string) ([]byte, error) {
+// lookupRaw looks up an image by name in a TagStore and returns the raw JSON
+// describing the image.
+func (s *TagStore) lookupRaw(name string) ([]byte, error) {
 	image, err := s.LookupImage(name)
 	if err != nil || image == nil {
 		return nil, fmt.Errorf("No such image %s", name)
@@ -24,7 +26,8 @@ func (s *TagStore) LookupRaw(name string) ([]byte, error) {
 	return imageInspectRaw, nil
 }
 
-// Lookup return an image encoded in JSON
+// Lookup looks up an image by name in a TagStore and returns it as an
+// ImageInspect structure.
 func (s *TagStore) Lookup(name string) (*types.ImageInspect, error) {
 	image, err := s.LookupImage(name)
 	if err != nil || image == nil {
@@ -32,7 +35,7 @@ func (s *TagStore) Lookup(name string) (*types.ImageInspect, error) {
 	}
 
 	imageInspect := &types.ImageInspect{
-		Id:              image.ID,
+		ID:              image.ID,
 		Parent:          image.Parent,
 		Comment:         image.Comment,
 		Created:         image.Created.Format(time.RFC3339Nano),
@@ -44,7 +47,7 @@ func (s *TagStore) Lookup(name string) (*types.ImageInspect, error) {
 		Architecture:    image.Architecture,
 		Os:              image.OS,
 		Size:            image.Size,
-		VirtualSize:     s.graph.GetParentsSize(image, 0) + image.Size,
+		VirtualSize:     s.graph.GetParentsSize(image) + image.Size,
 	}
 
 	imageInspect.GraphDriver.Name = s.graph.driver.String()

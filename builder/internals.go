@@ -330,7 +330,7 @@ func calcCopyInfo(b *builder, cmdName string, cInfos *[]*copyInfo, origPath stri
 			In:        resp.Body,
 			Out:       b.OutOld,
 			Formatter: b.StreamFormatter,
-			Size:      int(resp.ContentLength),
+			Size:      resp.ContentLength,
 			NewLines:  true,
 			ID:        "",
 			Action:    "Downloading",
@@ -607,9 +607,9 @@ func (b *builder) create() (*daemon.Container, error) {
 	b.Config.Image = b.image
 
 	hostConfig := &runconfig.HostConfig{
-		CpuShares:    b.cpuShares,
-		CpuPeriod:    b.cpuPeriod,
-		CpuQuota:     b.cpuQuota,
+		CPUShares:    b.cpuShares,
+		CPUPeriod:    b.cpuPeriod,
+		CPUQuota:     b.cpuQuota,
 		CpusetCpus:   b.cpuSetCpus,
 		CpusetMems:   b.cpuSetMems,
 		CgroupParent: b.cgroupParent,

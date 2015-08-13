@@ -1,4 +1,4 @@
-// +build daemon
+// +build daemon,!windows
 
 package main
 
@@ -633,7 +633,7 @@ func (s *DockerDaemonSuite) TestDaemonBridgeIP(c *check.C) {
 	// 3. Check if the bip config has taken effect using ifconfig and iptables commands
 	// 4. Launch a Container and make sure the IP-Address is in the expected subnet
 	// 5. Delete the docker0 Bridge
-	// 6. Restart the Docker Daemon (via defered action)
+	// 6. Restart the Docker Daemon (via deferred action)
 	//    This Restart takes care of bringing docker0 interface back to auto-assigned IP
 
 	defaultNetworkBridge := "docker0"
@@ -1330,6 +1330,14 @@ func (s *DockerDaemonSuite) TestHttpsInfo(c *check.C) {
 	}
 }
 
+// TestTlsVerify verifies that --tlsverify=false turns on tls
+func (s *DockerDaemonSuite) TestTlsVerify(c *check.C) {
+	out, err := exec.Command(dockerBinary, "daemon", "--tlsverify=false").CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "Could not load X509 key pair") {
+		c.Fatalf("Daemon should not have started due to missing certs: %v\n%s", err, string(out))
+	}
+}
+
 // TestHttpsInfoRogueCert connects via two-way authenticated HTTPS to the info endpoint
 // by using a rogue client certificate and checks that it fails with the expected error.
 func (s *DockerDaemonSuite) TestHttpsInfoRogueCert(c *check.C) {
@@ -1381,7 +1389,7 @@ func pingContainers(c *check.C, d *Daemon, expectFailure bool) {
 	args = append(dargs, "run", "--rm", "--link", "container1:alias1", "busybox", "sh", "-c")
 	pingCmd := "ping -c 1 %s -W 1"
 	args = append(args, fmt.Sprintf(pingCmd, "alias1"))
-	_, _, err := dockerCmdWithError(c, args...)
+	_, _, err := dockerCmdWithError(args...)
 
 	if expectFailure {
 		c.Assert(err, check.NotNil)
@@ -1518,4 +1526,27 @@ func teardownV6() error {
 		return err
 	}
 	return nil
+}
+
+func (s *DockerDaemonSuite) TestDaemonRestartWithContainerWithRestartPolicyAlways(c *check.C) {
+	c.Assert(s.d.StartWithBusybox(), check.IsNil)
+
+	out, err := s.d.Cmd("run", "-d", "--restart", "always", "busybox", "top")
+	c.Assert(err, check.IsNil)
+	id := strings.TrimSpace(out)
+
+	_, err = s.d.Cmd("stop", id)
+	c.Assert(err, check.IsNil)
+	_, err = s.d.Cmd("wait", id)
+	c.Assert(err, check.IsNil)
+
+	out, err = s.d.Cmd("ps", "-q")
+	c.Assert(err, check.IsNil)
+	c.Assert(out, check.Equals, "")
+
+	c.Assert(s.d.Restart(), check.IsNil)
+
+	out, err = s.d.Cmd("ps", "-q")
+	c.Assert(err, check.IsNil)
+	c.Assert(strings.TrimSpace(out), check.Equals, id[:12])
 }

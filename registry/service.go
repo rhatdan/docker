@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 
 	"github.com/docker/distribution/registry/client/auth"
@@ -27,7 +28,7 @@ func NewService(options *Options) *Service {
 }
 
 // Auth contacts the public registry with the provided credentials,
-// and returns OK if authentication was sucessful.
+// and returns OK if authentication was successful.
 // It can be used to verify the validity of a client's credentials.
 func (s *Service) Auth(authConfig *cliconfig.AuthConfig) (string, error) {
 	addr := authConfig.ServerAddress
@@ -151,14 +152,16 @@ func (s *Service) lookupEndpoints(repoName string, isPush bool) (endpoints []API
 			TrimHostname: true,
 			TLSConfig:    tlsConfig,
 		})
-		// v1 registry
-		endpoints = append(endpoints, APIEndpoint{
-			URL:          DefaultV1Registry,
-			Version:      APIVersion1,
-			Official:     true,
-			TrimHostname: true,
-			TLSConfig:    tlsConfig,
-		})
+		if runtime.GOOS == "linux" { // do not inherit legacy API for OSes supported in the future
+			// v1 registry
+			endpoints = append(endpoints, APIEndpoint{
+				URL:          DefaultV1Registry,
+				Version:      APIVersion1,
+				Official:     true,
+				TrimHostname: true,
+				TLSConfig:    tlsConfig,
+			})
+		}
 		return endpoints, nil
 	}
 

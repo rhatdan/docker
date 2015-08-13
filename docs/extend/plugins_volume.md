@@ -12,7 +12,7 @@ parent = "mn_extend"
 
 Docker volume plugins enable Docker deployments to be integrated with external
 storage systems, such as Amazon EBS, and enable data volumes to persist beyond
-the lifetime of a single Docker host. See the [plugin documentation](plugins.md)
+the lifetime of a single Docker host. See the [plugin documentation](/extend/plugins)
 for more information.
 
 # Command-line changes
@@ -78,7 +78,7 @@ Respond with a string error if an error occurred.
 }
 ```
 
-Create a volume, given a user specified volume name.
+Delete the specified volume from disk. This request is issued when a user invokes `docker rm -v` to remove volumes associated with a container.
 
 **Response**:
 ```

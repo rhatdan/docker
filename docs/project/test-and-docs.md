@@ -82,10 +82,6 @@ is simply `test`. The make file contains several targets for testing:
     <td class="monospaced">test-docker-py</td>
     <td>Run the tests for Docker API client.</td>
   </tr>
-  <tr>
-    <td class="monospaced">docs-test</td>
-    <td>Runs the documentation test build.</td>
-  </tr>
 </table>
 
 Run the entire test suite on your current repository:
@@ -173,74 +169,15 @@ To run the same test inside your Docker development container, you do this:
 
     root@5f8630b873fe:/go/src/github.com/docker/docker# TESTFLAGS='-check.f TestBuild*' hack/make.sh binary test-integration-cli
 
-## If tests under Boot2Docker fail due to disk space errors
+## Testing the Windows binary against a Linux daemon
 
-Running the tests requires about 2GB of memory. If you are running your
-container on bare metal, that is you are not running with Boot2Docker, your
-Docker development container is able to take the memory it requires directly
-from your local host.
+This explains how to test the Windows binary on a Windows machine set up as a
+development environment.  The tests will be run against a docker daemon 
+running on a remote Linux machine. You'll use  **Git Bash** that came with the 
+Git for Windows installation.  **Git Bash**, just as it sounds, allows you to
+run a Bash terminal on Windows. 
 
-If you are running Docker using Boot2Docker, the VM uses 2048MB by default.
-This means you can exceed the memory of your VM running tests in a Boot2Docker
-environment. When the test suite runs out of memory, it returns errors similar
-to the following:
-
-    server.go:1302 Error: Insertion failed because database is full: database or
-    disk is full
-
-    utils_test.go:179: Error copy: exit status 1 (cp: writing
-    '/tmp/docker-testd5c9-[...]': No space left on device
-
-To increase the memory on your VM, you need to reinitialize the Boot2Docker VM
-with new memory settings.
-
-1. Stop all running containers.
-
-2. View the current memory setting.
-
-        $ boot2docker info
-        {
-            "Name": "boot2docker-vm",
-            "UUID": "491736fd-4075-4be7-a6f5-1d4cdcf2cc74",
-            "Iso": "/Users/mary/.boot2docker/boot2docker.iso",
-            "State": "running",
-            "CPUs": 8,
-            "Memory": 2048,
-            "VRAM": 8,
-            "CfgFile": "/Users/mary/VirtualBox VMs/boot2docker-vm/boot2docker-vm.vbox",
-            "BaseFolder": "/Users/mary/VirtualBox VMs/boot2docker-vm",
-            "OSType": "",
-            "Flag": 0,
-            "BootOrder": null,
-            "DockerPort": 0,
-            "SSHPort": 2022,
-            "SerialFile": "/Users/mary/.boot2docker/boot2docker-vm.sock"
-        }
-
-
-3. Delete your existing `boot2docker` profile.
-
-        $ boot2docker delete
-
-4. Reinitialize `boot2docker` and specify a higher memory.
-
-        $ boot2docker init -m 5555
-
-5. Verify the memory was reset.
-
-        $ boot2docker info
-
-6. Restart your container and try your test again.
-
-
-## Testing just the Windows client
-
-This explains how to test the Windows client on a Windows server set up as a
-development environment.  You'll use the **Git Bash** came with the Git for
-Windows installation.  **Git Bash** just as it sounds allows you to run a Bash
-terminal on Windows. 
-
-1.  If you don't have one, start a Git Bash terminal.
+1.  If you don't have one open already, start a Git Bash terminal.
 
 	 ![Git Bash](/project/images/git_bash.png)
 
@@ -248,27 +185,31 @@ terminal on Windows.
 
 		$ cd /c/gopath/src/github.com/docker/docker
     
-3. Set `DOCKER_CLIENTONLY` as follows:
+3. Set `DOCKER_REMOTE_DAEMON` as follows:
 
-		$ export DOCKER_CLIENTONLY=1
-     
-	This ensures you are building only the client binary instead of both the
-	binary and the daemon.
-	
+		$ export DOCKER_REMOTE_DAEMON=1
+
 4. Set `DOCKER_TEST_HOST` to the `tcp://IP_ADDRESS:2376` value; substitute your
-machine's actual IP address, for example:
+Linux machines actual IP address. For example:
 
-		$ export DOCKER_TEST_HOST=tcp://263.124.23.200:2376
+		$ export DOCKER_TEST_HOST=tcp://213.124.23.200:2376
 
-5. Make the binary and the test:
+5. Make the binary and run the tests:
 
 		$ hack/make.sh binary test-integration-cli
   	
-   Many tests are skipped on Windows for various reasons. You see which tests
-   were skipped by re-running the make and passing in the 
-   `TESTFLAGS='-test.v'` value.
-        
+   Some tests are skipped on Windows for various reasons. You can see which
+   tests were skipped by re-running the make and passing in the 
+   `TESTFLAGS='-test.v'` value. For example 
 
+		$ TESTFLAGS='-test.v' hack/make.sh binary test-integration-cli
+		
+	Should you wish to run a single test such as one with the name 
+	'TestExample', you can pass in `TESTFLAGS='-check.f TestExample'`. For
+	example 
+	
+		$TESTFLAGS='-check.f TestExample' hack/make.sh binary test-integration-cli
+        
 You can now choose to make changes to the Docker source or the tests. If you
 make any changes just run these commands again.
 

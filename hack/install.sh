@@ -56,10 +56,13 @@ check_forked() {
 	# Check for lsb_release command existence, it usually exists in forked distros
 	if command_exists lsb_release; then
 		# Check if the `-u` option is supported
+		set +e
 		lsb_release -a -u > /dev/null 2>&1
+		lsb_release_exit_code=$?
+		set -e
 
 		# Check if the command has exited successfully, it means we're in a forked distro
-		if [ "$?" = "0" ]; then
+		if [ "$lsb_release_exit_code" = "0" ]; then
 			# Print info about current distro
 			cat <<-EOF
 			You're using '$lsb_dist' version '$dist_version'.
@@ -213,11 +216,8 @@ do_install() {
 
 
 	esac
+		
 
-	# Check if this is a forked Linux distro
-	check_forked
-
-	# Run setup for each distro accordingly
 	case "$lsb_dist" in
 		amzn)
 			(
@@ -302,7 +302,7 @@ do_install() {
 			;;
 
 		fedora|centos|oraclelinux)
-			$sh_c "cat >/etc/yum.repos.d/docker-${repo}.repo" <<-EOF
+			cat >/etc/yum.repos.d/docker-${repo}.repo <<-EOF
 			[docker-${repo}-repo]
 			name=Docker ${repo} Repository
 			baseurl=https://yum.dockerproject.org/repo/${repo}/${lsb_dist}/${dist_version}

@@ -73,7 +73,7 @@ Docker daemon supports a configuration flag `--default-network` which takes conf
 `NETWORK` is the name of the network created using the `docker network create` command
 When a container is created and if the network mode (`--net`) is not specified, then this default network will be used to connect
 the container. If `--default-network` is not specified, the default network will be the `bridge` driver.
-Example : `docker -d --default-network=overlay:multihost`
+Example : `docker daemon --default-network=overlay:multihost`
 
 ## Using Services
 
@@ -99,7 +99,7 @@ Assuming we want to publish a service from container `a0ebc12d3e48` on network `
 
 This would make the container `a0ebc12d3e48` accessible as `my-service` on network `foo`. Any other container in network `foo` can use DNS to resolve the address of `my-service`
 
-This can also be acheived by using the `--publish-service` flag for `docker run`:
+This can also be achieved by using the `--publish-service` flag for `docker run`:
 
         docker run -itd --publish-service db.foo postgres
 
@@ -116,20 +116,5 @@ To remove the a service:
         $ docker service detach a0ebc12d3e48 my-service.foo
         $ docker service unpublish my-service.foo
 
-
-## Native Multi-host networking
-
-There is a lot to talk about the native multi-host networking and the `overlay` driver that makes it happen. The technical details are documented under https://github.com/docker/libnetwork/blob/master/docs/overlay.md.
-Using the above experimental UI `docker network`, `docker service` and `--publish-service`, the user can exercise the power of multi-host networking.
-
-Since `network` and `service` objects are globally significant, this feature requires distributed states provided by the `libkv` project.
-Using `libkv`, the user can plug any of the supported Key-Value store (such as consul, etcd or zookeeper).
-User can specify the Key-Value store of choice using the `--kv-store` daemon flag, which takes configuration value of format `PROVIDER:URL`, where
-`PROVIDER` is the name of the Key-Value store (such as consul, etcd or zookeeper) and
-`URL` is the url to reach the Key-Value store.
-Example : `docker -d --kv-store=consul:localhost:8500`
-
-
 Send us feedback and comments on [#14083](https://github.com/docker/docker/issues/14083)
 or on the usual Google Groups (docker-user, docker-dev) and IRC channels.
-

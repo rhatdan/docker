@@ -139,7 +139,7 @@ func Build(d *daemon.Daemon, buildConfig *Config) error {
 		}
 		defer f.Body.Close()
 		ct := f.Header.Get("Content-Type")
-		clen := int(f.ContentLength)
+		clen := f.ContentLength
 		contentType, bodyReader, err := inspectResponse(ct, f.Body, clen)
 
 		defer bodyReader.Close()
@@ -182,11 +182,11 @@ func Build(d *daemon.Daemon, buildConfig *Config) error {
 
 	builder := &builder{
 		Daemon: d,
-		OutStream: &streamformatter.StdoutFormater{
+		OutStream: &streamformatter.StdoutFormatter{
 			Writer:          buildConfig.Stdout,
 			StreamFormatter: sf,
 		},
-		ErrStream: &streamformatter.StderrFormater{
+		ErrStream: &streamformatter.StderrFormatter{
 			Writer:          buildConfig.Stdout,
 			StreamFormatter: sf,
 		},
@@ -316,7 +316,7 @@ func Commit(name string, d *daemon.Daemon, c *CommitConfig) (string, error) {
 //    - an io.Reader for the response body
 //    - an error value which will be non-nil either when something goes wrong while
 //      reading bytes from r or when the detected content-type is not acceptable.
-func inspectResponse(ct string, r io.ReadCloser, clen int) (string, io.ReadCloser, error) {
+func inspectResponse(ct string, r io.ReadCloser, clen int64) (string, io.ReadCloser, error) {
 	plen := clen
 	if plen <= 0 || plen > maxPreambleLength {
 		plen = maxPreambleLength

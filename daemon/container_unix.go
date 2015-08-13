@@ -1,4 +1,4 @@
-// +build !windows
+// +build linux freebsd
 
 package daemon
 
@@ -16,8 +16,8 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/execdriver"
+	"github.com/docker/docker/daemon/links"
 	"github.com/docker/docker/daemon/network"
-	"github.com/docker/docker/links"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/directory"
 	"github.com/docker/docker/pkg/ioutils"
@@ -27,6 +27,7 @@ import (
 	"github.com/docker/docker/pkg/ulimit"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
+	"github.com/docker/docker/volume"
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/options"
@@ -42,9 +43,15 @@ type Container struct {
 	CommonContainer
 
 	// Fields below here are platform specific.
-
-	AppArmorProfile string
 	activeLinks     map[string]*links.Link
+	AppArmorProfile string
+	HostnamePath    string
+	HostsPath       string
+	MountPoints     map[string]*mountPoint
+	ResolvConfPath  string
+	UpdateDns       bool
+	Volumes         map[string]string // Deprecated since 1.7, kept for backwards compatibility
+	VolumesRW       map[string]bool   // Deprecated since 1.7, kept for backwards compatibility
 }
 
 func killProcessDirectly(container *Container) error {
@@ -74,40 +81,18 @@ func (container *Container) setupLinkedContainers() ([]string, error) {
 	}
 
 	if len(children) > 0 {
-		container.activeLinks = make(map[string]*links.Link, len(children))
-
-		// If we encounter an error make sure that we rollback any network
-		// config and iptables changes
-		rollback := func() {
-			for _, link := range container.activeLinks {
-				link.Disable()
-			}
-			container.activeLinks = nil
-		}
-
 		for linkAlias, child := range children {
 			if !child.IsRunning() {
 				return nil, fmt.Errorf("Cannot link to a non running container: %s AS %s", child.Name, linkAlias)
 			}
 
-			link, err := links.NewLink(
+			link := links.NewLink(
 				container.NetworkSettings.IPAddress,
 				child.NetworkSettings.IPAddress,
 				linkAlias,
 				child.Config.Env,
 				child.Config.ExposedPorts,
 			)
-
-			if err != nil {
-				rollback()
-				return nil, err
-			}
-
-			container.activeLinks[link.Alias()] = link
-			if err := link.Enable(); err != nil {
-				rollback()
-				return nil, err
-			}
 
 			for _, envVar := range link.ToEnv() {
 				env = append(env, envVar)
@@ -266,11 +251,11 @@ func populateCommand(c *Container, env []string) error {
 	resources := &execdriver.Resources{
 		Memory:           c.hostConfig.Memory,
 		MemorySwap:       c.hostConfig.MemorySwap,
-		CpuShares:        c.hostConfig.CpuShares,
+		CPUShares:        c.hostConfig.CPUShares,
 		CpusetCpus:       c.hostConfig.CpusetCpus,
 		CpusetMems:       c.hostConfig.CpusetMems,
-		CpuPeriod:        c.hostConfig.CpuPeriod,
-		CpuQuota:         c.hostConfig.CpuQuota,
+		CPUPeriod:        c.hostConfig.CPUPeriod,
+		CPUQuota:         c.hostConfig.CPUQuota,
 		BlkioWeight:      c.hostConfig.BlkioWeight,
 		Rlimits:          rlimits,
 		OomKillDisable:   c.hostConfig.OomKillDisable,
@@ -429,8 +414,8 @@ func (container *Container) buildJoinOptions() ([]libnetwork.EndpointOption, err
 	}
 	joinOptions = append(joinOptions, libnetwork.JoinOptionResolvConfPath(container.ResolvConfPath))
 
-	if len(container.hostConfig.Dns) > 0 {
-		dns = container.hostConfig.Dns
+	if len(container.hostConfig.DNS) > 0 {
+		dns = container.hostConfig.DNS
 	} else if len(container.daemon.config.Dns) > 0 {
 		dns = container.daemon.config.Dns
 	}
@@ -439,8 +424,8 @@ func (container *Container) buildJoinOptions() ([]libnetwork.EndpointOption, err
 		joinOptions = append(joinOptions, libnetwork.JoinOptionDNS(d))
 	}
 
-	if len(container.hostConfig.DnsSearch) > 0 {
-		dnsSearch = container.hostConfig.DnsSearch
+	if len(container.hostConfig.DNSSearch) > 0 {
+		dnsSearch = container.hostConfig.DNSSearch
 	} else if len(container.daemon.config.DnsSearch) > 0 {
 		dnsSearch = container.daemon.config.DnsSearch
 	}
@@ -549,7 +534,7 @@ func (container *Container) buildPortMapInfo(n libnetwork.Network, ep libnetwork
 			for _, tp := range exposedPorts {
 				natPort, err := nat.NewPort(tp.Proto.String(), strconv.Itoa(int(tp.Port)))
 				if err != nil {
-					return nil, fmt.Errorf("Error parsing Port value(%s):%v", tp.Port, err)
+					return nil, fmt.Errorf("Error parsing Port value(%v):%v", tp.Port, err)
 				}
 				networkSettings.Ports[natPort] = nil
 			}
@@ -666,6 +651,8 @@ func (container *Container) updateNetworkSettings(n libnetwork.Network, ep libne
 	return nil
 }
 
+// UpdateNetwork is used to update the container's network (e.g. when linked containers
+// get removed/unlinked).
 func (container *Container) UpdateNetwork() error {
 	n, err := container.daemon.netController.NetworkByID(container.NetworkSettings.NetworkID)
 	if err != nil {
@@ -854,7 +841,7 @@ func (container *Container) AllocateNetwork() error {
 
 	if service == "" {
 		// dot character "." has a special meaning to support SERVICE[.NETWORK] format.
-		// For backward compatiblity, replacing "." with "-", instead of failing
+		// For backward compatibility, replacing "." with "-", instead of failing
 		service = strings.Replace(container.Name, ".", "-", -1)
 		// Service names dont like "/" in them. removing it instead of failing for backward compatibility
 		service = strings.Replace(service, "/", "", -1)
@@ -1088,29 +1075,6 @@ func (container *Container) ReleaseNetwork() {
 			logrus.Errorf("deleting endpoint failed: %v", err)
 		}
 	}
-
-}
-
-func disableAllActiveLinks(container *Container) {
-	if container.activeLinks != nil {
-		for _, link := range container.activeLinks {
-			link.Disable()
-		}
-	}
-}
-
-func (container *Container) DisableLink(name string) {
-	if container.activeLinks != nil {
-		if link, exists := container.activeLinks[name]; exists {
-			link.Disable()
-			delete(container.activeLinks, name)
-			if err := container.UpdateNetwork(); err != nil {
-				logrus.Debugf("Could not update network to remove link: %v", err)
-			}
-		} else {
-			logrus.Debugf("Could not find active link for %s", name)
-		}
-	}
 }
 
 func (container *Container) UnmountVolumes(forceSyscall bool) error {
@@ -1157,31 +1121,106 @@ func (container *Container) CleanupStorage() error {
 	return nil
 }
 
-func (container *Container) secretsPath() (string, error) {
-	return container.GetRootResourcePath("secrets")
+func (container *Container) networkMounts() []execdriver.Mount {
+	var mounts []execdriver.Mount
+	mode := "Z"
+	if container.hostConfig.NetworkMode.IsContainer() {
+		mode = "z"
+	}
+	if container.ResolvConfPath != "" {
+		label.Relabel(container.ResolvConfPath, container.MountLabel, mode)
+		writable := !container.hostConfig.ReadonlyRootfs
+		if m, exists := container.MountPoints["/etc/resolv.conf"]; exists {
+			writable = m.RW
+		}
+		mounts = append(mounts, execdriver.Mount{
+			Source:      container.ResolvConfPath,
+			Destination: "/etc/resolv.conf",
+			Writable:    writable,
+			Private:     true,
+		})
+	}
+	if container.HostnamePath != "" {
+		label.Relabel(container.HostnamePath, container.MountLabel, mode)
+		writable := !container.hostConfig.ReadonlyRootfs
+		if m, exists := container.MountPoints["/etc/hostname"]; exists {
+			writable = m.RW
+		}
+		mounts = append(mounts, execdriver.Mount{
+			Source:      container.HostnamePath,
+			Destination: "/etc/hostname",
+			Writable:    writable,
+			Private:     true,
+		})
+	}
+	if container.HostsPath != "" {
+		label.Relabel(container.HostsPath, container.MountLabel, mode)
+		writable := !container.hostConfig.ReadonlyRootfs
+		if m, exists := container.MountPoints["/etc/hosts"]; exists {
+			writable = m.RW
+		}
+		mounts = append(mounts, execdriver.Mount{
+			Source:      container.HostsPath,
+			Destination: "/etc/hosts",
+			Writable:    writable,
+			Private:     true,
+		})
+	}
+	return mounts
 }
 
-func (container *Container) setupSecretFiles() error {
-	secretsPath, err := container.secretsPath()
-	if err != nil {
-		return err
+func (container *Container) addBindMountPoint(name, source, destination string, rw bool) {
+	container.MountPoints[destination] = &mountPoint{
+		Name:        name,
+		Source:      source,
+		Destination: destination,
+		RW:          rw,
 	}
+}
 
-	if err := os.MkdirAll(secretsPath, 0700); err != nil {
-		return err
+func (container *Container) addLocalMountPoint(name, destination string, rw bool) {
+	container.MountPoints[destination] = &mountPoint{
+		Name:        name,
+		Driver:      volume.DefaultDriverName,
+		Destination: destination,
+		RW:          rw,
 	}
+}
 
-	if err := syscall.Mount("tmpfs", secretsPath, "tmpfs", uintptr(syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV), label.FormatMountLabel("", container.GetMountLabel())); err != nil {
-		return fmt.Errorf("mounting secret tmpfs: %s", err)
+func (container *Container) addMountPointWithVolume(destination string, vol volume.Volume, rw bool) {
+	container.MountPoints[destination] = &mountPoint{
+		Name:        vol.Name(),
+		Driver:      vol.DriverName(),
+		Destination: destination,
+		RW:          rw,
+		Volume:      vol,
 	}
+}
 
-	data, err := getHostSecretData()
-	if err != nil {
-		return err
-	}
-	for _, s := range data {
-		s.SaveTo(secretsPath)
-	}
+func (container *Container) isDestinationMounted(destination string) bool {
+	return container.MountPoints[destination] != nil
+}
 
+func (container *Container) prepareMountPoints() error {
+	for _, config := range container.MountPoints {
+		if len(config.Driver) > 0 {
+			v, err := createVolume(config.Name, config.Driver)
+			if err != nil {
+				return err
+			}
+			config.Volume = v
+		}
+	}
+	return nil
+}
+
+func (container *Container) removeMountPoints() error {
+	for _, m := range container.MountPoints {
+		if m.Volume != nil {
+			if err := removeVolume(m.Volume); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }

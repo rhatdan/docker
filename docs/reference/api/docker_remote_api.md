@@ -12,12 +12,11 @@ parent = "smn_remoteapi"
 
  - By default the Docker daemon listens on `unix:///var/run/docker.sock`
    and the client must have `root` access to interact with the daemon.
- - If the Docker daemon is set to use an encrypted TCP socket (`--tls`,
-   or `--tlsverify`) as with Boot2Docker 1.3.0, then you need to add extra
+ - If you are using `docker-machine`, the Docker daemon is on a virtual host that uses an encrypted TCP socket. In this situation, you need to add extra
    parameters to `curl` or `wget` when making test API requests:
-   `curl --insecure --cert ~/.docker/cert.pem --key ~/.docker/key.pem https://boot2docker:2376/images/json`
+   `curl --insecure --cert ~/.docker/cert.pem --key ~/.docker/key.pem https://YOUR_VM_IP:2376/images/json`
    or 
-   `wget --no-check-certificate --certificate=$DOCKER_CERT_PATH/cert.pem --private-key=$DOCKER_CERT_PATH/key.pem https://boot2docker:2376/images/json -O - -q`
+   `wget --no-check-certificate --certificate=$DOCKER_CERT_PATH/cert.pem --private-key=$DOCKER_CERT_PATH/key.pem https://your_vm_ip:2376/images/json -O - -q`
  - If a group named `docker` exists on your system, docker will apply
    ownership of the socket to the group.
  - The API tends to be REST, but for some complex commands, like attach
@@ -36,13 +35,13 @@ parent = "smn_remoteapi"
    Client applications need to take this into account to ensure
    they will not break when talking to newer Docker daemons.
 
-The current version of the API is v1.20
+The current version of the API is v1.21
 
 Calling `/info` is the same as calling
-`/v1.20/info`.
+`/v1.21/info`.
 
 You can still call an old version of the API using
-`/v1.19/info`.
+`/v1.20/info`.
 
 ## Docker Events
 
@@ -59,6 +58,12 @@ Some container-related events are not affected by container state, so they are n
 Running `docker rmi` emits an **untag** event when removing an image name.  The `rmi` command may also emit **delete** events when images are deleted by ID directly or by deleting the last tag referring to the image.
 
 > **Acknowledgement**: This diagram and the accompanying text were used with the permission of Matt Good and Gilder Labs. See Matt's original blog post [Docker Events Explained](http://gliderlabs.com/blog/2015/04/14/docker-events-explained/).
+
+## v1.21
+
+### Full documentation
+
+[*Docker Remote API v1.21*](/reference/api/docker_remote_api_v1.21/)
 
 ## v1.20
 

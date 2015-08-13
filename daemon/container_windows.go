@@ -22,18 +22,6 @@ type Container struct {
 	CommonContainer
 
 	// Fields below here are platform specific.
-
-	// TODO Windows. Further factoring out of unused fields will be necessary.
-
-	// ---- START OF TEMPORARY DECLARATION ----
-	// TODO Windows. Temporarily keeping fields in to assist in compilation
-	// of the daemon on Windows without affecting many other files in a single
-	// PR, thus making code review significantly harder. These lines will be
-	// removed in subsequent PRs.
-
-	AppArmorProfile string
-	// ---- END OF TEMPORARY DECLARATION ----
-
 }
 
 func killProcessDirectly(container *Container) error {
@@ -167,17 +155,15 @@ func (container *Container) ExportRw() (archive.Archive, error) {
 	return nil, nil
 }
 
+func (container *Container) UpdateNetwork() error {
+	return nil
+}
+
 func (container *Container) ReleaseNetwork() {
 }
 
 func (container *Container) RestoreNetwork() error {
 	return nil
-}
-
-func disableAllActiveLinks(container *Container) {
-}
-
-func (container *Container) DisableLink(name string) {
 }
 
 func (container *Container) UnmountVolumes(forceSyscall bool) error {
@@ -211,5 +197,15 @@ func (container *Container) CleanupStorage() error {
 	if wd, ok := container.daemon.driver.(*windows.WindowsGraphDriver); ok {
 		return hcsshim.UnprepareLayer(wd.Info(), container.ID)
 	}
+	return nil
+}
+
+// prepareMountPoints is a no-op on Windows
+func (container *Container) prepareMountPoints() error {
+	return nil
+}
+
+// removeMountPoints is a no-op on Windows.
+func (container *Container) removeMountPoints() error {
 	return nil
 }

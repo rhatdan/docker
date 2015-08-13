@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/parsers/kernel"
 	"github.com/docker/docker/pkg/parsers/operatingsystem"
+	"github.com/docker/docker/pkg/sysinfo"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
@@ -56,15 +57,17 @@ func (daemon *Daemon) SystemInfo() (*types.Info, error) {
 		initPath = daemon.SystemInitPath()
 	}
 
+	sysInfo := sysinfo.New(false)
+
 	v := &types.Info{
 		ID:                 daemon.ID,
 		Containers:         len(daemon.List()),
 		Images:             imgcount,
 		Driver:             daemon.GraphDriver().String(),
 		DriverStatus:       daemon.GraphDriver().Status(),
-		IPv4Forwarding:     !daemon.SystemConfig().IPv4ForwardingDisabled,
-		BridgeNfIptables:   !daemon.SystemConfig().BridgeNfCallIptablesDisabled,
-		BridgeNfIp6tables:  !daemon.SystemConfig().BridgeNfCallIp6tablesDisabled,
+		IPv4Forwarding:     !sysInfo.IPv4ForwardingDisabled,
+		BridgeNfIptables:   !sysInfo.BridgeNfCallIptablesDisabled,
+		BridgeNfIP6tables:  !sysInfo.BridgeNfCallIP6tablesDisabled,
 		Debug:              os.Getenv("DEBUG") != "",
 		NFd:                fileutils.GetTotalUsedFds(),
 		NGoroutines:        runtime.NumGoroutine(),
@@ -90,18 +93,18 @@ func (daemon *Daemon) SystemInfo() (*types.Info, error) {
 	// sysinfo.cgroupCpuInfo will be nil otherwise and cause a SIGSEGV if
 	// an attempt is made to access through them.
 	if runtime.GOOS != "windows" {
-		v.MemoryLimit = daemon.SystemConfig().MemoryLimit
-		v.SwapLimit = daemon.SystemConfig().SwapLimit
-		v.OomKillDisable = daemon.SystemConfig().OomKillDisable
-		v.CpuCfsPeriod = daemon.SystemConfig().CpuCfsPeriod
-		v.CpuCfsQuota = daemon.SystemConfig().CpuCfsQuota
+		v.MemoryLimit = sysInfo.MemoryLimit
+		v.SwapLimit = sysInfo.SwapLimit
+		v.OomKillDisable = sysInfo.OomKillDisable
+		v.CPUCfsPeriod = sysInfo.CPUCfsPeriod
+		v.CPUCfsQuota = sysInfo.CPUCfsQuota
 	}
 
 	if httpProxy := os.Getenv("http_proxy"); httpProxy != "" {
-		v.HttpProxy = httpProxy
+		v.HTTPProxy = httpProxy
 	}
 	if httpsProxy := os.Getenv("https_proxy"); httpsProxy != "" {
-		v.HttpsProxy = httpsProxy
+		v.HTTPSProxy = httpsProxy
 	}
 	if noProxy := os.Getenv("no_proxy"); noProxy != "" {
 		v.NoProxy = noProxy

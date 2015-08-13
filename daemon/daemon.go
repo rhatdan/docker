@@ -29,6 +29,7 @@ import (
 	"github.com/docker/docker/pkg/graphdb"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/namesgenerator"
+	"github.com/docker/docker/pkg/nat"
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/docker/pkg/sysinfo"
 	"github.com/docker/docker/pkg/system"
@@ -91,7 +92,6 @@ type Daemon struct {
 	graph            *graph.Graph
 	repositories     *graph.TagStore
 	idIndex          *truncindex.TruncIndex
-	sysInfo          *sysinfo.SysInfo
 	config           *Config
 	containerGraph   *graphdb.Database
 	driver           graphdriver.Driver
@@ -144,19 +144,17 @@ func (daemon *Daemon) containerRoot(id string) string {
 // Load reads the contents of a container from disk
 // This is typically done at startup.
 func (daemon *Daemon) load(id string) (*Container, error) {
-	container := &Container{
-		CommonContainer: daemon.newBaseContainer(id),
-	}
+	container := daemon.newBaseContainer(id)
 
 	if err := container.FromDisk(); err != nil {
 		return nil, err
 	}
 
 	if container.ID != id {
-		return container, fmt.Errorf("Container %s is stored at %s", container.ID, id)
+		return &container, fmt.Errorf("Container %s is stored at %s", container.ID, id)
 	}
 
-	return container, nil
+	return &container, nil
 }
 
 // Register makes a container object usable by the daemon as <container.ID>
@@ -247,7 +245,7 @@ func (daemon *Daemon) restore() error {
 	}
 
 	var (
-		debug         = (os.Getenv("DEBUG") != "" || os.Getenv("TEST") != "")
+		debug         = os.Getenv("DEBUG") != ""
 		currentDriver = daemon.driver.String()
 		containers    = make(map[string]*cr)
 	)
@@ -352,7 +350,7 @@ func (daemon *Daemon) mergeAndVerifyConfig(config *runconfig.Config, img *image.
 func (daemon *Daemon) generateIdAndName(name string) (string, string, error) {
 	var (
 		err error
-		id  = stringid.GenerateRandomID()
+		id  = stringid.GenerateNonCryptoID()
 	)
 
 	if name == "" {
@@ -396,7 +394,7 @@ func (daemon *Daemon) reserveName(id, name string) (string, error) {
 		} else {
 			nameAsKnownByUser := strings.TrimPrefix(name, "/")
 			return "", fmt.Errorf(
-				"Conflict. The name %q is already in use by container %s. You have to delete (or rename) that container to be able to reuse that name.", nameAsKnownByUser,
+				"Conflict. The name %q is already in use by container %s. You have to remove (or rename) that container to be able to reuse that name.", nameAsKnownByUser,
 				stringid.TruncateID(conflictingContainer.ID))
 		}
 	}
@@ -478,11 +476,7 @@ func (daemon *Daemon) newContainer(name string, config *runconfig.Config, imgID 
 	base.Driver = daemon.driver.String()
 	base.ExecDriver = daemon.execDriver.Name()
 
-	container := &Container{
-		CommonContainer: base,
-	}
-
-	return container, err
+	return &base, err
 }
 
 func GetFullContainerName(name string) (string, error) {
@@ -563,7 +557,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 	config.DisableBridge = isBridgeNetworkDisabled(config)
 
 	// Verify the platform is supported as a daemon
-	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
+	if !platformSupported {
 		return nil, ErrSystemNotSupported
 	}
 
@@ -588,7 +582,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 	}
 	config.Root = realRoot
 	// Create the root directory if it doesn't exists
-	if err := system.MkdirAll(config.Root, 0700); err != nil && !os.IsExist(err) {
+	if err := system.MkdirAll(config.Root, 0700); err != nil {
 		return nil, err
 	}
 
@@ -640,7 +634,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 
 	daemonRepo := filepath.Join(config.Root, "containers")
 
-	if err := system.MkdirAll(daemonRepo, 0700); err != nil && !os.IsExist(err) {
+	if err := system.MkdirAll(daemonRepo, 0700); err != nil {
 		return nil, err
 	}
 
@@ -667,7 +661,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 
 	trustDir := filepath.Join(config.Root, "trust")
 
-	if err := system.MkdirAll(trustDir, 0700); err != nil && !os.IsExist(err) {
+	if err := system.MkdirAll(trustDir, 0700); err != nil {
 		return nil, err
 	}
 	trustService, err := trust.NewTrustStore(trustDir)
@@ -730,7 +724,6 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 	d.graph = g
 	d.repositories = repositories
 	d.idIndex = truncindex.NewTruncIndex([]string{})
-	d.sysInfo = sysInfo
 	d.config = config
 	d.sysInitPath = sysInitPath
 	d.execDriver = ed
@@ -863,10 +856,6 @@ func (daemon *Daemon) Config() *Config {
 	return daemon.config
 }
 
-func (daemon *Daemon) SystemConfig() *sysinfo.SysInfo {
-	return daemon.sysInfo
-}
-
 func (daemon *Daemon) SystemInitPath() string {
 	return daemon.sysInitPath
 }
@@ -947,18 +936,6 @@ func (daemon *Daemon) setHostConfig(container *Container, hostConfig *runconfig.
 	return nil
 }
 
-func (daemon *Daemon) newBaseContainer(id string) CommonContainer {
-	return CommonContainer{
-		ID:           id,
-		State:        NewState(),
-		MountPoints:  make(map[string]*mountPoint),
-		Volumes:      make(map[string]string),
-		VolumesRW:    make(map[string]bool),
-		execCommands: newExecStore(),
-		root:         daemon.containerRoot(id),
-	}
-}
-
 func setDefaultMtu(config *Config) {
 	// do nothing if the config does not have the default 0 value.
 	if config.Mtu != 0 {
@@ -984,4 +961,36 @@ func getDefaultRouteMtu() (int, error) {
 		}
 	}
 	return 0, errNoDefaultRoute
+}
+
+// verifyContainerSettings performs validation of the hostconfig and config
+// structures.
+func (daemon *Daemon) verifyContainerSettings(hostConfig *runconfig.HostConfig, config *runconfig.Config) ([]string, error) {
+
+	// First perform verification of settings common across all platforms.
+	if config != nil {
+		if config.WorkingDir != "" && !filepath.IsAbs(config.WorkingDir) {
+			return nil, fmt.Errorf("The working directory '%s' is invalid. It needs to be an absolute path.", config.WorkingDir)
+		}
+	}
+
+	if hostConfig == nil {
+		return nil, nil
+	}
+
+	for port := range hostConfig.PortBindings {
+		_, portStr := nat.SplitProtoPort(string(port))
+		if _, err := nat.ParsePort(portStr); err != nil {
+			return nil, fmt.Errorf("Invalid port specification: %q", portStr)
+		}
+		for _, pb := range hostConfig.PortBindings[port] {
+			_, err := nat.NewPort(nat.SplitProtoPort(pb.HostPort))
+			if err != nil {
+				return nil, fmt.Errorf("Invalid port specification: %q", pb.HostPort)
+			}
+		}
+	}
+
+	// Now do platform-specific verification
+	return verifyPlatformContainerSettings(daemon, hostConfig, config)
 }
