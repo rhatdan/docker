@@ -3,15 +3,18 @@
 package daemon
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/docker/docker/daemon/execdriver"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/volume"
 	"github.com/docker/docker/volume/local"
+	"github.com/opencontainers/runc/libcontainer/label"
 )
 
 // copyOwnership copies the permissions and uid:gid of the source file
@@ -31,6 +34,18 @@ func copyOwnership(source, destination string) error {
 
 func (container *Container) setupMounts() ([]execdriver.Mount, error) {
 	var mounts []execdriver.Mount
+
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return nil, err
+	}
+
+	mounts = append(mounts, execdriver.Mount{
+		Source:      secretsPath,
+		Destination: "/run/secrets",
+		Writable:    true,
+	})
+
 	for _, m := range container.MountPoints {
 		path, err := m.Setup()
 		if err != nil {

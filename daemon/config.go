@@ -14,27 +14,30 @@ const (
 // CommonConfig defines the configuration of a docker daemon which are
 // common across platforms.
 type CommonConfig struct {
-	AutoRestart    bool
-	Bridge         bridgeConfig // Bridge holds bridge network specific configuration.
-	Context        map[string][]string
-	CorsHeaders    string
-	DisableBridge  bool
-	Dns            []string
-	DnsSearch      []string
-	EnableCors     bool
-	ExecDriver     string
-	ExecOptions    []string
-	ExecRoot       string
-	GraphDriver    string
-	GraphOptions   []string
-	Labels         []string
-	LogConfig      runconfig.LogConfig
-	Mtu            int
-	Pidfile        string
-	Root           string
-	TrustKeyPath   string
-	DefaultNetwork string
-	NetworkKVStore string
+	AutoRestart          bool
+	Bridge               bridgeConfig // Bridge holds bridge network specific configuration.
+	Context              map[string][]string
+	CorsHeaders          string
+	DisableBridge        bool
+	Dns                  []string
+	DnsSearch            []string
+	EnableCors           bool
+	ExecDriver           string
+	ExecOptions          []string
+	ExecRoot             string
+	GraphDriver          string
+	GraphOptions         []string
+	Labels               []string
+	LogConfig            runconfig.LogConfig
+	Mtu                  int
+	Pidfile              string
+	Root                 string
+	TrustKeyPath         string
+	DefaultNetwork       string
+	NetworkKVStore       string
+	BlockedRegistries    []string
+	AdditionalRegistries []string
+	ConfirmDefPush       bool
 }
 
 // InstallCommonFlags adds command-line options to the top-level flag parser for
@@ -59,4 +62,7 @@ func (config *Config) InstallCommonFlags(cmd *flag.FlagSet, usageFn func(string)
 	cmd.Var(opts.NewListOptsRef(&config.Labels, opts.ValidateLabel), []string{"-label"}, usageFn("Set key=value labels to the daemon"))
 	cmd.StringVar(&config.LogConfig.Type, []string{"-log-driver"}, "json-file", usageFn("Default driver for container logs"))
 	cmd.Var(opts.NewMapOpts(config.LogConfig.Config, nil), []string{"-log-opt"}, usageFn("Set log driver options"))
+	cmd.Var(opts.NewListOptsRef(&config.BlockedRegistries, nil), []string{"-block-registry"}, usageFn("Don't contact given registry"))
+	cmd.Var(opts.NewListOptsRef(&config.AdditionalRegistries, nil), []string{"-add-registry"}, usageFn("Registry to query before a public one"))
+	cmd.BoolVar(&config.ConfirmDefPush, []string{"-confirm-def-push"}, true, usageFn("Confirm a push to default registry"))
 }
