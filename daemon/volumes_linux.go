@@ -12,7 +12,6 @@ import (
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/volume"
 	"github.com/docker/docker/volume/local"
-	"github.com/opencontainers/runc/libcontainer/label"
 )
 
 // copyOwnership copies the permissions and uid:gid of the source file
@@ -118,14 +117,4 @@ func validVolumeLayout(files []os.FileInfo) bool {
 	}
 
 	return true
-}
-
-func (container *Container) setupJournal() (string, error) {
-	path := journalPath(container.ID)
-	if path != "" {
-		if err := os.MkdirAll(path, 0755); err != nil {
-			return "", err
-		}
-	}
-	return path, nil
 }
