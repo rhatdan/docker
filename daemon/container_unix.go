@@ -33,6 +33,7 @@ import (
 	"github.com/docker/libnetwork/types"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/devices"
+	"github.com/opencontainers/runc/libcontainer/label"
 )
 
 const DefaultPathEnv = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -1153,5 +1154,34 @@ func (container *Container) PrepareStorage() error {
 }
 
 func (container *Container) CleanupStorage() error {
+	return nil
+}
+
+func (container *Container) secretsPath() (string, error) {
+	return container.GetRootResourcePath("secrets")
+}
+
+func (container *Container) setupSecretFiles() error {
+	secretsPath, err := container.secretsPath()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(secretsPath, 0700); err != nil {
+		return err
+	}
+
+	if err := syscall.Mount("tmpfs", secretsPath, "tmpfs", uintptr(syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV), label.FormatMountLabel("", container.GetMountLabel())); err != nil {
+		return fmt.Errorf("mounting secret tmpfs: %s", err)
+	}
+
+	data, err := getHostSecretData()
+	if err != nil {
+		return err
+	}
+	for _, s := range data {
+		s.SaveTo(secretsPath)
+	}
+
 	return nil
 }
