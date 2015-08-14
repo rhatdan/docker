@@ -13,7 +13,7 @@ import (
 
 // See issue docker/docker#8141
 func (s *DockerRegistrySuite) TestPullImageWithAliases(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
 
 	repos := []string{}
 	for _, tag := range []string{"recent", "fresh"} {
@@ -205,7 +205,7 @@ func (s *DockerTrustSuite) TestTrustedIsolatedPull(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestUntrustedPull(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 	dockerCmd(c, "push", repoName)
@@ -261,7 +261,7 @@ func (s *DockerTrustSuite) TestPullWhenCertExpired(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPullFromBadTrustServer(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockerclievilpull/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockerclievilpull/trusted:latest", s.reg.url)
 	evilLocalConfigDir, err := ioutil.TempDir("", "evil-local-config-dir")
 	if err != nil {
 		c.Fatalf("Failed to create local temp dir")
@@ -333,7 +333,7 @@ func (s *DockerTrustSuite) TestTrustedPullFromBadTrustServer(c *check.C) {
 
 func (s *DockerTrustSuite) TestTrustedPullWithExpiredSnapshot(c *check.C) {
 	c.Skip("Currently changes system time, causing instability")
-	repoName := fmt.Sprintf("%v/dockercliexpiredtimestamppull/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercliexpiredtimestamppull/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -368,4 +368,324 @@ func (s *DockerTrustSuite) TestTrustedPullWithExpiredSnapshot(c *check.C) {
 			c.Fatalf("Missing expected output on trusted pull with expired snapshot:\n%s", out)
 		}
 	})
+}
+
+func (s *DockerRegistrySuite) TestPullFromAdditionalRegistry(c *check.C) {
+	d := NewDaemon(c)
+	if err := d.StartWithBusybox("--add-registry=" + s.reg.url); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing add-registry=%s: %v", s.reg.url, err)
+	}
+	defer d.Stop()
+
+	busyboxID := d.getAndTestImageEntry(c, 1, "busybox", "").id
+
+	// this will pull from docker.io
+	if _, err := d.Cmd("pull", "library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull library/hello-world from %q: %v", s.reg.url, err)
+	}
+
+	helloWorldID := d.getAndTestImageEntry(c, 2, "docker.io/hello-world", "").id
+	if helloWorldID == busyboxID {
+		c.Fatalf("docker.io/hello-world must have different ID than busybox image")
+	}
+
+	// push busybox to additional registry as "library/hello-world" and remove all local images
+	if out, err := d.Cmd("tag", "busybox", s.reg.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg.url+"/library/hello-world", err, out)
+	}
+	toRemove := []string{"library/hello-world", "busybox", "docker.io/hello-world"}
+	if out, err := d.Cmd("rmi", toRemove...); err != nil {
+		c.Fatalf("failed to remove images %v: %v, output: %s", toRemove, err, out)
+	}
+	d.getAndTestImageEntry(c, 0, "", "")
+
+	// pull the same name again - now the image should be pulled from additional registry
+	if _, err := d.Cmd("pull", "library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull library/hello-world from %q: %v", s.reg.url, err)
+	}
+	d.getAndTestImageEntry(c, 1, s.reg.url+"/library/hello-world", busyboxID)
+
+	// empty images once more
+	if out, err := d.Cmd("rmi", s.reg.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to remove image %s: %v, output: %s", s.reg.url+"library/hello-world", err, out)
+	}
+	d.getAndTestImageEntry(c, 0, "", "")
+
+	// now pull with fully qualified name
+	if _, err := d.Cmd("pull", "docker.io/library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull docker.io/library/hello-world from %q: %v", s.reg.url, err)
+	}
+	d.getAndTestImageEntry(c, 1, "docker.io/hello-world", helloWorldID)
+}
+
+func (s *DockerRegistriesSuite) TestPullFromAdditionalRegistries(c *check.C) {
+	d := NewDaemon(c)
+	daemonArgs := []string{"--add-registry=" + s.reg1.url, "--add-registry=" + s.reg2.url}
+	if err := d.StartWithBusybox(daemonArgs...); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing { %s } flags: %v", strings.Join(daemonArgs, ", "), err)
+	}
+	defer d.Stop()
+
+	busyboxID := d.getAndTestImageEntry(c, 1, "busybox", "").id
+
+	// this will pull from docker.io
+	if _, err := d.Cmd("pull", "library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull library/hello-world from \"docker.io\": %v", err)
+	}
+	helloWorldID := d.getAndTestImageEntry(c, 2, "docker.io/hello-world", "").id
+	if helloWorldID == busyboxID {
+		c.Fatalf("docker.io/hello-world must have different ID than busybox image")
+	}
+
+	// push:
+	//  hello-world to 1st additional registry as "misc/hello-world"
+	//  busybox to 2nd additional registry as "library/hello-world"
+	if out, err := d.Cmd("tag", "docker.io/hello-world", s.reg1.url+"/misc/hello-world"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "docker.io/hello-world", err, out)
+	}
+	if out, err := d.Cmd("tag", "busybox", s.reg2.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "/busybox", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg1.url+"/misc/hello-world"); err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg1.url+"/misc/hello-world", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg2.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg2.url+"/library/busybox", err, out)
+	}
+	// and remove all local images
+	toRemove := []string{"misc/hello-world", s.reg2.url + "/library/hello-world", "busybox", "docker.io/hello-world"}
+	if out, err := d.Cmd("rmi", toRemove...); err != nil {
+		c.Fatalf("failed to remove images %v: %v, output: %s", toRemove, err, out)
+	}
+	d.getAndTestImageEntry(c, 0, "", "")
+
+	// now pull the "library/hello-world" from 2nd additional registry
+	if _, err := d.Cmd("pull", "library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull library/hello-world from %q: %v", s.reg2.url, err)
+	}
+	d.getAndTestImageEntry(c, 1, s.reg2.url+"/library/hello-world", busyboxID)
+
+	// now pull the "misc/hello-world" from 1st additional registry
+	if _, err := d.Cmd("pull", "misc/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull misc/hello-world from %q: %v", s.reg2.url, err)
+	}
+	d.getAndTestImageEntry(c, 2, s.reg1.url+"/misc/hello-world", helloWorldID)
+
+	// tag it as library/hello-world and push it to 1st registry
+	if out, err := d.Cmd("tag", s.reg1.url+"/misc/hello-world", s.reg1.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", s.reg1.url+"/misc/hello-world", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg1.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg1.url+"/library/hello-world", err, out)
+	}
+
+	// remove all images
+	toRemove = []string{s.reg1.url + "/misc/hello-world", s.reg1.url + "/library/hello-world", s.reg2.url + "/library/hello-world"}
+	if out, err := d.Cmd("rmi", toRemove...); err != nil {
+		c.Fatalf("failed to remove images %v: %v, output: %s", toRemove, err, out)
+	}
+	d.getAndTestImageEntry(c, 0, "", "")
+
+	// now pull "library/hello-world" from 1st additional registry
+	if _, err := d.Cmd("pull", "library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull library/hello-world from %q: %v", s.reg1.url, err)
+	}
+	d.getAndTestImageEntry(c, 1, s.reg1.url+"/library/hello-world", helloWorldID)
+
+	// now pull fully qualified image from 2nd registry
+	if _, err := d.Cmd("pull", s.reg2.url+"/library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull %s/library/hello-world: %v", s.reg2.url, err)
+	}
+	d.getAndTestImageEntry(c, 2, s.reg2.url+"/library/hello-world", busyboxID)
+}
+
+// Test pulls from blocked public registry and from private registry. This
+// shall be called with various daemonArgs containing at least one
+// `--block-registry` flag.
+func (s *DockerRegistrySuite) doTestPullFromBlockedPublicRegistry(c *check.C, daemonArgs []string) {
+	allBlocked := false
+	for _, arg := range daemonArgs {
+		if arg == "--block-registry=all" {
+			allBlocked = true
+		}
+	}
+	d := NewDaemon(c)
+	if err := d.StartWithBusybox(daemonArgs...); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing { %s } flags: %v", strings.Join(daemonArgs, ", "), err)
+	}
+	defer d.Stop()
+
+	busyboxID := d.getAndTestImageEntry(c, 1, "busybox", "").id
+
+	// try to pull from docker.io
+	if out, err := d.Cmd("pull", "library/hello-world"); err == nil {
+		c.Fatalf("pull from blocked public registry should have failed, output: %s", out)
+	}
+
+	// tag busybox as library/hello-world and push it to some private registry
+	if out, err := d.Cmd("tag", "busybox", s.reg.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg.url+"/library/hello-world"); !allBlocked && err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg.url+"/library/hello-world", err, out)
+	} else if allBlocked && err == nil {
+		c.Fatalf("push to private registry should have failed, output: %q", out)
+	}
+
+	// remove library/hello-world image
+	if out, err := d.Cmd("rmi", s.reg.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to remove images %v: %v, output: %s", s.reg.url+"/library/hello-world", err, out)
+	}
+	d.getAndTestImageEntry(c, 1, "busybox", busyboxID)
+
+	// try to pull from private registry
+	if out, err := d.Cmd("pull", s.reg.url+"/library/hello-world"); !allBlocked && err != nil {
+		c.Fatalf("we should have been able to pull %s/library/hello-world: %v", s.reg.url, err)
+	} else if allBlocked && err == nil {
+		c.Fatalf("pull from private registry should have failed, output: %q", out)
+	} else if !allBlocked {
+		d.getAndTestImageEntry(c, 2, s.reg.url+"/library/hello-world", busyboxID)
+	}
+}
+
+func (s *DockerRegistrySuite) TestPullFromBlockedPublicRegistry(c *check.C) {
+	for _, blockedRegistry := range []string{"public", "docker.io"} {
+		s.doTestPullFromBlockedPublicRegistry(c, []string{"--block-registry=" + blockedRegistry})
+	}
+}
+
+func (s *DockerRegistrySuite) TestPullWithAllRegistriesBlocked(c *check.C) {
+	s.doTestPullFromBlockedPublicRegistry(c, []string{"--block-registry=all"})
+}
+
+// Test pulls from additional registry with public registry blocked. This
+// shall be called with various daemonArgs containing at least one
+// `--block-registry` flag.
+func (s *DockerRegistriesSuite) doTestPullFromPrivateRegistriesWithPublicBlocked(c *check.C, daemonArgs []string) {
+	allBlocked := false
+	for _, arg := range daemonArgs {
+		if arg == "--block-registry=all" {
+			allBlocked = true
+		}
+	}
+	d := NewDaemon(c)
+	daemonArgs = append(daemonArgs, "--add-registry="+s.reg1.url)
+	if err := d.StartWithBusybox(daemonArgs...); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing { %s } flags: %v", strings.Join(daemonArgs, ", "), err)
+	}
+	defer d.Stop()
+
+	busyboxID := d.getAndTestImageEntry(c, 1, "busybox", "").id
+
+	// try to pull from blocked public registry
+	if out, err := d.Cmd("pull", "library/hello-world"); err == nil {
+		c.Fatalf("pulling from blocked public registry should have failed, output: %s", out)
+	}
+
+	// push busybox to
+	//  additional registry as "misc/busybox"
+	//  private registry as "library/busybox"
+	// and remove all local images
+	if out, err := d.Cmd("tag", "busybox", s.reg1.url+"/misc/busybox"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("tag", "busybox", s.reg2.url+"/library/busybox"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg1.url+"/misc/busybox"); err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg1.url+"/misc/busybox", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg2.url+"/library/busybox"); !allBlocked && err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg2.url+"/library/busybox", err, out)
+	} else if allBlocked && err == nil {
+		c.Fatalf("push to private registry should have failed, output: %q", out)
+	}
+	toRemove := []string{"busybox", "misc/busybox", s.reg2.url + "/library/busybox"}
+	if out, err := d.Cmd("rmi", toRemove...); err != nil {
+		c.Fatalf("failed to remove images %v: %v, output: %s", toRemove, err, out)
+	}
+	d.getAndTestImageEntry(c, 0, "", "")
+
+	// try to pull "library/busybox" from additional registry
+	if out, err := d.Cmd("pull", "library/busybox"); err == nil {
+		c.Fatalf("pull of library/busybox from additional registry should have failed, output: %q", out)
+	}
+
+	// now pull the "misc/busybox" from additional registry
+	if _, err := d.Cmd("pull", "misc/busybox"); err != nil {
+		c.Fatalf("we should have been able to pull misc/hello-world from %q: %v", s.reg1.url, err)
+	}
+	d.getAndTestImageEntry(c, 1, s.reg1.url+"/misc/busybox", busyboxID)
+
+	// try to pull "library/busybox" from private registry
+	if out, err := d.Cmd("pull", s.reg2.url+"/library/busybox"); !allBlocked && err != nil {
+		c.Fatalf("we should have been able to pull %s/library/busybox: %v", s.reg2.url, err)
+	} else if allBlocked && err == nil {
+		c.Fatalf("pull from private registry should have failed, output: %q", out)
+	} else if !allBlocked {
+		d.getAndTestImageEntry(c, 2, s.reg2.url+"/library/busybox", busyboxID)
+	}
+}
+
+func (s *DockerRegistriesSuite) TestPullFromPrivateRegistriesWithPublicBlocked(c *check.C) {
+	for _, blockedRegistry := range []string{"public", "docker.io"} {
+		s.doTestPullFromPrivateRegistriesWithPublicBlocked(c, []string{"--block-registry=" + blockedRegistry})
+	}
+}
+
+func (s *DockerRegistriesSuite) TestPullFromAdditionalRegistryWithAllBlocked(c *check.C) {
+	s.doTestPullFromPrivateRegistriesWithPublicBlocked(c, []string{"--block-registry=all"})
+}
+
+func (s *DockerRegistriesSuite) TestPullFromBlockedRegistry(c *check.C) {
+	d := NewDaemon(c)
+	daemonArgs := []string{"--block-registry=" + s.reg1.url, "--add-registry=" + s.reg2.url}
+	if err := d.StartWithBusybox(daemonArgs...); err != nil {
+		c.Fatalf("we should have been able to start the daemon with passing { %s } flags: %v", strings.Join(daemonArgs, ", "), err)
+	}
+	defer d.Stop()
+
+	busyboxID := d.getAndTestImageEntry(c, 1, "busybox", "").id
+
+	// pull image from docker.io
+	if _, err := d.Cmd("pull", "library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull library/hello-world from \"docker.io\": %v", err)
+	}
+	helloWorldID := d.getAndTestImageEntry(c, 2, "docker.io/hello-world", "").id
+	if helloWorldID == busyboxID {
+		c.Fatalf("docker.io/hello-world must have different ID than busybox image")
+	}
+
+	// push "hello-world" to blocked and additional registry and remove all local images
+	if out, err := d.Cmd("tag", "busybox", s.reg1.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("tag", "busybox", s.reg2.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to tag image %s: error %v, output %q", "busybox", err, out)
+	}
+	if out, err := d.Cmd("push", s.reg1.url+"/library/hello-world"); err == nil {
+		c.Fatalf("push to blocked registry should have failed, output: %q", out)
+	}
+	if out, err := d.Cmd("push", s.reg2.url+"/library/hello-world"); err != nil {
+		c.Fatalf("failed to push image %s: error %v, output %q", s.reg2.url+"/library/hello-world", err, out)
+	}
+	toRemove := []string{"library/hello-world", s.reg1.url + "/library/hello-world", "docker.io/hello-world", "busybox"}
+	if out, err := d.Cmd("rmi", toRemove...); err != nil {
+		c.Fatalf("failed to remove images %v: %v, output: %s", toRemove, err, out)
+	}
+	d.getAndTestImageEntry(c, 0, "", "")
+
+	// try to pull "library/hello-world" from blocked registry
+	if out, err := d.Cmd("pull", s.reg1.url+"/library/hello-world"); err == nil {
+		c.Fatalf("pull of library/hello-world from additional registry should have failed, output: %q", out)
+	}
+
+	// now pull the "library/hello-world" from additional registry
+	if _, err := d.Cmd("pull", s.reg2.url+"/library/hello-world"); err != nil {
+		c.Fatalf("we should have been able to pull library/hello-world from %q: %v", s.reg2.url, err)
+	}
+	d.getAndTestImageEntry(c, 1, s.reg2.url+"/library/hello-world", busyboxID)
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/parsers"
-	"github.com/docker/docker/registry"
 )
 
 // ImageExport exports list of images to a output stream specified in the
@@ -36,7 +35,7 @@ func (s *TagStore) ImageExport(names []string, outStream io.Writer) error {
 		}
 	}
 	for _, name := range names {
-		name = registry.NormalizeLocalName(name)
+		name = s.NormalizeLocalName(name)
 		logrus.Debugf("Serializing %s", name)
 		rootRepo := s.Repositories[name]
 		if rootRepo != nil {
