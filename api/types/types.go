@@ -83,7 +83,7 @@ type GraphDriverData struct {
 
 // GET "/images/{name:.*}/json"
 type ImageInspectBase struct {
-	ID              string
+	Id              string
 	Parent          string
 	Comment         string
 	Created         string
@@ -97,7 +97,7 @@ type ImageInspectBase struct {
 	Size            int64
 }
 
-// ImageInspectBase contains response of Remote API:
+// ImageInspect contains response of Remote API:
 // GET "/images/{name:.*}/json"
 type ImageInspect struct {
 	ImageInspectBase
