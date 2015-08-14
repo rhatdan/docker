@@ -68,6 +68,7 @@ mkdir -p src/github.com/docker/distribution
 mv tmp-digest src/github.com/docker/distribution/digest
 mkdir -p src/github.com/docker/distribution/registry
 mv tmp-api src/github.com/docker/distribution/registry/api
+clone git github.com/vbatts/tar-split v0.9.6
 
 clone git github.com/docker/libcontainer v2.1.1
 # libcontainer deps (see src/github.com/docker/libcontainer/update-vendor.sh)

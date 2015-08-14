@@ -3,12 +3,14 @@ package graph
 import (
 	"compress/gzip"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -25,6 +27,8 @@ import (
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/pkg/truncindex"
 	"github.com/docker/docker/runconfig"
+	"github.com/vbatts/tar-split/tar/asm"
+	"github.com/vbatts/tar-split/tar/storage"
 )
 
 // A Graph is a store for versioned filesystem images and the relationship between them.
@@ -193,8 +197,7 @@ func (graph *Graph) Register(img *image.Image, layerData archive.ArchiveReader) 
 		return fmt.Errorf("Driver %s failed to create image rootfs %s: %s", graph.driver, img.ID, err)
 	}
 	// Apply the diff/layer
-	img.SetGraph(graph)
-	if err := image.StoreImage(img, layerData, tmp); err != nil {
+	if err := graph.storeImage(img, layerData, tmp); err != nil {
 		return err
 	}
 	// Commit
@@ -218,7 +221,7 @@ func (graph *Graph) TempLayerArchive(id string, sf *streamformatter.StreamFormat
 	if err != nil {
 		return nil, err
 	}
-	a, err := image.TarLayer()
+	a, err := graph.TarLayer(image)
 	if err != nil {
 		return nil, err
 	}
@@ -442,4 +445,136 @@ func (graph *Graph) ImageRoot(id string) string {
 
 func (graph *Graph) Driver() graphdriver.Driver {
 	return graph.driver
+}
+
+// file names for ./graph/<ID>/
+const (
+	jsonFileName      = "json"
+	layersizeFileName = "layersize"
+	digestFileName    = "checksum"
+	tarDataFileName   = "tar-data.json.gz"
+)
+
+func (graph *Graph) disassembleAndApplyTarLayer(img *image.Image, layerData archive.ArchiveReader, root string) error {
+	// this is saving the tar-split metadata
+	mf, err := os.OpenFile(filepath.Join(root, tarDataFileName), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(0600))
+	if err != nil {
+		return err
+	}
+	mfz := gzip.NewWriter(mf)
+	metaPacker := storage.NewJSONPacker(mfz)
+	defer mf.Close()
+	defer mfz.Close()
+
+	inflatedLayerData, err := archive.DecompressStream(layerData)
+	if err != nil {
+		return err
+	}
+
+	// we're passing nil here for the file putter, because the ApplyDiff will
+	// handle the extraction of the archive
+	rdr, err := asm.NewInputTarStream(inflatedLayerData, metaPacker, nil)
+	if err != nil {
+		return err
+	}
+
+	if img.Size, err = graph.driver.ApplyDiff(img.ID, img.Parent, archive.ArchiveReader(rdr)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (graph *Graph) assembleTarLayer(img *image.Image) (archive.Archive, error) {
+	root := filepath.Join(graph.Root, img.ID)
+	mFileName := filepath.Join(root, tarDataFileName)
+	mf, err := os.Open(mFileName)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logrus.Errorf("failed to open %q: %s", mFileName, err)
+		}
+		return nil, err
+	}
+	pR, pW := io.Pipe()
+	// this will need to be in a goroutine, as we are returning the stream of a
+	// tar archive, but can not close the metadata reader early (when this
+	// function returns)...
+	go func() {
+		defer mf.Close()
+		// let's reassemble!
+		logrus.Debugf("[graph] TarLayer with reassembly: %s", img.ID)
+		mfz, err := gzip.NewReader(mf)
+		if err != nil {
+			pW.CloseWithError(fmt.Errorf("[graph] error with %s:  %s", mFileName, err))
+			return
+		}
+		defer mfz.Close()
+
+		// get our relative path to the container
+		fsLayer, err := graph.driver.Get(img.ID, "")
+		if err != nil {
+			pW.CloseWithError(err)
+			return
+		}
+		defer graph.driver.Put(img.ID)
+
+		metaUnpacker := storage.NewJSONUnpacker(mfz)
+		fileGetter := storage.NewPathFileGetter(fsLayer)
+		logrus.Debugf("[graph] %s is at %q", img.ID, fsLayer)
+		ots := asm.NewOutputTarStream(fileGetter, metaUnpacker)
+		defer ots.Close()
+		if _, err := io.Copy(pW, ots); err != nil {
+			pW.CloseWithError(err)
+			return
+		}
+		pW.Close()
+	}()
+	return pR, nil
+}
+
+// TarLayer returns a tar archive of the image's filesystem layer.
+func (graph *Graph) TarLayer(img *image.Image) (arch archive.Archive, err error) {
+	rdr, err := graph.assembleTarLayer(img)
+	if err != nil {
+		logrus.Debugf("[graph] TarLayer with traditional differ: %s", img.ID)
+		return graph.driver.Diff(img.ID, img.Parent)
+	}
+	return rdr, nil
+}
+
+// storeImage stores file system layer data for the given image to the
+// graph's storage driver. Image metadata is stored in a file
+// at the specified root directory.
+func (graph *Graph) storeImage(img *image.Image, layerData archive.ArchiveReader, root string) (err error) {
+	// Store the layer. If layerData is not nil, unpack it into the new layer
+	if layerData != nil {
+		if err := graph.disassembleAndApplyTarLayer(img, layerData, root); err != nil {
+			return err
+		}
+	}
+
+	if err := graph.saveSize(root, img.Size); err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(jsonPath(root), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(0600))
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	return json.NewEncoder(f).Encode(img)
+}
+
+func jsonPath(root string) string {
+	return filepath.Join(root, jsonFileName)
+}
+
+// saveSize stores the `size` in the provided graph `img` directory `root`.
+func (graph *Graph) saveSize(root string, size int64) error {
+	if err := ioutil.WriteFile(filepath.Join(root, layersizeFileName), []byte(strconv.FormatInt(size, 10)), 0600); err != nil {
+		return fmt.Errorf("Error storing image size in %s/%s: %s", root, layersizeFileName, err)
+	}
+	return nil
 }

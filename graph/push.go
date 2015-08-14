@@ -458,7 +458,7 @@ func (s *TagStore) pushV2Image(r *registry.Session, img *image.Image, endpoint *
 	if err != nil {
 		return "", err
 	}
-	arch, err := image.TarLayer()
+	arch, err := s.graph.TarLayer(image)
 	if err != nil {
 		return "", err
 	}

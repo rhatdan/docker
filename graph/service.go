@@ -327,7 +327,7 @@ func (s *TagStore) pullImageJSON(r *registry.Session, imgID, endpoint string, to
 // ImageTarLayer return the tarLayer of the image
 func (s *TagStore) ImageTarLayer(name string, dest io.Writer) error {
 	if image, err := s.LookupImage(name); err == nil && image != nil {
-		fs, err := image.TarLayer()
+		fs, err := s.graph.TarLayer(image)
 		if err != nil {
 			return err
 		}
