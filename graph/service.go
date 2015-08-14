@@ -50,7 +50,7 @@ func NewManifestFetcher(s *TagStore, endpoint registry.APIEndpoint, repoInfo *re
 func makeRemoteImageInspect(repoInfo *registry.RepositoryInfo, img *image.Image, tag string, dgst digest.Digest) *types.RemoteImageInspect {
 	return &types.RemoteImageInspect{
 		types.ImageInspectBase{
-			ID:              img.ID,
+			Id:              img.ID,
 			Parent:          img.Parent,
 			Comment:         img.Comment,
 			Created:         img.Created.Format(time.RFC3339Nano),
@@ -92,7 +92,7 @@ func (s *TagStore) Lookup(name string) (*types.ImageInspect, error) {
 
 	imageInspect := &types.ImageInspect{
 		types.ImageInspectBase{
-			ID:              image.ID,
+			Id:              image.ID,
 			Parent:          image.Parent,
 			Comment:         image.Comment,
 			Created:         image.Created.Format(time.RFC3339Nano),

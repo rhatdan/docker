@@ -1244,7 +1244,38 @@ func (s *Server) getImagesByName(version version.Version, w http.ResponseWriter,
 		return fmt.Errorf("Missing parameter")
 	}
 
-	imageInspect, err := s.daemon.Repositories().Lookup(vars["name"])
+	name := vars["name"]
+
+	if boolValue(r, "remote") {
+		authEncoded := r.Header.Get("X-Registry-Auth")
+		authConfig := &cliconfig.AuthConfig{}
+		if authEncoded != "" {
+			authJSON := base64.NewDecoder(base64.URLEncoding, strings.NewReader(authEncoded))
+			if err := json.NewDecoder(authJSON).Decode(authConfig); err != nil {
+				// for a pull it is not an error if no auth was given
+				// to increase compatibility with the existing api it is defaulting to be empty
+				authConfig = &cliconfig.AuthConfig{}
+			}
+		}
+
+		image, tag := parsers.ParseRepositoryTag(name)
+		metaHeaders := map[string][]string{}
+		for k, v := range r.Header {
+			if strings.HasPrefix(k, "X-Meta-") {
+				metaHeaders[k] = v
+			}
+		}
+		lookupRemoteConfig := &graph.LookupRemoteConfig{
+			MetaHeaders: metaHeaders,
+			AuthConfig:  authConfig,
+		}
+		imageInspect, err := s.daemon.Repositories().LookupRemote(image, tag, lookupRemoteConfig)
+		if err != nil {
+			return err
+		}
+		return writeJSON(w, http.StatusOK, imageInspect)
+	}
+	imageInspect, err := s.daemon.Repositories().Lookup(name)
 	if err != nil {
 		return err
 	}
