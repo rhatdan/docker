@@ -72,7 +72,10 @@ func (s *TagStore) Pull(image string, tag string, imagePullConfig *ImagePullConf
 }
 
 func (s *TagStore) pullFromRegistry(image string, tag string, imagePullConfig *ImagePullConfig) error {
-	var sf = streamformatter.NewJSONStreamFormatter()
+	var (
+		sf  = streamformatter.NewJSONStreamFormatter()
+		out = imagePullConfig.OutStream
+	)
 
 	// Resolve the Repository name from fqn to RepositoryInfo
 	repoInfo, err := s.registryService.ResolveRepository(image)
@@ -80,13 +83,17 @@ func (s *TagStore) pullFromRegistry(image string, tag string, imagePullConfig *I
 		return err
 	}
 
+	out.Write(sf.FormatStream(fmt.Sprintf("Trying to pull repository %s ... ", repoInfo.CanonicalName)))
+
 	// makes sure name is not empty or `scratch`
 	if err := validateRepoName(repoInfo.LocalName); err != nil {
+		out.Write(sf.FormatStatus("", "failed"))
 		return err
 	}
 
 	endpoints, err := s.registryService.LookupPullEndpoints(repoInfo.CanonicalName)
 	if err != nil {
+		out.Write(sf.FormatStatus("", "failed"))
 		return err
 	}
 
@@ -97,7 +104,6 @@ func (s *TagStore) pullFromRegistry(image string, tag string, imagePullConfig *I
 
 	var (
 		lastErr error
-		out     = imagePullConfig.OutStream
 
 		// discardNoSupportErrors is used to track whether an endpoint encountered an error of type registry.ErrNoSupport
 		// By default it is false, which means that if a ErrNoSupport error is encountered, it will be saved in lastErr.
@@ -122,7 +128,6 @@ func (s *TagStore) pullFromRegistry(image string, tag string, imagePullConfig *I
 			lastErr = err
 			continue
 		}
-		out.Write(sf.FormatStream(fmt.Sprintf("Trying to pull repository %s ...", repoInfo.CanonicalName)))
 		if fallback, err := puller.Pull(tag); err != nil {
 			if fallback {
 				if _, ok := err.(registry.ErrNoSupport); !ok {
@@ -156,9 +161,9 @@ func (s *TagStore) pullFromRegistry(image string, tag string, imagePullConfig *I
 		lastErr = fmt.Errorf("no endpoints found for %s", image)
 	}
 	if strings.Contains(lastErr.Error(), "not found") {
-		out.Write(sf.FormatStatus("", " not found"))
+		out.Write(sf.FormatStatus("", "not found"))
 	} else {
-		out.Write(sf.FormatStatus("", " failed"))
+		out.Write(sf.FormatStatus("", "failed"))
 	}
 	return lastErr
 }
