@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -46,7 +47,21 @@ func untar() {
 	os.Exit(0)
 }
 
+// The archive may be compressed with one of the following algorithms:
+//  identity (uncompressed), gzip, bzip2, xz.
 func Untar(tarArchive io.Reader, dest string, options *archive.TarOptions) error {
+	return untarHandler(tarArchive, dest, options, true)
+}
+
+// UntarUncompressed reads a stream of bytes from `archive`, parses it as a tar archive,
+// and unpacks it into the directory at `dest`.
+// The archive must be an uncompressed stream.
+func UntarUncompressed(tarArchive io.Reader, dest string, options *archive.TarOptions) error {
+	return untarHandler(tarArchive, dest, options, false)
+}
+
+// Handler for teasing out the automatic decompression
+func untarHandler(tarArchive io.Reader, dest string, options *archive.TarOptions, decompress bool) error {
 	if tarArchive == nil {
 		return fmt.Errorf("Empty archive")
 	}
@@ -64,11 +79,20 @@ func Untar(tarArchive io.Reader, dest string, options *archive.TarOptions) error
 		}
 	}
 
-	decompressedArchive, err := archive.DecompressStream(tarArchive)
-	if err != nil {
-		return err
+	r := ioutil.NopCloser(tarArchive)
+	if decompress {
+		decompressedArchive, err := archive.DecompressStream(tarArchive)
+		if err != nil {
+			return err
+		}
+		defer decompressedArchive.Close()
+		r = decompressedArchive
 	}
-	defer decompressedArchive.Close()
+
+	return invokeUnpack(r, dest, options)
+}
+
+func invokeUnpack(decompressedArchive io.Reader, dest string, options *archive.TarOptions) error {
 
 	// We can't pass a potentially large exclude list directly via cmd line
 	// because we easily overrun the kernel's max argument/environment size
