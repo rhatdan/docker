@@ -19,6 +19,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon"
+	"github.com/docker/docker/pkg/audit"
 )
 
 //Gets the file descriptor
@@ -136,12 +137,16 @@ func generateContainerConfigMsg(c *daemon.Container) string {
 
 //LogAction logs a docker API function and records the user that initiated the request using the authentication results
 func (s *Server) LogAction(w http.ResponseWriter, r *http.Request) error {
-	var message string
+	var (
+		message  string
+		username string
+		loginuid int
+	)
 	action, c := s.parseRequest(r)
 
 	switch action {
 	case "start":
-		message += generateContainerConfigMsg(c)
+		message = fmt.Sprintf("%s%v", message, generateContainerConfigMsg(c))
 		fallthrough
 	default:
 		//Get user credentials
@@ -167,12 +172,13 @@ func (s *Server) LogAction(w http.ResponseWriter, r *http.Request) error {
 		message = fmt.Sprintf("Username=%v, %s", username, message)
 	}
 
-	//Provide the container ID being affected if it exists
+	//Log the container ID being affected if it exists
 	if c != nil {
 		message = fmt.Sprintf("ID=%v, %s", c.ID, message)
 	}
 	message = fmt.Sprintf("{Action=%v, %s}", action, message)
 	logSyslog(message)
+	logAuditlog(c, action, username, loginuid, true)
 	return nil
 }
 
@@ -184,4 +190,51 @@ func logSyslog(message string) {
 		fmt.Printf("Error logging to system log: %v", err)
 	}
 	logger.Info(message)
+}
+
+//Logs an API event to the audit log
+func logAuditlog(c *daemon.Container, action string, username string, loginuid int, success bool) {
+	virt := audit.AUDIT_VIRT_CONTROL
+	vm := "?"
+	vm_pid := "?"
+	exe := "?"
+	hostname := "?"
+	user := "?"
+	auid := "?"
+
+	if c != nil {
+		vm = c.Config.Image
+		vm_pid = fmt.Sprint(c.State.Pid)
+		exe = c.Path
+		hostname = c.Config.Hostname
+	}
+
+	if username != "" {
+		user = username
+	}
+
+	if loginuid != -1 {
+		auid = fmt.Sprint(loginuid)
+	}
+
+	vars := map[string]string{
+		"op":       action,
+		"reason":   "api",
+		"vm":       vm,
+		"vm-pid":   vm_pid,
+		"user":     user,
+		"auid":     auid,
+		"exe":      exe,
+		"hostname": hostname,
+	}
+
+	//Encoding is a function of libaudit that ensures
+	//that the audit values contain only approved characters.
+	for key, value := range vars {
+		if audit.AuditValueNeedsEncoding(value) {
+			vars[key] = audit.AuditEncodeNVString(key, value)
+		}
+	}
+	message := audit.AuditFormatVars(vars)
+	audit.AuditLogUserEvent(virt, message, success)
 }
