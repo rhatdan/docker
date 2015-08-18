@@ -13,8 +13,14 @@ import (
 )
 
 var (
+<<<<<<< HEAD
 	remoteRepoName  = "dockercli/busybox-by-dgst"
 	repoName        = fmt.Sprintf("%v/%s", privateRegistryURL, remoteRepoName)
+||||||| parent of 32ed90a... Add --add-registry and --block-registry options to docker daemon
+	repoName        = fmt.Sprintf("%v/dockercli/busybox-by-dgst", privateRegistryURL)
+=======
+	repoName        = fmt.Sprintf("%v/dockercli/busybox-by-dgst", privateRegistryURLs[0])
+>>>>>>> 32ed90a... Add --add-registry and --block-registry options to docker daemon
 	pushDigestRegex = regexp.MustCompile("[\\S]+: digest: ([\\S]+) size: [0-9]+")
 	digestRegex     = regexp.MustCompile("Digest: ([\\S]+)")
 )

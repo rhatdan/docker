@@ -218,6 +218,7 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) error {
 	w.WriteHeader(code)
 	return json.NewEncoder(w).Encode(v)
 }
+
 func (s *Server) optionsHandler(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	w.WriteHeader(http.StatusOK)
 	return nil
