@@ -400,13 +400,20 @@ func (store *TagStore) SetDigest(repoName, digest, imageName string, keepUnquali
 // *Default registry* here means any registry in registry.RegistryList.
 // Returned is a list of maps with just one entry {"repositoryName": Repository}
 func (store *TagStore) getRepositoryList(repoName string) (result []map[string]Repository) {
-	if r, exists := store.Repositories[repoName]; exists {
-		result = []map[string]Repository{
-			{repoName: r},
+	repoMap := map[string]struct{}{}
+	addResult := func(name string, repo Repository) bool {
+		if _, exists := repoMap[name]; exists {
+			return false
 		}
+		result = append(result, map[string]Repository{name: repo})
+		repoMap[name] = struct{}{}
+		return true
+	}
+	if r, exists := store.Repositories[repoName]; exists {
+		addResult(repoName, r)
 	}
 	if r, exists := store.Repositories[registry.NormalizeLocalName(repoName)]; exists {
-		result = append(result, map[string]Repository{registry.NormalizeLocalName(repoName): r})
+		addResult(registry.NormalizeLocalName(repoName), r)
 	}
 	if !registry.RepositoryNameHasIndex(repoName) {
 		defaultRegistries := make(map[string]struct{}, len(registry.RegistryList))
@@ -417,14 +424,14 @@ func (store *TagStore) getRepositoryList(repoName string) (result []map[string]R
 			}
 			fqn := registry.NormalizeLocalName(registry.RegistryList[i] + "/" + repoName)
 			if r, exists := store.Repositories[fqn]; exists {
-				result = append(result, map[string]Repository{fqn: r})
+				addResult(fqn, r)
 			}
 		}
 		for name, r := range store.Repositories {
 			indexName, remoteName := registry.SplitReposName(name, false)
 			if indexName != "" && remoteName == repoName {
 				if _, exists := defaultRegistries[indexName]; exists {
-					result = append(result, map[string]Repository{name: r})
+					addResult(name, r)
 				}
 			}
 		}
