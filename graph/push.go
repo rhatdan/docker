@@ -117,9 +117,10 @@ func (s *TagStore) Push(localName string, imagePushConfig *ImagePushConfig) erro
 
 	imagePushConfig.OutStream.Write(sf.FormatStatus("", "The push refers to a repository [%s] (len: %d)", repoInfo.CanonicalName, reposLen))
 	matching := s.getRepositoryList(localName)
+Loop:
 	for _, namedRepo := range matching {
 		for _, localRepo = range namedRepo {
-			break
+			break Loop
 		}
 	}
 	if localRepo == nil {
