@@ -23,7 +23,7 @@ its own networking, and its own isolated process tree.  The
 defaults related to the binary to run, the networking to expose, and
 more, but `docker run` gives final control to the operator who starts
 the container from the image. That's the main reason
-[*run*](/reference/commandline/cli/#run) has more options than any
+[*run*](/reference/commandline/run) has more options than any
 other `docker` command.
 
 ## General form
@@ -88,7 +88,7 @@ In detached mode (`-d=true` or just `-d`), all I/O should be done
 through network connections or shared volumes because the container is
 no longer listening to the command line where you executed `docker run`.
 You can reattach to a detached container with `docker`
-[*attach*](/reference/commandline/cli/#attach). If you choose to run a
+[*attach*](/reference/commandline/attach). If you choose to run a
 container in the detached mode, then you cannot use the `--rm` option.
 
 ### Foreground
@@ -369,8 +369,8 @@ Using the `--restart` flag on Docker run you can specify a restart policy for
 how a container should or should not be restarted on exit.
 
 When a restart policy is active on a container, it will be shown as either `Up`
-or `Restarting` in [`docker ps`](/reference/commandline/cli/#ps). It can also be
-useful to use [`docker events`](/reference/commandline/cli/#events) to see the
+or `Restarting` in [`docker ps`](/reference/commandline/ps). It can also be
+useful to use [`docker events`](/reference/commandline/events) to see the
 restart policy in effect.
 
 Docker supports the following restart policies:
@@ -426,7 +426,7 @@ You can specify the maximum amount of times Docker will try to restart the
 container when using the **on-failure** policy.  The default is that Docker
 will try forever to restart the container. The number of (attempted) restarts
 for a container can be obtained via [`docker inspect`](
-/reference/commandline/cli/#inspect). For example, to get the number of restarts
+/reference/commandline/inspect). For example, to get the number of restarts
 for container "my-container";
 
     $ docker inspect -f "{{ .RestartCount }}" my-container
@@ -1057,7 +1057,7 @@ variables automatically:
 
 The container may also include environment variables defined
 as a result of the container being linked with another container. See
-the [*Container Links*](/userguide/dockerlinks/#container-linking)
+the [*Container Links*](/userguide/dockerlinks/#connect-with-the-linking-system)
 section for more details.
 
 Additionally, the operator can **set any environment variable** in the
@@ -1152,14 +1152,17 @@ volume mounted on the host).
 
 ### USER
 
-The default user within a container is `root` (id = 0), but if the
-developer created additional users, those are accessible too. The
-developer can set a default user to run the first process with the
-Dockerfile `USER` instruction, but the operator can override it:
+`root` (id = 0) is the default user within a container. The image developer can
+create additional users. Those users are accessible by name.  When passing a numeric
+ID, the user does not have to exist in the container.
+
+The developer can set a default user to run the first process with the
+Dockerfile `USER` instruction. When starting a container, the operator can override
+the `USER` instruction by passing the `-u` option.
 
     -u="": Username or UID
 
-> **Note:** if you pass numeric uid, it must be in range 0-2147483647.
+> **Note:** if you pass a numeric uid, it must be in the range of 0-2147483647.
 
 ### WORKDIR
 
