@@ -2,6 +2,7 @@
     "distribution": "FROM rhel",
     "dependencies":[
       "  RUN yum -y update && yum install -y \\",
+      "  audit-libs-devel \\",
       "  binutils \\",
       "  btrfs-progs-devel \\",
       "  btrfs-progs \\",
