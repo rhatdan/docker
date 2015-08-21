@@ -54,6 +54,7 @@ for version in "${versions[@]}"; do
 
 	# this list is sorted alphabetically; please keep it that way
 	packages=(
+		audit-libs-devel # for "libaudit.h" and libaudit.so
 		btrfs-progs-devel # for "btrfs/ioctl.h" (and "version.h" if possible)
 		device-mapper-devel # for "libdevmapper.h"
 		glibc-static
