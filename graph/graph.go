@@ -159,6 +159,11 @@ func (graph *Graph) Register(img *image.Image, layerData archive.ArchiveReader) 
 	graph.imageMutex.Lock(img.ID)
 	defer graph.imageMutex.Unlock(img.ID)
 
+	// Skip register if image is already registered
+	if graph.Exists(img.ID) {
+		return nil
+	}
+
 	defer func() {
 		// If any error occurs, remove the new dir from the driver.
 		// Don't check for errors since the dir might not have been created.
@@ -167,11 +172,6 @@ func (graph *Graph) Register(img *image.Image, layerData archive.ArchiveReader) 
 			graph.driver.Remove(img.ID)
 		}
 	}()
-
-	// (This is a convenience to save time. Race conditions are taken care of by os.Rename)
-	if graph.Exists(img.ID) {
-		return fmt.Errorf("Image %s already exists", img.ID)
-	}
 
 	// Ensure that the image root does not exist on the filesystem
 	// when it is not registered in the graph.
