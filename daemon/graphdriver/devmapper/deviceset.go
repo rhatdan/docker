@@ -40,6 +40,8 @@ var (
 	logLevel                     = devicemapper.LogLevelFatal
 	driverDeferredRemovalSupport = false
 	enableDeferredRemoval        = false
+	WarnOnLoopback               = true
+	LoopbackInUse                = false
 )
 
 const deviceSetMetaFile string = "deviceset-metadata"
@@ -1408,6 +1410,7 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 	if devices.thinPoolDevice == "" {
 		if devices.metadataLoopFile != "" || devices.dataLoopFile != "" {
 			logrus.Warnf("Usage of loopback devices is strongly discouraged for production use. Please use `--storage-opt dm.thinpooldev` or use `man docker` to refer to dm.thinpooldev section.")
+			LoopbackInUse = true
 		}
 	}
 
@@ -1996,6 +1999,8 @@ func NewDeviceSet(root string, doInit bool, options []string) (*DeviceSet, error
 		}
 		key = strings.ToLower(key)
 		switch key {
+		case "dm.no_warn_on_loop_devices":
+			WarnOnLoopback = false
 		case "dm.basesize":
 			size, err := units.RAMInBytes(val)
 			if err != nil {
