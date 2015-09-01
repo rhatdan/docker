@@ -33,9 +33,9 @@ func genOS() (string, error) {
 	switch os_str {
 	case "Fedora":
 		return "Fedora", nil
-	case "Centos":
+	case "CentOS":
 		return "Centos", nil
-	case "red":
+	case "Red":
 		return "RHEL", nil
 	default:
 		return "", nil
