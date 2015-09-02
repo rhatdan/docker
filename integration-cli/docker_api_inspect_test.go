@@ -229,9 +229,9 @@ func (s *DockerRegistrySuite) TestInspectApiNonExistentRepository(c *check.C) {
 	_, status, err := apiCallInspectImage(c, nil, repoName, false, true)
 	c.Assert(status, check.Equals, http.StatusNotFound)
 	c.Assert(err, check.Not(check.IsNil))
-	c.Assert(err.Error(), check.Matches, `(?i)no such image.*`)
+	c.Assert(err.Error(), check.Matches, `(?i)(no such image|Error: image (.* )?not found).*`)
 
 	_, status, err = apiCallInspectImage(c, nil, repoName, true, true)
 	c.Assert(err, check.Not(check.IsNil))
-	c.Assert(err.Error(), check.Matches, `(?i)(no such image|no tags available).*`)
+	c.Assert(err.Error(), check.Matches, `(?i)(no such image|no tags available|Error: image (.* )?not found).*`)
 }
