@@ -14,7 +14,7 @@ import (
 
 var (
 	remoteRepoName  = "dockercli/busybox-by-dgst"
-	repoName        = fmt.Sprintf("%v/%s", privateRegistryURL, privateRegistryURLs[0])
+	repoName        = fmt.Sprintf("%v/%s", privateRegistryURLs[0], "registry")
 	pushDigestRegex = regexp.MustCompile("[\\S]+: digest: ([\\S]+) size: [0-9]+")
 	digestRegex     = regexp.MustCompile("Digest: ([\\S]+)")
 )
