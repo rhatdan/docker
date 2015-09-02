@@ -93,7 +93,7 @@ type GraphDriverData struct {
 
 // ImageInspect contains response of Remote API:
 // GET "/images/{name:.*}/json"
-type ImageInspect struct {
+type ImageInspectBase struct {
 	ID              string `json:"Id"`
 	Parent          string
 	Comment         string
@@ -106,8 +106,21 @@ type ImageInspect struct {
 	Architecture    string
 	Os              string
 	Size            int64
-	VirtualSize     int64
-	GraphDriver     GraphDriverData
+}
+
+// GET "/images/{name:.*}/json"
+type ImageInspect struct {
+	ImageInspectBase
+	VirtualSize int64
+	GraphDriver GraphDriverData
+}
+
+// GET "/images/{name:.*}/json?remote=1"
+type RemoteImageInspect struct {
+	ImageInspectBase
+	Registry string
+	Digest   string
+	Tag      string
 }
 
 // Port stores open ports info of container
@@ -323,4 +336,16 @@ type VolumeCreateRequest struct {
 	Name       string            // Name is the requested name of the volume
 	Driver     string            // Driver is the name of the driver that should be used to create the volume
 	DriverOpts map[string]string // DriverOpts holds the driver specific options to use for when creating the volume.
+}
+
+type RepositoryTag struct {
+	Tag     string
+	ImageID string
+}
+
+// GET "/images/{name:.*}/tags"
+type RepositoryTagList struct {
+	// Fully qualified repository name
+	Name    string
+	TagList []*RepositoryTag
 }
