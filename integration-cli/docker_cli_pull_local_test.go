@@ -11,7 +11,7 @@ import (
 //
 // Ref: docker/docker#8141
 func (s *DockerRegistrySuite) TestPullImageWithAliases(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
 
 	repos := []string{}
 	for _, tag := range []string{"recent", "fresh"} {
