@@ -140,7 +140,7 @@ func trustCmdEnv(cmd *exec.Cmd, server, offlinePwd, taggingPwd string) {
 }
 
 func (s *DockerTrustSuite) setupTrustedImage(c *check.C, name string) string {
-	repoName := fmt.Sprintf("%v/dockercli/%s:latest", privateRegistryURL, name)
+	repoName := fmt.Sprintf("%v/dockercli/%s:latest", s.reg.url, name)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
