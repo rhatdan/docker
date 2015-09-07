@@ -58,7 +58,7 @@ http:
 }
 
 func newTestRegistryV2(c *check.C) (*testRegistryV2, error) {
-	return newTestRegistryV2At(c, privateRegistryURLs[0])
+	return newTestRegistryV2At(c, privateRegistryURL)
 }
 
 func (t *testRegistryV2) Ping() error {

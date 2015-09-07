@@ -5578,7 +5578,7 @@ func (s *DockerTrustSuite) TestTrustedBuild(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedBuildUntrustedTag(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/build-untrusted-tag:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/build-untrusted-tag:latest", privateRegistryURL)
 	dockerFile := fmt.Sprintf(`
   FROM %s
   RUN []

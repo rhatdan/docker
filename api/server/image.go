@@ -254,6 +254,8 @@ func (s *Server) getImagesByName(version version.Version, w http.ResponseWriter,
 		return fmt.Errorf("Missing parameter")
 	}
 
+	name := vars["name"]
+
 	if boolValue(r, "remote") {
 		authEncoded := r.Header.Get("X-Registry-Auth")
 		authConfig := &cliconfig.AuthConfig{}
@@ -266,7 +268,7 @@ func (s *Server) getImagesByName(version version.Version, w http.ResponseWriter,
 			}
 		}
 
-		image, tag := parsers.ParseRepositoryTag(vars["name"])
+		image, tag := parsers.ParseRepositoryTag(name)
 		metaHeaders := map[string][]string{}
 		for k, v := range r.Header {
 			if strings.HasPrefix(k, "X-Meta-") {
@@ -284,7 +286,7 @@ func (s *Server) getImagesByName(version version.Version, w http.ResponseWriter,
 		return writeJSON(w, http.StatusOK, imageInspect)
 	}
 
-	imageInspect, err := s.daemon.Repositories().Lookup(vars["name"])
+	imageInspect, err := s.daemon.Repositories().Lookup(name)
 	if err != nil {
 		return err
 	}
