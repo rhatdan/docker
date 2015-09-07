@@ -98,8 +98,8 @@ type DockerRegistriesSuite struct {
 }
 
 func (s *DockerRegistriesSuite) SetUpTest(c *check.C) {
-	s.reg1 = setupRegistryAt(c, privateRegistryURLs[0])
-	s.reg2 = setupRegistryAt(c, privateRegistryURLs[1])
+	s.reg1 = setupRegistryAt(c, privateRegistryURL)
+	s.reg2 = setupRegistryAt(c, privateRegistryURL2)
 }
 
 func (s *DockerRegistriesSuite) TearDownTest(c *check.C) {

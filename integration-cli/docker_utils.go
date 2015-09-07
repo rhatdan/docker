@@ -50,15 +50,6 @@ type Daemon struct {
 	userlandProxy  bool
 }
 
-func enableUserlandProxy() bool {
-	if env := os.Getenv("DOCKER_USERLANDPROXY"); env != "" {
-		if val, err := strconv.ParseBool(env); err != nil {
-			return val
-		}
-	}
-	return true
-}
-
 type localImageEntry struct {
 	name, tag, id string
 }
@@ -1507,7 +1498,7 @@ func setupRegistryAt(c *check.C, url string) *testRegistryV2 {
 }
 
 func setupRegistry(c *check.C) *testRegistryV2 {
-	return setupRegistryAt(c, privateRegistryURLs[0])
+	return setupRegistryAt(c, privateRegistryURL)
 }
 
 func setupNotary(c *check.C) *testNotary {
