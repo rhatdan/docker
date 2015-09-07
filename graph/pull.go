@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/cliconfig"
@@ -63,6 +64,29 @@ func NewPuller(s *TagStore, endpoint registry.APIEndpoint, repoInfo *registry.Re
 // Pull initiates a pull operation. image is the repository name to pull, and
 // tag may be either empty, or indicate a specific tag to pull.
 func (s *TagStore) Pull(image string, tag string, imagePullConfig *ImagePullConfig) error {
+	var err error
+	doPull := func(image string) error {
+		err := s.pullFromRegistry(image, tag, imagePullConfig)
+		return err
+	}
+	// Unless the index name is specified, iterate over all registries until
+	// the matching image is found.
+	if registry.RepositoryNameHasIndex(image) {
+		return doPull(image)
+	}
+	if len(registry.RegistryList) == 0 {
+		return fmt.Errorf("No configured registry to pull from.")
+	}
+	for _, r := range registry.RegistryList {
+		// Prepend the index name to the image name.
+		if err = doPull(fmt.Sprintf("%s/%s", r, image)); err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+func (s *TagStore) pullFromRegistry(image string, tag string, imagePullConfig *ImagePullConfig) error {
 	var sf = streamformatter.NewJSONStreamFormatter()
 
 	// Resolve the Repository name from fqn to RepositoryInfo
@@ -88,6 +112,7 @@ func (s *TagStore) Pull(image string, tag string, imagePullConfig *ImagePullConf
 
 	var (
 		lastErr error
+		out     = imagePullConfig.OutStream
 
 		// discardNoSupportErrors is used to track whether an endpoint encountered an error of type registry.ErrNoSupport
 		// By default it is false, which means that if a ErrNoSupport error is encountered, it will be saved in lastErr.
@@ -112,6 +137,7 @@ func (s *TagStore) Pull(image string, tag string, imagePullConfig *ImagePullConf
 			lastErr = err
 			continue
 		}
+		out.Write(sf.FormatStream(fmt.Sprintf("Trying to pull repository %s ...", repoInfo.CanonicalName)))
 		if fallback, err := puller.Pull(tag); err != nil {
 			if fallback {
 				if _, ok := err.(registry.ErrNoSupport); !ok {
@@ -127,16 +153,27 @@ func (s *TagStore) Pull(image string, tag string, imagePullConfig *ImagePullConf
 				continue
 			}
 			logrus.Debugf("Not continuing with error: %v", err)
+			if strings.Contains(err.Error(), "not found") {
+				out.Write(sf.FormatStatus("", "not found"))
+			} else {
+				out.Write(sf.FormatStatus("", "failed"))
+			}
 			return err
 
 		}
 
 		s.eventsService.Log("pull", logName, "")
+		out.Write(sf.FormatStatus("", ""))
 		return nil
 	}
 
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no endpoints found for %s", image)
+	}
+	if strings.Contains(lastErr.Error(), "not found") {
+		out.Write(sf.FormatStatus("", " not found"))
+	} else {
+		out.Write(sf.FormatStatus("", " failed"))
 	}
 	return lastErr
 }
