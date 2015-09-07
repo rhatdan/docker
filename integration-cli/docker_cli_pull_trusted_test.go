@@ -59,7 +59,7 @@ func (s *DockerTrustSuite) TestTrustedIsolatedPull(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestUntrustedPull(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 	dockerCmd(c, "push", repoName)
@@ -115,7 +115,7 @@ func (s *DockerTrustSuite) TestPullWhenCertExpired(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPullFromBadTrustServer(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockerclievilpull/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockerclievilpull/trusted:latest", s.reg.url)
 	evilLocalConfigDir, err := ioutil.TempDir("", "evil-local-config-dir")
 	if err != nil {
 		c.Fatalf("Failed to create local temp dir")
@@ -187,7 +187,7 @@ func (s *DockerTrustSuite) TestTrustedPullFromBadTrustServer(c *check.C) {
 
 func (s *DockerTrustSuite) TestTrustedPullWithExpiredSnapshot(c *check.C) {
 	c.Skip("Currently changes system time, causing instability")
-	repoName := fmt.Sprintf("%v/dockercliexpiredtimestamppull/trusted:latest", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercliexpiredtimestamppull/trusted:latest", s.reg.url)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 

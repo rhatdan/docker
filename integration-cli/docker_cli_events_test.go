@@ -671,7 +671,7 @@ func (s *DockerRegistrySuite) TestEventsImageFilterPush(c *check.C) {
 	testRequires(c, DaemonIsLinux)
 	testRequires(c, Network)
 	since := daemonTime(c).Unix()
-	repoName := fmt.Sprintf("%v/dockercli/testf", privateRegistryURL)
+	repoName := fmt.Sprintf("%v/dockercli/testf", s.reg.url)
 
 	out, _ := dockerCmd(c, "run", "-d", "busybox", "top")
 	cID := strings.TrimSpace(out)
