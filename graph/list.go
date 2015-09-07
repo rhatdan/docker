@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/parsers/filters"
+	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 )
 
@@ -65,19 +66,35 @@ func (s *TagStore) Images(filterArgs, filter string, all bool) ([]*types.Image, 
 		allImages = s.graph.Heads()
 	}
 
+	// try to match filter against all repositories from additional registries
+	// when dealing with short name
+	repoNameFilters := make([]string, 1, 1+len(registry.RegistryList))
+	repoNameFilters[0] = filter
+	if strings.IndexByte(filter, '/') == -1 {
+		for _, r := range registry.RegistryList {
+			repoNameFilters = append(repoNameFilters, r+"/"+filter)
+		}
+	}
+
 	lookup := make(map[string]*types.Image)
 	s.Lock()
 	for repoName, repository := range s.Repositories {
 		filterTagName := ""
-		if filter != "" {
-			filterName := filter
-			// Test if the tag was in there, if yes, get the name
-			if strings.Contains(filterName, ":") {
-				filterWithTag := strings.Split(filter, ":")
-				filterName = filterWithTag[0]
-				filterTagName = filterWithTag[1]
+		if repoNameFilters[0] != "" {
+			match := false
+			for _, filter := range repoNameFilters {
+				filterName := filter
+				// Test if the tag was in there, if yes, get the name
+				if strings.Contains(filterName, ":") {
+					filterWithTag := strings.Split(filter, ":")
+					filterName = filterWithTag[0]
+					filterTagName = filterWithTag[1]
+				}
+				if match, _ = path.Match(filterName, repoName); match {
+					break
+				}
 			}
-			if match, _ := path.Match(filterName, repoName); !match {
+			if !match {
 				continue
 			}
 			if filterTagName != "" {
