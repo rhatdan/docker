@@ -1498,7 +1498,7 @@ func setupRegistryAt(c *check.C, url string) *testRegistryV2 {
 }
 
 func setupRegistry(c *check.C) *testRegistryV2 {
-	return setupRegistryAt(c, privateRegistryURLs[0])
+	return setupRegistryAt(c, privateRegistryURL)
 }
 
 func setupNotary(c *check.C) *testNotary {

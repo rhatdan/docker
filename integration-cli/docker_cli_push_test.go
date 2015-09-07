@@ -17,7 +17,7 @@ import (
 
 // Pushing an image to a private registry.
 func (s *DockerRegistrySuite) TestPushBusyboxImage(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
 	// tag the image to upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 	// push the image to the registry
@@ -32,7 +32,7 @@ func (s *DockerSuite) TestPushUnprefixedRepo(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushUntagged(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
 
 	expected := "Repository does not exist"
 	if out, _, err := dockerCmdWithError("push", repoName); err == nil {
@@ -43,7 +43,7 @@ func (s *DockerRegistrySuite) TestPushUntagged(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushBadTag(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/busybox:latest", privateRegistryURL)
 
 	expected := "does not exist"
 
@@ -55,9 +55,9 @@ func (s *DockerRegistrySuite) TestPushBadTag(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushMultipleTags(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", s.reg.url)
-	repoTag1 := fmt.Sprintf("%v/dockercli/busybox:t1", s.reg.url)
-	repoTag2 := fmt.Sprintf("%v/dockercli/busybox:t2", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoTag1 := fmt.Sprintf("%v/dockercli/busybox:t1", privateRegistryURL)
+	repoTag2 := fmt.Sprintf("%v/dockercli/busybox:t2", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoTag1)
 
@@ -101,7 +101,7 @@ func (s *DockerRegistrySuite) TestPushMultipleTags(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TestPushEmptyLayer(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/emptylayer", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/emptylayer", privateRegistryURL)
 	emptyTarball, err := ioutil.TempFile("", "empty_tarball")
 	if err != nil {
 		c.Fatalf("Unable to create test file: %v", err)
@@ -130,7 +130,7 @@ func (s *DockerRegistrySuite) TestPushEmptyLayer(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPush(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -146,7 +146,7 @@ func (s *DockerTrustSuite) TestTrustedPush(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithFaillingServer(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -163,7 +163,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithFaillingServer(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithoutServerAndUntrusted(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -180,7 +180,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithoutServerAndUntrusted(c *check.C) 
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithExistingTag(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercli/trusted:latest", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 	dockerCmd(c, "push", repoName)
@@ -198,7 +198,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithExistingTag(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithExistingSignedTag(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockerclipushpush/trusted:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockerclipushpush/trusted:latest", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -242,7 +242,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithExistingSignedTag(c *check.C) {
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithIncorrectPassphraseForNonRoot(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercliincorretpwd/trusted:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercliincorretpwd/trusted:latest", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -273,7 +273,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithIncorrectPassphraseForNonRoot(c *c
 
 func (s *DockerTrustSuite) TestTrustedPushWithExpiredSnapshot(c *check.C) {
 	c.Skip("Currently changes system time, causing instability")
-	repoName := fmt.Sprintf("%v/dockercliexpiredsnapshot/trusted:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercliexpiredsnapshot/trusted:latest", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 
@@ -309,7 +309,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithExpiredSnapshot(c *check.C) {
 
 func (s *DockerTrustSuite) TestTrustedPushWithExpiredTimestamp(c *check.C) {
 	c.Skip("Currently changes system time, causing instability")
-	repoName := fmt.Sprintf("%v/dockercliexpiredtimestamppush/trusted:latest", s.reg.url)
+	repoName := fmt.Sprintf("%v/dockercliexpiredtimestamppush/trusted:latest", privateRegistryURL)
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", repoName)
 

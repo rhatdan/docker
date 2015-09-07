@@ -108,6 +108,7 @@ type ImageInspectBase struct {
 	Size            int64
 }
 
+// ImageInspect contains response of Remote API:
 // GET "/images/{name:.*}/json"
 type ImageInspect struct {
 	ImageInspectBase
