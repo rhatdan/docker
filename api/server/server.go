@@ -250,7 +250,7 @@ func (s *Server) initTCPSocket(addr string) (l net.Listener, err error) {
 	return
 }
 
-func makeHTTPHandler(logging bool, localMethod string, localRoute string, handlerFunc HTTPAPIFunc, corsHeaders string, dockerVersion version.Version) http.HandlerFunc {
+func (s *Server) makeHTTPHandler(logging bool, localMethod string, localRoute string, handlerFunc HTTPAPIFunc, corsHeaders string, dockerVersion version.Version) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Define the context that we'll pass around to share info
 		// like the docker-request-id.
@@ -293,6 +293,9 @@ func makeHTTPHandler(logging bool, localMethod string, localRoute string, handle
 		if corsHeaders != "" {
 			writeCorsHeaders(w, r, corsHeaders)
 		}
+
+		//Log the API call
+		s.LogAction(w, r)
 
 		if apiVersion.GreaterThan(api.Version) {
 			http.Error(w, fmt.Errorf("client is newer than server (client API version: %s, server API version: %s)", apiVersion, api.Version).Error(), http.StatusBadRequest)
@@ -401,7 +404,7 @@ func createRouter(s *Server) *mux.Router {
 			localMethod := method
 
 			// build the handler function
-			f := makeHTTPHandler(s.cfg.Logging, localMethod, localRoute, localFct, corsHeaders, version.Version(s.cfg.Version))
+			f := s.makeHTTPHandler(s.cfg.Logging, localMethod, localRoute, localFct, corsHeaders, version.Version(s.cfg.Version))
 
 			// add the new route
 			if localRoute == "" {
