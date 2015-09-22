@@ -24,22 +24,49 @@ git remote add $GITHUBUSER git@github.com:$GITHUBUSER/docker.git
 
 ### 1. Pull from master and create a release branch
 
-Note: Even for major releases, all of X, Y and Z in vX.Y.Z must be specified (e.g. v1.0.0).
+All releases version numbers will be of the form: vX.Y.Z  where X is the major
+version number, Y is the minor version number and Z is the patch release version number.
+
+#### Major releases
+
+The release branch name is just vX.Y because it's going to be the basis for all .Z releases.
 
 ```bash
+export BASE=vX.Y
 export VERSION=vX.Y.Z
 git fetch origin
-git branch -D release || true
-git checkout --track origin/release
+git checkout --track origin/master
+git checkout -b release/$BASE
+```
+
+This new branch is going to be the base for the release. We need to push it to origin so we
+can track the cherry-picked changes and the version bump:
+
+```bash
+git push origin release/$BASE
+```
+
+When you have the major release branch in origin, we need to create the bump fork branch
+that we'll push to our fork:
+
+```bash
 git checkout -b bump_$VERSION
 ```
 
-If it's a regular release, we usually merge master.
+#### Patch releases
+
+If we have the release branch in origin, we can create the forked bump branch from it directly:
+
 ```bash
-git merge origin/master
+export VERSION=vX.Y.Z
+export PATCH=vX.Y.Z+1
+git fetch origin
+git checkout --track origin/release/$BASE
+git checkout -b bump_$PATCH
 ```
 
-Otherwise, if it is a hotfix release, we cherry-pick only the commits we want.
+We cherry-pick only the commits we want into the bump branch:
+
 ```bash
 # get the commits ids we want to cherry-pick
 git log
@@ -169,7 +196,7 @@ make AWS_S3_BUCKET=beta-docs.docker.io BUILD_ROOT=yes docs-release
 git add VERSION CHANGELOG.md
 git commit -m "Bump version to $VERSION"
 git push $GITHUBUSER bump_$VERSION
-echo "https://github.com/$GITHUBUSER/docker/compare/docker:release...$GITHUBUSER:bump_$VERSION?expand=1"
+echo "https://github.com/$GITHUBUSER/docker/compare/docker:release/$BASE...$GITHUBUSER:bump_$VERSION?expand=1"
 ```
 
 That last command will give you the proper link to visit to ensure that you
@@ -185,6 +212,7 @@ Replace "..." with the respective credentials:
 
 ```bash
 docker build -t docker .
+
 docker run \
        -e AWS_S3_BUCKET=test.docker.com \
        -e AWS_ACCESS_KEY="..." \
@@ -313,7 +341,7 @@ docker run \
        hack/release.sh
 ```
 
-### 12. Apply tag
+### 12. Apply tag and create release
 
 It's very important that we don't make the tag until after the official
 release is uploaded to get.docker.com!
@@ -323,6 +351,15 @@ git tag -a $VERSION -m $VERSION bump_$VERSION
 git push origin $VERSION
 ```
 
+Once the tag is pushed, go to GitHub and create a [new release](https://github.com/docker/docker/releases/new).
+If the tag is for an RC make sure you check `This is a pre-release` at the bottom of the form.
+
+Select the tag that you just pushed as the version and paste the changelog in the description of the release.
+You can see examples in this two links:
+
+https://github.com/docker/docker/releases/tag/v1.8.0
+https://github.com/docker/docker/releases/tag/v1.8.0-rc3
+
 ### 13. Go to github to merge the `bump_$VERSION` branch into release
 
 Don't forget to push that pretty blue button to delete the leftover
@@ -330,25 +367,12 @@ branch afterwards!
 
 ### 14. Update the docs branch
 
-If this is a MAJOR.MINOR.0 release, you need to make an branch for the previous release's
-documentation:
+You will need to point the docs branch to the newly created release tag:
 
 ```bash
-git checkout -b docs-$PREVIOUS_MAJOR_MINOR
-git fetch
-git reset --hard origin/docs
-git push -f origin docs-$PREVIOUS_MAJOR_MINOR
-```
-
-You will need the `awsconfig` file added to the `docs/` directory to contain the
-s3 credentials for the bucket you are deploying to.
-
-```bash
-git checkout -b docs release || git checkout docs
-git fetch
-git reset --hard origin/release
+git checkout origin/docs
+git reset --hard origin/$VERSION
 git push -f origin docs
-make AWS_S3_BUCKET=docs.docker.com BUILD_ROOT=yes DISTRIBUTION_ID=C2K6......FL2F docs-release
 ```
 
 The docs will appear on https://docs.docker.com/ (though there may be cached
@@ -358,7 +382,7 @@ For more information about documentation releases, see `docs/README.md`.
 Note that the new docs will not appear live on the site until the cache (a complex,
 distributed CDN system) is flushed. The `make docs-release` command will do this
 _if_ the `DISTRIBUTION_ID` is set correctly - this will take at least 15 minutes to run
-and you can check its progress with the CDN Cloudfront Chrome addin.
+and you can check its progress with the CDN Cloudfront Chrome addon.
 
 ### 15. Create a new pull request to merge your bump commit back into master
 

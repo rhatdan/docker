@@ -1,6 +1,8 @@
 package daemon
 
-import "fmt"
+import (
+	derr "github.com/docker/docker/errors"
+)
 
 // ContainerUnpause unpauses a container
 func (daemon *Daemon) ContainerUnpause(name string) error {
@@ -9,8 +11,8 @@ func (daemon *Daemon) ContainerUnpause(name string) error {
 		return err
 	}
 
-	if err := container.Unpause(); err != nil {
-		return fmt.Errorf("Cannot unpause container %s: %s", name, err)
+	if err := container.unpause(); err != nil {
+		return derr.ErrorCodeCantUnpause.WithArgs(name, err)
 	}
 
 	return nil

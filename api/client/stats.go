@@ -56,17 +56,23 @@ func (s *containerStats) Collect(cli *DockerCli, streamStats bool) {
 	)
 	go func() {
 		for {
-			var v *types.Stats
+			var v *types.StatsJSON
 			if err := dec.Decode(&v); err != nil {
 				u <- err
 				return
 			}
-			var (
+
+			var memPercent = 0.0
+			var cpuPercent = 0.0
+
+			// MemoryStats.Limit will never be 0 unless the container is not running and we havn't
+			// got any data from cgroup
+			if v.MemoryStats.Limit != 0 {
 				memPercent = float64(v.MemoryStats.Usage) / float64(v.MemoryStats.Limit) * 100.0
-				cpuPercent = 0.0
-			)
-			previousCPU = v.PreCpuStats.CpuUsage.TotalUsage
-			previousSystem = v.PreCpuStats.SystemUsage
+			}
+
+			previousCPU = v.PreCPUStats.CPUUsage.TotalUsage
+			previousSystem = v.PreCPUStats.SystemUsage
 			cpuPercent = calculateCPUPercent(previousCPU, previousSystem, v)
 			blkRead, blkWrite := calculateBlockIO(v.BlkioStats)
 			s.mu.Lock()
@@ -74,8 +80,7 @@ func (s *containerStats) Collect(cli *DockerCli, streamStats bool) {
 			s.Memory = float64(v.MemoryStats.Usage)
 			s.MemoryLimit = float64(v.MemoryStats.Limit)
 			s.MemoryPercentage = memPercent
-			s.NetworkRx = float64(v.Network.RxBytes)
-			s.NetworkTx = float64(v.Network.TxBytes)
+			s.NetworkRx, s.NetworkTx = calculateNetwork(v.Networks)
 			s.BlockRead = float64(blkRead)
 			s.BlockWrite = float64(blkWrite)
 			s.mu.Unlock()
@@ -94,6 +99,11 @@ func (s *containerStats) Collect(cli *DockerCli, streamStats bool) {
 			s.CPUPercentage = 0
 			s.Memory = 0
 			s.MemoryPercentage = 0
+			s.MemoryLimit = 0
+			s.NetworkRx = 0
+			s.NetworkTx = 0
+			s.BlockRead = 0
+			s.BlockWrite = 0
 			s.mu.Unlock()
 		case err := <-u:
 			if err != nil {
@@ -192,17 +202,17 @@ func (cli *DockerCli) CmdStats(args ...string) error {
 	return nil
 }
 
-func calculateCPUPercent(previousCPU, previousSystem uint64, v *types.Stats) float64 {
+func calculateCPUPercent(previousCPU, previousSystem uint64, v *types.StatsJSON) float64 {
 	var (
 		cpuPercent = 0.0
 		// calculate the change for the cpu usage of the container in between readings
-		cpuDelta = float64(v.CpuStats.CpuUsage.TotalUsage - previousCPU)
+		cpuDelta = float64(v.CPUStats.CPUUsage.TotalUsage - previousCPU)
 		// calculate the change for the entire system between readings
-		systemDelta = float64(v.CpuStats.SystemUsage - previousSystem)
+		systemDelta = float64(v.CPUStats.SystemUsage - previousSystem)
 	)
 
 	if systemDelta > 0.0 && cpuDelta > 0.0 {
-		cpuPercent = (cpuDelta / systemDelta) * float64(len(v.CpuStats.CpuUsage.PercpuUsage)) * 100.0
+		cpuPercent = (cpuDelta / systemDelta) * float64(len(v.CPUStats.CPUUsage.PercpuUsage)) * 100.0
 	}
 	return cpuPercent
 }
@@ -211,10 +221,20 @@ func calculateBlockIO(blkio types.BlkioStats) (blkRead uint64, blkWrite uint64) 
 	for _, bioEntry := range blkio.IoServiceBytesRecursive {
 		switch strings.ToLower(bioEntry.Op) {
 		case "read":
-			blkRead = bioEntry.Value
+			blkRead = blkRead + bioEntry.Value
 		case "write":
-			blkWrite = bioEntry.Value
+			blkWrite = blkWrite + bioEntry.Value
 		}
 	}
 	return
+}
+
+func calculateNetwork(network map[string]types.NetworkStats) (float64, float64) {
+	var rx, tx float64
+
+	for _, v := range network {
+		rx += float64(v.RxBytes)
+		tx += float64(v.TxBytes)
+	}
+	return rx, tx
 }

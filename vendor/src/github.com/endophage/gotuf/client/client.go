@@ -78,7 +78,7 @@ func (c *Client) update() error {
 	if err != nil {
 		// In this instance the root has not expired base on time, but is
 		// expired based on the snapshot dictating a new root has been produced.
-		logrus.Info(err.Error())
+		logrus.Debug(err)
 		return tuf.ErrLocalRootExpired{}
 	}
 	// will always need top level targets at a minimum
@@ -223,7 +223,12 @@ func (c Client) verifyRoot(role string, s *data.Signed, minVersion int) error {
 	// This will cause keyDB to get updated, overwriting any keyIDs associated
 	// with the roles in root.json
 	logrus.Debug("updating known root roles and keys")
-	err = c.local.SetRoot(s)
+	root, err := data.RootFromSigned(s)
+	if err != nil {
+		logrus.Error(err.Error())
+		return err
+	}
+	err = c.local.SetRoot(root)
 	if err != nil {
 		logrus.Error(err.Error())
 		return err
@@ -298,7 +303,11 @@ func (c *Client) downloadTimestamp() error {
 	if download {
 		c.cache.SetMeta(role, raw)
 	}
-	c.local.SetTimestamp(s)
+	ts, err := data.TimestampFromSigned(s)
+	if err != nil {
+		return err
+	}
+	c.local.SetTimestamp(ts)
 	return nil
 }
 
@@ -366,7 +375,11 @@ func (c *Client) downloadSnapshot() error {
 		return err
 	}
 	logrus.Debug("successfully verified snapshot")
-	c.local.SetSnapshot(s)
+	snap, err := data.SnapshotFromSigned(s)
+	if err != nil {
+		return err
+	}
+	c.local.SetSnapshot(snap)
 	if download {
 		err = c.cache.SetMeta(role, raw)
 		if err != nil {
@@ -393,7 +406,11 @@ func (c *Client) downloadTargets(role string) error {
 		logrus.Error("Error getting targets file:", err)
 		return err
 	}
-	err = c.local.SetTargets(role, s)
+	t, err := data.TargetsFromSigned(s)
+	if err != nil {
+		return err
+	}
+	err = c.local.SetTargets(role, t)
 	if err != nil {
 		return err
 	}

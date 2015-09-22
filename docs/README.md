@@ -62,10 +62,6 @@ own.
 
 4. Modify existing or add new `.md` files to the `docs` directory.
 
-	If you add a new document (`.md`) file, you must also add it to the
-	appropriate section of the `docs/mkdocs.yml` file in this repository.
-
-
 5.  As you work, build the documentation site locally to see your changes.
 
 	The `docker/docker` repository contains a `Dockerfile` and a `Makefile`.
@@ -87,8 +83,8 @@ own.
 	container with this image.
 
 	The container exposes port 8000 on the localhost so that you can connect and
-	see your changes. If you are running Boot2Docker, use the `boot2docker ip`
-	to get the address of your server.
+	see your changes. If you use Docker Machine, the `docker-machine ip
+	<machine-name>` command gives you the address of your server.
 
 6.  Check your writing for style and mechanical errors.
 
@@ -158,18 +154,20 @@ update the root docs pages by running
 
      	$ make AWS_S3_BUCKET=dowideit-docs BUILD_ROOT=yes docs-release
 
-### Errors publishing using Boot2Docker
+### Errors publishing using a Docker Machine VM
 
-Sometimes, in a Boot2Docker environment, the publishing procedure returns this
+Sometimes, in a Windows or Mac environment, the publishing procedure returns this
 error:
 
 	Post http:///var/run/docker.sock/build?rm=1&t=docker-docs%3Apost-1.2.0-docs_update-2:
 	dial unix /var/run/docker.sock: no such file or directory.
 
-If this happens, set the Docker host. Run the following command to set the
+If this happens, set the Docker host. Run the following command to get the
 variables in your shell:
 
-		$ eval "$(boot2docker shellinit)"
+		docker-machine env <machine-name>
+		
+Then, set your environment accordingly.
 
 ## Cherry-picking documentation changes to update an existing release.
 
@@ -288,9 +286,9 @@ aws cloudfront  create-invalidation --profile docs.docker.com --distribution-id 
 
 ### Generate the man pages 
 
-For information on generating man pages (short for manual page), see [the man
-page directory](https://github.com/docker/docker/tree/master/docker) in this
-project.
+For information on generating man pages (short for manual page), see the README.md
+document in [the man page directory](https://github.com/docker/docker/tree/master/docker)
+in this project.
 
 
 

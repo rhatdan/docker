@@ -28,7 +28,7 @@ func NewService(options *Options) *Service {
 }
 
 // Auth contacts the public registry with the provided credentials,
-// and returns OK if authentication was sucessful.
+// and returns OK if authentication was successful.
 // It can be used to verify the validity of a client's credentials.
 func (s *Service) Auth(authConfig *cliconfig.AuthConfig) (string, error) {
 	addr := authConfig.ServerAddress
@@ -109,10 +109,29 @@ func (s *Service) tlsConfigForMirror(mirror string) (*tls.Config, error) {
 	return s.TLSConfig(mirrorURL.Host)
 }
 
-// LookupEndpoints creates an list of endpoints to try, in order of preference.
+// LookupPullEndpoints creates an list of endpoints to try to pull from, in order of preference.
 // It gives preference to v2 endpoints over v1, mirrors over the actual
 // registry, and HTTPS over plain HTTP.
-func (s *Service) LookupEndpoints(repoName string) (endpoints []APIEndpoint, err error) {
+func (s *Service) LookupPullEndpoints(repoName string) (endpoints []APIEndpoint, err error) {
+	return s.lookupEndpoints(repoName)
+}
+
+// LookupPushEndpoints creates an list of endpoints to try to push to, in order of preference.
+// It gives preference to v2 endpoints over v1, and HTTPS over plain HTTP.
+// Mirrors are not included.
+func (s *Service) LookupPushEndpoints(repoName string) (endpoints []APIEndpoint, err error) {
+	allEndpoints, err := s.lookupEndpoints(repoName)
+	if err == nil {
+		for _, endpoint := range allEndpoints {
+			if !endpoint.Mirror {
+				endpoints = append(endpoints, endpoint)
+			}
+		}
+	}
+	return endpoints, err
+}
+
+func (s *Service) lookupEndpoints(repoName string) (endpoints []APIEndpoint, err error) {
 	var cfg = tlsconfig.ServerDefault
 	tlsConfig := &cfg
 	if strings.HasPrefix(repoName, DefaultNamespace+"/") {

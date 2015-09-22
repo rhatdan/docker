@@ -35,6 +35,7 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 
 	fmt.Fprintf(cli.out, "Containers: %d\n", info.Containers)
 	fmt.Fprintf(cli.out, "Images: %d\n", info.Images)
+	fmt.Fprintf(cli.out, "Engine Version: %s\n", info.ServerVersion)
 	ioutils.FprintfIfNotEmpty(cli.out, "Storage Driver: %s\n", info.Driver)
 	if info.DriverStatus != nil {
 		for _, pair := range info.DriverStatus {
@@ -61,8 +62,8 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 		fmt.Fprintf(cli.out, "Docker Root Dir: %s\n", info.DockerRootDir)
 	}
 
-	ioutils.FprintfIfNotEmpty(cli.out, "Http Proxy: %s\n", info.HttpProxy)
-	ioutils.FprintfIfNotEmpty(cli.out, "Https Proxy: %s\n", info.HttpsProxy)
+	ioutils.FprintfIfNotEmpty(cli.out, "Http Proxy: %s\n", info.HTTPProxy)
+	ioutils.FprintfIfNotEmpty(cli.out, "Https Proxy: %s\n", info.HTTPSProxy)
 	ioutils.FprintfIfNotEmpty(cli.out, "No Proxy: %s\n", info.NoProxy)
 
 	if info.IndexServerAddress != "" {
@@ -82,12 +83,12 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 				fmt.Fprintf(cli.err, "WARNING: No swap limit support\n")
 			}
 			if !info.IPv4Forwarding {
-				fmt.Fprintf(cli.err, "WARNING: IPv4 forwarding is disabled.\n")
+				fmt.Fprintf(cli.err, "WARNING: IPv4 forwarding is disabled\n")
 			}
 			if !info.BridgeNfIptables {
 				fmt.Fprintf(cli.err, "WARNING: bridge-nf-call-iptables is disabled\n")
 			}
-			if !info.BridgeNfIp6tables {
+			if !info.BridgeNfIP6tables {
 				fmt.Fprintf(cli.err, "WARNING: bridge-nf-call-ip6tables is disabled\n")
 			}
 		}

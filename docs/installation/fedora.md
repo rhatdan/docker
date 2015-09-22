@@ -12,7 +12,6 @@ parent = "smn_linux"
 
 Docker is supported on the following versions of Fedora:
 
-- Fedora 20 
 - Fedora 21
 - Fedora 22 
 
@@ -21,7 +20,7 @@ installation mechanisms. Using these packages ensures you get the latest release
 of Docker. If you wish to install using Fedora-managed packages, consult your
 Fedora release documentation for information on Fedora's Docker support.
 
-##Prerequisites
+## Prerequisites
 
 Docker requires a 64-bit installation regardless of your Fedora version. Also, your kernel must be 3.10 at minimum. To check your current kernel
 version, open a terminal and use `uname -r` to display your kernel version:
@@ -206,6 +205,24 @@ If you need to add an HTTP Proxy, set a different directory or partition for the
 Docker runtime files, or make other customizations, read our Systemd article to
 learn how to [customize your Systemd Docker daemon options](/articles/systemd/).
 
+## Running Docker with a manually-defined network
+
+If you manually configure your network using `systemd-network` with `systemd` version 219 or higher, containers you start with Docker may be unable to access your network.
+Beginning with version 220, the forwarding setting for a given network (`net.ipv4.conf.<interface>.forwarding`) defaults to *off*. This setting prevents IP forwarding. It also conflicts with Docker which enables the `net.ipv4.conf.all.forwarding` setting within a container.
+
+To work around this, edit the `<interface>.network` file in
+`/usr/lib/systemd/network/` on your Docker host  (ex: `/usr/lib/systemd/network/80-container-host0.network`) add the following block:
+
+```
+[Network]
+...
+IPForward=kernel
+# OR
+IPForward=true
+...
+```
+
+This configuration allows IP forwarding from the container as expected.
 
 ## Uninstall
 

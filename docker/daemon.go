@@ -76,6 +76,7 @@ func NewDaemonCli() *DaemonCli {
 
 	// TODO(tiborvass): remove InstallFlags?
 	daemonConfig := new(daemon.Config)
+	daemonConfig.LogConfig.Config = make(map[string]string)
 	daemonConfig.InstallFlags(daemonFlags, presentInHelp)
 	daemonConfig.InstallFlags(flag.CommandLine, absentFromHelp)
 	registryOptions := new(registry.Options)
@@ -100,6 +101,7 @@ func migrateKey() (err error) {
 				err = os.Remove(oldPath)
 			} else {
 				logrus.Warnf("Key migration failed, key file not removed at %s", oldPath)
+				os.Remove(newPath)
 			}
 		}()
 
@@ -210,10 +212,6 @@ func (cli *DaemonCli) CmdDaemon(args ...string) error {
 		}()
 	}
 
-	if cli.LogConfig.Config == nil {
-		cli.LogConfig.Config = make(map[string]string)
-	}
-
 	serverConfig := &apiserver.Config{
 		Logging: true,
 		Version: dockerversion.VERSION,
@@ -313,7 +311,7 @@ func shutdownDaemon(d *daemon.Daemon, timeout time.Duration) {
 	}()
 	select {
 	case <-ch:
-		logrus.Debug("Clean shutdown succeded")
+		logrus.Debug("Clean shutdown succeeded")
 	case <-time.After(timeout * time.Second):
 		logrus.Error("Force shutdown daemon")
 	}

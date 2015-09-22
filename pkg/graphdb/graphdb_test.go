@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"testing"
 
-	_ "code.google.com/p/gosqlite/sqlite3"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func newTestDb(t *testing.T) (*Database, string) {
@@ -243,7 +243,7 @@ func TestAddSelfAsChild(t *testing.T) {
 	}
 }
 
-func TestAddChildToNonExistantRoot(t *testing.T) {
+func TestAddChildToNonExistentRoot(t *testing.T) {
 	db, dbpath := newTestDb(t)
 	defer destroyTestDb(dbpath)
 

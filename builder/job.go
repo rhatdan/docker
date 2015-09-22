@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -45,6 +46,18 @@ var validCommitCommands = map[string]bool{
 	"workdir":    true,
 }
 
+// BuiltinAllowedBuildArgs is list of built-in allowed build args
+var BuiltinAllowedBuildArgs = map[string]bool{
+	"HTTP_PROXY":  true,
+	"http_proxy":  true,
+	"HTTPS_PROXY": true,
+	"https_proxy": true,
+	"FTP_PROXY":   true,
+	"ftp_proxy":   true,
+	"NO_PROXY":    true,
+	"no_proxy":    true,
+}
+
 // Config contains all configs for a build job
 type Config struct {
 	DockerfileName string
@@ -65,6 +78,7 @@ type Config struct {
 	CgroupParent   string
 	Ulimits        []*ulimit.Ulimit
 	AuthConfigs    map[string]cliconfig.AuthConfig
+	BuildArgs      map[string]string
 
 	Stdout  io.Writer
 	Context io.ReadCloser
@@ -139,7 +153,7 @@ func Build(d *daemon.Daemon, buildConfig *Config) error {
 		}
 		defer f.Body.Close()
 		ct := f.Header.Get("Content-Type")
-		clen := int(f.ContentLength)
+		clen := f.ContentLength
 		contentType, bodyReader, err := inspectResponse(ct, f.Body, clen)
 
 		defer bodyReader.Close()
@@ -190,26 +204,28 @@ func Build(d *daemon.Daemon, buildConfig *Config) error {
 			Writer:          buildConfig.Stdout,
 			StreamFormatter: sf,
 		},
-		Verbose:         !buildConfig.SuppressOutput,
-		UtilizeCache:    !buildConfig.NoCache,
-		Remove:          buildConfig.Remove,
-		ForceRemove:     buildConfig.ForceRemove,
-		Pull:            buildConfig.Pull,
-		OutOld:          buildConfig.Stdout,
-		StreamFormatter: sf,
-		AuthConfigs:     buildConfig.AuthConfigs,
-		dockerfileName:  buildConfig.DockerfileName,
-		cpuShares:       buildConfig.CPUShares,
-		cpuPeriod:       buildConfig.CPUPeriod,
-		cpuQuota:        buildConfig.CPUQuota,
-		cpuSetCpus:      buildConfig.CPUSetCpus,
-		cpuSetMems:      buildConfig.CPUSetMems,
-		cgroupParent:    buildConfig.CgroupParent,
-		memory:          buildConfig.Memory,
-		memorySwap:      buildConfig.MemorySwap,
-		ulimits:         buildConfig.Ulimits,
-		cancelled:       buildConfig.WaitCancelled(),
-		id:              stringid.GenerateRandomID(),
+		Verbose:          !buildConfig.SuppressOutput,
+		UtilizeCache:     !buildConfig.NoCache,
+		Remove:           buildConfig.Remove,
+		ForceRemove:      buildConfig.ForceRemove,
+		Pull:             buildConfig.Pull,
+		OutOld:           buildConfig.Stdout,
+		StreamFormatter:  sf,
+		AuthConfigs:      buildConfig.AuthConfigs,
+		dockerfileName:   buildConfig.DockerfileName,
+		cpuShares:        buildConfig.CPUShares,
+		cpuPeriod:        buildConfig.CPUPeriod,
+		cpuQuota:         buildConfig.CPUQuota,
+		cpuSetCpus:       buildConfig.CPUSetCpus,
+		cpuSetMems:       buildConfig.CPUSetMems,
+		cgroupParent:     buildConfig.CgroupParent,
+		memory:           buildConfig.Memory,
+		memorySwap:       buildConfig.MemorySwap,
+		ulimits:          buildConfig.Ulimits,
+		cancelled:        buildConfig.WaitCancelled(),
+		id:               stringid.GenerateRandomID(),
+		buildArgs:        buildConfig.BuildArgs,
+		allowedBuildArgs: make(map[string]bool),
 	}
 
 	defer func() {
@@ -279,6 +295,11 @@ func Commit(name string, d *daemon.Daemon, c *CommitConfig) (string, error) {
 		return "", err
 	}
 
+	// It is not possible to commit a running container on Windows
+	if runtime.GOOS == "windows" && container.IsRunning() {
+		return "", fmt.Errorf("Windows does not support commit of a running container")
+	}
+
 	if c.Config == nil {
 		c.Config = &runconfig.Config{}
 	}
@@ -316,7 +337,7 @@ func Commit(name string, d *daemon.Daemon, c *CommitConfig) (string, error) {
 //    - an io.Reader for the response body
 //    - an error value which will be non-nil either when something goes wrong while
 //      reading bytes from r or when the detected content-type is not acceptable.
-func inspectResponse(ct string, r io.ReadCloser, clen int) (string, io.ReadCloser, error) {
+func inspectResponse(ct string, r io.ReadCloser, clen int64) (string, io.ReadCloser, error) {
 	plen := clen
 	if plen <= 0 || plen > maxPreambleLength {
 		plen = maxPreambleLength

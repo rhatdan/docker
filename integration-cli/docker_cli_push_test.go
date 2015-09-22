@@ -60,58 +60,40 @@ func (s *DockerRegistrySuite) TestPushMultipleTags(c *check.C) {
 
 	dockerCmd(c, "tag", "busybox", repoTag2)
 
-	out, _ := dockerCmd(c, "push", repoName)
+	dockerCmd(c, "push", repoName)
 
-	// There should be no duplicate hashes in the output
-	imageSuccessfullyPushed := ": Image successfully pushed"
+	// Ensure layer list is equivalent for repoTag1 and repoTag2
+	out1, _ := dockerCmd(c, "pull", repoTag1)
+	if strings.Contains(out1, "Tag t1 not found") {
+		c.Fatalf("Unable to pull pushed image: %s", out1)
+	}
 	imageAlreadyExists := ": Image already exists"
-	imagePushHashes := make(map[string]struct{})
-	outputLines := strings.Split(out, "\n")
-	for _, outputLine := range outputLines {
-		if strings.Contains(outputLine, imageSuccessfullyPushed) {
-			hash := strings.TrimSuffix(outputLine, imageSuccessfullyPushed)
-			if _, present := imagePushHashes[hash]; present {
-				c.Fatalf("Duplicate image push: %s", outputLine)
-			}
-			imagePushHashes[hash] = struct{}{}
-		} else if strings.Contains(outputLine, imageAlreadyExists) {
-			hash := strings.TrimSuffix(outputLine, imageAlreadyExists)
-			if _, present := imagePushHashes[hash]; present {
-				c.Fatalf("Duplicate image push: %s", outputLine)
-			}
-			imagePushHashes[hash] = struct{}{}
+	var out1Lines []string
+	for _, outputLine := range strings.Split(out1, "\n") {
+		if strings.Contains(outputLine, imageAlreadyExists) {
+			out1Lines = append(out1Lines, outputLine)
 		}
 	}
 
-	if len(imagePushHashes) == 0 {
-		c.Fatal(`Expected at least one line containing "Image successfully pushed"`)
+	out2, _ := dockerCmd(c, "pull", repoTag2)
+	if strings.Contains(out2, "Tag t2 not found") {
+		c.Fatalf("Unable to pull pushed image: %s", out1)
 	}
-}
-
-func (s *DockerRegistrySuite) TestPushInterrupt(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
-	// tag the image and upload it to the private registry
-	dockerCmd(c, "tag", "busybox", repoName)
-
-	pushCmd := exec.Command(dockerBinary, "push", repoName)
-	if err := pushCmd.Start(); err != nil {
-		c.Fatalf("Failed to start pushing to private registry: %v", err)
-	}
-
-	// Interrupt push (yes, we have no idea at what point it will get killed).
-	time.Sleep(200 * time.Millisecond)
-	if err := pushCmd.Process.Kill(); err != nil {
-		c.Fatalf("Failed to kill push process: %v", err)
-	}
-	if out, _, err := dockerCmdWithError("push", repoName); err == nil {
-		if !strings.Contains(out, "already in progress") {
-			c.Fatalf("Push should be continued on daemon side, but seems ok: %v, %s", err, out)
+	var out2Lines []string
+	for _, outputLine := range strings.Split(out2, "\n") {
+		if strings.Contains(outputLine, imageAlreadyExists) {
+			out1Lines = append(out1Lines, outputLine)
 		}
 	}
-	// now wait until all this pushes will complete
-	// if it failed with timeout - there would be some error,
-	// so no logic about it here
-	for exec.Command(dockerBinary, "push", repoName).Run() != nil {
+
+	if len(out1Lines) != len(out2Lines) {
+		c.Fatalf("Mismatched output length:\n%s\n%s", out1, out2)
+	}
+
+	for i := range out1Lines {
+		if out1Lines[i] != out2Lines[i] {
+			c.Fatalf("Mismatched output line:\n%s\n%s", out1Lines[i], out2Lines[i])
+		}
 	}
 }
 
@@ -172,7 +154,7 @@ func (s *DockerTrustSuite) TestTrustedPushWithFaillingServer(c *check.C) {
 		c.Fatalf("Missing error while running trusted push w/ no server")
 	}
 
-	if !strings.Contains(string(out), "Error establishing connection to notary repository") {
+	if !strings.Contains(string(out), "error contacting notary server") {
 		c.Fatalf("Missing expected output on trusted push:\n%s", out)
 	}
 }

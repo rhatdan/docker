@@ -12,11 +12,10 @@ import (
 )
 
 func (s *DockerSuite) TestLogsApiWithStdout(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	out, _ := dockerCmd(c, "run", "-d", "-t", "busybox", "/bin/sh", "-c", "while true; do echo hello; sleep 1; done")
 	id := strings.TrimSpace(out)
-	if err := waitRun(id); err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(waitRun(id), check.IsNil)
 
 	type logOut struct {
 		out string
@@ -53,6 +52,7 @@ func (s *DockerSuite) TestLogsApiWithStdout(c *check.C) {
 }
 
 func (s *DockerSuite) TestLogsApiNoStdoutNorStderr(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	name := "logs_test"
 	dockerCmd(c, "run", "-d", "-t", "--name", name, "busybox", "/bin/sh")
 
@@ -68,6 +68,7 @@ func (s *DockerSuite) TestLogsApiNoStdoutNorStderr(c *check.C) {
 
 // Regression test for #12704
 func (s *DockerSuite) TestLogsApiFollowEmptyOutput(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	name := "logs_test"
 	t0 := time.Now()
 	dockerCmd(c, "run", "-d", "-t", "--name", name, "busybox", "sleep", "10")

@@ -24,10 +24,22 @@ var (
 	ErrDriverNotFound          = errors.New("The requested docker init has not been found")
 )
 
-// StartCallback defines a callback function.
-// It's used by 'Run' and 'Exec', does some work in parent process
-// after child process is started.
-type StartCallback func(*ProcessConfig, int)
+// DriverCallback defines a callback function which is used in "Run" and "Exec".
+// This allows work to be done in the parent process when the child is passing
+// through PreStart, Start and PostStop events.
+// Callbacks are provided a processConfig pointer and the pid of the child
+type DriverCallback func(processConfig *ProcessConfig, pid int) error
+
+// Hooks is a struct containing function pointers to callbacks
+// used by any execdriver implementation exploiting hooks capabilities
+type Hooks struct {
+	// PreStart is called before container's CMD/ENTRYPOINT is executed
+	PreStart []DriverCallback
+	// Start is called after the container's process is full started
+	Start DriverCallback
+	// PostStop is called after the container process exits
+	PostStop []DriverCallback
+}
 
 // Info is driver specific information based on
 // processes registered with the driver
@@ -56,11 +68,11 @@ type ExitStatus struct {
 type Driver interface {
 	// Run executes the process, blocks until the process exits and returns
 	// the exit code. It's the last stage on Docker side for running a container.
-	Run(c *Command, pipes *Pipes, startCallback StartCallback) (ExitStatus, error)
+	Run(c *Command, pipes *Pipes, hooks Hooks) (ExitStatus, error)
 
 	// Exec executes the process in an existing container, blocks until the
 	// process exits and returns the exit code.
-	Exec(c *Command, processConfig *ProcessConfig, pipes *Pipes, startCallback StartCallback) (int, error)
+	Exec(c *Command, processConfig *ProcessConfig, pipes *Pipes, hooks Hooks) (int, error)
 
 	// Kill sends signals to process in container.
 	Kill(c *Command, sig int) error
@@ -89,15 +101,9 @@ type Driver interface {
 
 	// Stats returns resource stats for a running container
 	Stats(id string) (*ResourceStats, error)
-}
 
-// Network settings of the container
-type Network struct {
-	Interface      *NetworkInterface `json:"interface"` // if interface is nil then networking is disabled
-	Mtu            int               `json:"mtu"`
-	ContainerID    string            `json:"container_id"` // id of the container to join network.
-	NamespacePath  string            `json:"namespace_path"`
-	HostNetworking bool              `json:"host_networking"`
+	// SupportsHooks refers to the driver capability to exploit pre/post hook functionality
+	SupportsHooks() bool
 }
 
 // Ipc settings of the container
@@ -130,26 +136,13 @@ type UTS struct {
 	HostUTS bool `json:"host_uts"`
 }
 
-// NetworkInterface contains all network configs for a driver
-type NetworkInterface struct {
-	Gateway              string `json:"gateway"`
-	IPAddress            string `json:"ip"`
-	IPPrefixLen          int    `json:"ip_prefix_len"`
-	MacAddress           string `json:"mac"`
-	Bridge               string `json:"bridge"`
-	GlobalIPv6Address    string `json:"global_ipv6"`
-	LinkLocalIPv6Address string `json:"link_local_ipv6"`
-	GlobalIPv6PrefixLen  int    `json:"global_ipv6_prefix_len"`
-	IPv6Gateway          string `json:"ipv6_gateway"`
-	HairpinMode          bool   `json:"hairpin_mode"`
-}
-
 // Resources contains all resource configs for a driver.
 // Currently these are all for cgroup configs.
 // TODO Windows: Factor out ulimit.Rlimit
 type Resources struct {
 	Memory           int64            `json:"memory"`
 	MemorySwap       int64            `json:"memory_swap"`
+	KernelMemory     int64            `json:"kernel_memory"`
 	CPUShares        int64            `json:"cpu_shares"`
 	CpusetCpus       string           `json:"cpuset_cpus"`
 	CpusetMems       string           `json:"cpuset_mems"`

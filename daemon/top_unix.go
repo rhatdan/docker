@@ -3,14 +3,19 @@
 package daemon
 
 import (
-	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/docker/docker/api/types"
+	derr "github.com/docker/docker/errors"
 )
 
+// ContainerTop lists the processes running inside of the given
+// container by calling ps with the given args, or with the flags
+// "-ef" if no args are given.  An error is returned if the container
+// is not found, or is not running, or if there are any problems
+// running ps, or parsing the output.
 func (daemon *Daemon) ContainerTop(name string, psArgs string) (*types.ContainerProcessList, error) {
 	if psArgs == "" {
 		psArgs = "-ef"
@@ -22,7 +27,7 @@ func (daemon *Daemon) ContainerTop(name string, psArgs string) (*types.Container
 	}
 
 	if !container.IsRunning() {
-		return nil, fmt.Errorf("Container %s is not running", name)
+		return nil, derr.ErrorCodeNotRunning.WithArgs(name)
 	}
 
 	pids, err := daemon.ExecutionDriver().GetPidsForContainer(container.ID)
@@ -32,7 +37,7 @@ func (daemon *Daemon) ContainerTop(name string, psArgs string) (*types.Container
 
 	output, err := exec.Command("ps", strings.Split(psArgs, " ")...).Output()
 	if err != nil {
-		return nil, fmt.Errorf("Error running ps: %s", err)
+		return nil, derr.ErrorCodePSError.WithArgs(err)
 	}
 
 	procList := &types.ContainerProcessList{}
@@ -47,9 +52,10 @@ func (daemon *Daemon) ContainerTop(name string, psArgs string) (*types.Container
 		}
 	}
 	if pidIndex == -1 {
-		return nil, fmt.Errorf("Couldn't find PID field in ps output")
+		return nil, derr.ErrorCodeNoPID
 	}
 
+	// loop through the output and extract the PID from each line
 	for _, line := range lines[1:] {
 		if len(line) == 0 {
 			continue
@@ -57,7 +63,7 @@ func (daemon *Daemon) ContainerTop(name string, psArgs string) (*types.Container
 		fields := strings.Fields(line)
 		p, err := strconv.Atoi(fields[pidIndex])
 		if err != nil {
-			return nil, fmt.Errorf("Unexpected pid '%s': %s", fields[pidIndex], err)
+			return nil, derr.ErrorCodeBadPID.WithArgs(fields[pidIndex], err)
 		}
 
 		for _, pid := range pids {
@@ -70,6 +76,6 @@ func (daemon *Daemon) ContainerTop(name string, psArgs string) (*types.Container
 			}
 		}
 	}
-	container.LogEvent("top")
+	container.logEvent("top")
 	return procList, nil
 }

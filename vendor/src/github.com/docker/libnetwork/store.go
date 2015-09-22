@@ -7,7 +7,6 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/libkv/store"
 	"github.com/docker/libnetwork/datastore"
-	"github.com/docker/libnetwork/types"
 )
 
 func (c *controller) validateDatastoreConfig() bool {
@@ -91,7 +90,7 @@ func (c *controller) deleteNetworkFromStore(n *network) error {
 	return nil
 }
 
-func (c *controller) getNetworkFromStore(nid types.UUID) (*network, error) {
+func (c *controller) getNetworkFromStore(nid string) (*network, error) {
 	n := network{id: nid}
 	if err := c.store.GetObject(datastore.Key(n.Key()...), &n); err != nil {
 		return nil, err
@@ -105,7 +104,7 @@ func (c *controller) newEndpointFromStore(key string, ep *endpoint) error {
 	id := ep.id
 	ep.Unlock()
 
-	_, err := n.EndpointByID(string(id))
+	_, err := n.EndpointByID(id)
 	if err != nil {
 		if _, ok := err.(ErrNoSuchEndpoint); ok {
 			return n.addEndpoint(ep)
@@ -134,7 +133,7 @@ func (c *controller) updateEndpointToStore(ep *endpoint) error {
 	return cs.PutObjectAtomic(ep)
 }
 
-func (c *controller) getEndpointFromStore(eid types.UUID) (*endpoint, error) {
+func (c *controller) getEndpointFromStore(eid string) (*endpoint, error) {
 	ep := endpoint{id: eid}
 	if err := c.store.GetObject(datastore.Key(ep.Key()...), &ep); err != nil {
 		return nil, err
@@ -175,7 +174,11 @@ func (c *controller) watchNetworks() error {
 	cs := c.store
 	c.Unlock()
 
-	nwPairs, err := cs.KVStore().WatchTree(datastore.Key(datastore.NetworkKeyPrefix), nil)
+	networkKey := datastore.Key(datastore.NetworkKeyPrefix)
+	if err := ensureKeys(networkKey, cs); err != nil {
+		return fmt.Errorf("failed to ensure if the network keys are valid and present in store: %v", err)
+	}
+	nwPairs, err := cs.KVStore().WatchTree(networkKey, nil)
 	if err != nil {
 		return err
 	}
@@ -229,7 +232,11 @@ func (n *network) watchEndpoints() error {
 	stopCh := n.stopWatchCh
 	n.Unlock()
 
-	epPairs, err := cs.KVStore().WatchTree(datastore.Key(tmp.KeyPrefix()...), stopCh)
+	endpointKey := datastore.Key(tmp.KeyPrefix()...)
+	if err := ensureKeys(endpointKey, cs); err != nil {
+		return fmt.Errorf("failed to ensure if the endpoint keys are valid and present in store: %v", err)
+	}
+	epPairs, err := cs.KVStore().WatchTree(endpointKey, stopCh)
 	if err != nil {
 		return err
 	}
@@ -346,7 +353,7 @@ func (c *controller) processEndpointUpdate(ep *endpoint) bool {
 	if !ok {
 		return true
 	}
-	existing, _ := n.EndpointByID(string(ep.id))
+	existing, _ := n.EndpointByID(ep.id)
 	if existing == nil {
 		return true
 	}
@@ -357,15 +364,20 @@ func (c *controller) processEndpointUpdate(ep *endpoint) bool {
 		// Can't use SetIndex() because ee is locked.
 		ee.dbIndex = ep.Index()
 		ee.dbExists = true
-		if ee.container != nil && ep.container != nil {
-			// we care only about the container id
-			ee.container.id = ep.container.id
-		} else {
-			// we still care only about the container id, but this is a short-cut to communicate join or leave operation
-			ee.container = ep.container
-		}
+		ee.sandboxID = ep.sandboxID
 	}
 	ee.Unlock()
 
 	return false
+}
+
+func ensureKeys(key string, cs datastore.DataStore) error {
+	exists, err := cs.KVStore().Exists(key)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return cs.KVStore().Put(key, []byte{}, nil)
 }

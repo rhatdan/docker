@@ -35,6 +35,7 @@ import (
 	"github.com/docker/docker/pkg/units"
 	"github.com/docker/docker/pkg/urlutil"
 	"github.com/docker/docker/registry"
+	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
 )
 
@@ -64,6 +65,8 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	flCPUSetCpus := cmd.String([]string{"-cpuset-cpus"}, "", "CPUs in which to allow execution (0-3, 0,1)")
 	flCPUSetMems := cmd.String([]string{"-cpuset-mems"}, "", "MEMs in which to allow execution (0-3, 0,1)")
 	flCgroupParent := cmd.String([]string{"-cgroup-parent"}, "", "Optional parent cgroup for the container")
+	flBuildArg := opts.NewListOpts(opts.ValidateEnv)
+	cmd.Var(&flBuildArg, []string{"-build-arg"}, "Set build-time variables")
 
 	ulimits := make(map[string]*ulimit.Ulimit)
 	flUlimits := opts.NewUlimitOpt(&ulimits)
@@ -257,6 +260,14 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	}
 	v.Set("ulimits", string(ulimitsJSON))
 
+	// collect all the build-time environment variables for the container
+	buildArgs := runconfig.ConvertKVStringsToMap(flBuildArg.GetAll())
+	buildArgsJSON, err := json.Marshal(buildArgs)
+	if err != nil {
+		return err
+	}
+	v.Set("buildargs", string(buildArgsJSON))
+
 	headers := http.Header(make(map[string][]string))
 	buf, err := json.Marshal(cli.configFile.AuthConfigs)
 	if err != nil {
@@ -307,6 +318,12 @@ func (cli *DockerCli) CmdBuild(args ...string) error {
 	return nil
 }
 
+// isUNC returns true if the path is UNC (one starting \\). It always returns
+// false on Linux.
+func isUNC(path string) bool {
+	return runtime.GOOS == "windows" && strings.HasPrefix(path, `\\`)
+}
+
 // getDockerfileRelPath uses the given context directory for a `docker build`
 // and returns the absolute path to the context directory, the relative path of
 // the dockerfile in that context directory, and a non-nil error on success.
@@ -317,9 +334,16 @@ func getDockerfileRelPath(givenContextDir, givenDockerfile string) (absContextDi
 
 	// The context dir might be a symbolic link, so follow it to the actual
 	// target directory.
-	absContextDir, err = filepath.EvalSymlinks(absContextDir)
-	if err != nil {
-		return "", "", fmt.Errorf("unable to evaluate symlinks in context path: %v", err)
+	//
+	// FIXME. We use isUNC (always false on non-Windows platforms) to workaround
+	// an issue in golang. On Windows, EvalSymLinks does not work on UNC file
+	// paths (those starting with \\). This hack means that when using links
+	// on UNC paths, they will not be followed.
+	if !isUNC(absContextDir) {
+		absContextDir, err = filepath.EvalSymlinks(absContextDir)
+		if err != nil {
+			return "", "", fmt.Errorf("unable to evaluate symlinks in context path: %v", err)
+		}
 	}
 
 	stat, err := os.Lstat(absContextDir)
@@ -354,9 +378,16 @@ func getDockerfileRelPath(givenContextDir, givenDockerfile string) (absContextDi
 	}
 
 	// Evaluate symlinks in the path to the Dockerfile too.
-	absDockerfile, err = filepath.EvalSymlinks(absDockerfile)
-	if err != nil {
-		return "", "", fmt.Errorf("unable to evaluate symlinks in Dockerfile path: %v", err)
+	//
+	// FIXME. We use isUNC (always false on non-Windows platforms) to workaround
+	// an issue in golang. On Windows, EvalSymLinks does not work on UNC file
+	// paths (those starting with \\). This hack means that when using links
+	// on UNC paths, they will not be followed.
+	if !isUNC(absDockerfile) {
+		absDockerfile, err = filepath.EvalSymlinks(absDockerfile)
+		if err != nil {
+			return "", "", fmt.Errorf("unable to evaluate symlinks in Dockerfile path: %v", err)
+		}
 	}
 
 	if _, err := os.Lstat(absDockerfile); err != nil {
@@ -462,7 +493,7 @@ func getContextFromURL(out io.Writer, remoteURL, dockerfileName string) (absCont
 		In:        response.Body,
 		Out:       out,
 		Formatter: streamformatter.NewStreamFormatter(),
-		Size:      int(response.ContentLength),
+		Size:      response.ContentLength,
 		NewLines:  true,
 		ID:        "",
 		Action:    fmt.Sprintf("Downloading build context from remote url: %s", remoteURL),

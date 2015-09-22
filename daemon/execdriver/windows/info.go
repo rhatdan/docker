@@ -6,10 +6,11 @@ import "github.com/docker/docker/daemon/execdriver"
 
 type info struct {
 	ID     string
-	driver *driver
+	driver *Driver
 }
 
-func (d *driver) Info(id string) execdriver.Info {
+// Info implements the exec driver Driver interface.
+func (d *Driver) Info(id string) execdriver.Info {
 	return &info{
 		ID:     id,
 		driver: d,

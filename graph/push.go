@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/distribution/digest"
 	"github.com/docker/docker/cliconfig"
 	"github.com/docker/docker/pkg/streamformatter"
 	"github.com/docker/docker/registry"
@@ -44,13 +45,13 @@ func (s *TagStore) NewPusher(endpoint registry.APIEndpoint, localRepo Repository
 	switch endpoint.Version {
 	case registry.APIVersion2:
 		return &v2Pusher{
-			TagStore:   s,
-			endpoint:   endpoint,
-			localRepo:  localRepo,
-			repoInfo:   repoInfo,
-			config:     imagePushConfig,
-			sf:         sf,
-			layersSeen: make(map[string]bool),
+			TagStore:     s,
+			endpoint:     endpoint,
+			localRepo:    localRepo,
+			repoInfo:     repoInfo,
+			config:       imagePushConfig,
+			sf:           sf,
+			layersPushed: make(map[digest.Digest]bool),
 		}, nil
 	case registry.APIVersion1:
 		return &v1Pusher{
@@ -77,7 +78,7 @@ func (s *TagStore) Push(localName string, imagePushConfig *ImagePushConfig) erro
 		return err
 	}
 
-	endpoints, err := s.registryService.LookupEndpoints(repoInfo.CanonicalName)
+	endpoints, err := s.registryService.LookupPushEndpoints(repoInfo.CanonicalName)
 	if err != nil {
 		return err
 	}

@@ -51,6 +51,11 @@ List containers
                  "Created": 1367854155,
                  "Status": "Exit 0",
                  "Ports": [{"PrivatePort": 2222, "PublicPort": 3333, "Type": "tcp"}],
+                 "Labels": {
+                         "com.example.vendor": "Acme",
+                         "com.example.license": "GPL",
+                         "com.example.version": "1.0"
+                 },
                  "SizeRw": 12288,
                  "SizeRootFs": 0
          },
@@ -62,6 +67,7 @@ List containers
                  "Created": 1367854155,
                  "Status": "Exit 0",
                  "Ports": [],
+                 "Labels": {},
                  "SizeRw": 12288,
                  "SizeRootFs": 0
          },
@@ -73,6 +79,7 @@ List containers
                  "Created": 1367854154,
                  "Status": "Exit 0",
                  "Ports":[],
+                 "Labels": {},
                  "SizeRw":12288,
                  "SizeRootFs":0
          },
@@ -84,6 +91,7 @@ List containers
                  "Created": 1367854152,
                  "Status": "Exit 0",
                  "Ports": [],
+                 "Labels": {},
                  "SizeRw": 12288,
                  "SizeRootFs": 0
          }
@@ -191,7 +199,7 @@ Create a container
       Content-Type: application/json
 
       {
-           "Id":"e90e34656806"
+           "Id":"e90e34656806",
            "Warnings":[]
       }
 
@@ -275,7 +283,7 @@ Json Parameters:
           `{ "PathOnHost": "/dev/deviceName", "PathInContainer": "/dev/deviceName", "CgroupPermissions": "mrw"}`
     -   **Ulimits** - A list of ulimits to set in the container, specified as
           `{ "Name": <name>, "Soft": <soft limit>, "Hard": <hard limit> }`, for example:
-          `Ulimits: { "Name": "nofile", "Soft": 1024, "Hard", 2048 }}`
+          `Ulimits: { "Name": "nofile", "Soft": 1024, "Hard": 2048 }`
     -   **SecurityOpt**: A list of string values to customize labels for MLS
         systems, such as SELinux.
     -   **LogConfig** - Log configuration for the container, specified as a JSON object in the form
@@ -485,7 +493,7 @@ Status Codes:
 Get `stdout` and `stderr` logs from the container ``id``
 
 > **Note**:
-> This endpoint works only for containers with `json-file` logging driver.
+> This endpoint works only for containers with the `json-file` or `journald` logging drivers.
 
 **Example request**:
 
@@ -1921,7 +1929,7 @@ Sets up an exec instance in a running container `id`
     Content-Type: application/json
 
     {
-         "Id": "f90e34656806"
+         "Id": "f90e34656806",
          "Warnings":[]
     }
 

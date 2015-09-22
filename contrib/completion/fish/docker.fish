@@ -49,6 +49,7 @@ complete -c docker -f -n '__fish_docker_no_subcommand' -l bip -d "Use this CIDR 
 complete -c docker -f -n '__fish_docker_no_subcommand' -s D -l debug -d 'Enable debug mode'
 complete -c docker -f -n '__fish_docker_no_subcommand' -s d -l daemon -d 'Enable daemon mode'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l dns -d 'Force Docker to use specific DNS servers'
+complete -c docker -f -n '__fish_docker_no_subcommand' -l dns-opt -d 'Force Docker to use specific DNS options'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l dns-search -d 'Force Docker to use specific DNS search domains'
 complete -c docker -f -n '__fish_docker_no_subcommand' -s e -l exec-driver -d 'Force the Docker runtime to use a specific exec driver'
 complete -c docker -f -n '__fish_docker_no_subcommand' -l exec-opt -d 'Set exec driver options'
@@ -122,6 +123,7 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l cidfile -d '
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l cpuset -d 'CPUs in which to allow execution (0-3, 0,1)'
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l device -d 'Add a host device to the container (e.g. --device=/dev/sdc:/dev/xvdc:rwm)'
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l dns -d 'Set custom DNS servers'
+complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l dns-opt -d "Set custom DNS options (Use --dns-opt='' if you don't wish to set options)"
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l dns-search -d "Set custom DNS search domains (Use --dns-search=. if you don't wish to set the search domain)"
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -s e -l env -d 'Set environment variables'
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l entrypoint -d 'Overwrite the default ENTRYPOINT of the image'
@@ -134,9 +136,9 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from create' -s i -l interac
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l ipc -d 'Default is to create a private IPC namespace (POSIX SysV IPC) for the container'
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l link -d 'Add link to another container in the form of <name|id>:alias'
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l lxc-conf -d '(lxc exec-driver only) Add custom lxc options --lxc-conf="lxc.cgroup.cpuset.cpus = 0,1"'
-complete -c docker -A -f -n '__fish_seen_subcommand_from create' -s m -l memory -d 'Memory limit (format: <number><optional unit>, where unit = b, k, m or g)'
+complete -c docker -A -f -n '__fish_seen_subcommand_from create' -s m -l memory -d 'Memory limit (format: <number>[<unit>], where unit = b, k, m or g)'
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l mac-address -d 'Container MAC address (e.g. 92:d0:c6:0a:29:33)'
-complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l memory-swap -d "Total memory usage (memory + swap), set '-1' to disable swap (format: <number><optional unit>, where unit = b, k, m or g)"
+complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l memory-swap -d "Total memory usage (memory + swap), set '-1' to disable swap (format: <number>[<unit>], where unit = b, k, m or g)"
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l name -d 'Assign a name to the container'
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -l net -d 'Set the Network mode for the container'
 complete -c docker -A -f -n '__fish_seen_subcommand_from create' -s P -l publish-all -d 'Publish all exposed ports to random ports on the host interfaces'
@@ -277,7 +279,7 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from push' -a '(__fish_print
 complete -c docker -f -n '__fish_docker_no_subcommand' -a rename -d 'Rename an existing container'
 
 # restart
-complete -c docker -f -n '__fish_docker_no_subcommand' -a restart -d 'Restart a running container'
+complete -c docker -f -n '__fish_docker_no_subcommand' -a restart -d 'Restart a container'
 complete -c docker -A -f -n '__fish_seen_subcommand_from restart' -l help -d 'Print usage'
 complete -c docker -A -f -n '__fish_seen_subcommand_from restart' -s t -l time -d 'Number of seconds to try to stop for before killing the container. Once killed it will then be restarted. Default is 10 seconds.'
 complete -c docker -A -f -n '__fish_seen_subcommand_from restart' -a '(__fish_print_docker_containers running)' -d "Container"
@@ -309,6 +311,7 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l cpuset -d 'CPUs
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s d -l detach -d 'Detached mode: run the container in the background and print the new container ID'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l device -d 'Add a host device to the container (e.g. --device=/dev/sdc:/dev/xvdc:rwm)'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l dns -d 'Set custom DNS servers'
+complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l dns-opt -d "Set custom DNS options (Use --dns-opt='' if you don't wish to set options)"
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l dns-search -d "Set custom DNS search domains (Use --dns-search=. if you don't wish to set the search domain)"
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s e -l env -d 'Set environment variables'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l entrypoint -d 'Overwrite the default ENTRYPOINT of the image'
@@ -321,9 +324,9 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s i -l interactiv
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l ipc -d 'Default is to create a private IPC namespace (POSIX SysV IPC) for the container'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l link -d 'Add link to another container in the form of <name|id>:alias'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l lxc-conf -d '(lxc exec-driver only) Add custom lxc options --lxc-conf="lxc.cgroup.cpuset.cpus = 0,1"'
-complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s m -l memory -d 'Memory limit (format: <number><optional unit>, where unit = b, k, m or g)'
+complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s m -l memory -d 'Memory limit (format: <number>[<unit>], where unit = b, k, m or g)'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l mac-address -d 'Container MAC address (e.g. 92:d0:c6:0a:29:33)'
-complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l memory-swap -d "Total memory usage (memory + swap), set '-1' to disable swap (format: <number><optional unit>, where unit = b, k, m or g)"
+complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l memory-swap -d "Total memory usage (memory + swap), set '-1' to disable swap (format: <number>[<unit>], where unit = b, k, m or g)"
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l name -d 'Assign a name to the container'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l net -d 'Set the Network mode for the container'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s P -l publish-all -d 'Publish all exposed ports to random ports on the host interfaces'
@@ -335,6 +338,7 @@ complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l restart -d 'Res
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l rm -d 'Automatically remove the container when it exits (incompatible with -d)'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l security-opt -d 'Security Options'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l sig-proxy -d 'Proxy received signals to the process (non-TTY mode only). SIGCHLD, SIGSTOP, and SIGKILL are not proxied.'
+complete -c docker -A -f -n '__fish_seen_subcommand_from run' -l stop-signal 'Signal to kill a container'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s t -l tty -d 'Allocate a pseudo-TTY'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s u -l user -d 'Username or UID'
 complete -c docker -A -f -n '__fish_seen_subcommand_from run' -s v -l volume -d 'Bind mount a volume (e.g., from the host: -v /host:/container, from Docker: -v /container)'

@@ -14,6 +14,7 @@ func setPlatformSpecificContainerFields(container *Container, contJSONBase *type
 	return contJSONBase
 }
 
+// ContainerInspectPre120 gets containers for pre 1.20 APIs.
 func (daemon *Daemon) ContainerInspectPre120(name string) (*types.ContainerJSONPre120, error) {
 	container, err := daemon.Get(name)
 	if err != nil {
@@ -35,8 +36,9 @@ func (daemon *Daemon) ContainerInspectPre120(name string) (*types.ContainerJSONP
 		volumesRW[m.Destination] = m.RW
 	}
 
-	config := &types.ContainerConfig{
+	config := &types.ContainerConfigPre120{
 		container.Config,
+		container.hostConfig.VolumeDriver,
 		container.hostConfig.Memory,
 		container.hostConfig.MemorySwap,
 		container.hostConfig.CPUShares,

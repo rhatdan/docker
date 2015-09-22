@@ -33,7 +33,7 @@ type v2Puller struct {
 
 func (p *v2Puller) Pull(tag string) (fallback bool, err error) {
 	// TODO(tiborvass): was ReceiveTimeout
-	p.repo, err = NewV2Repository(p.repoInfo, p.endpoint, p.config.MetaHeaders, p.config.AuthConfig)
+	p.repo, err = NewV2Repository(p.repoInfo, p.endpoint, p.config.MetaHeaders, p.config.AuthConfig, "pull")
 	if err != nil {
 		logrus.Debugf("Error getting v2 registry: %v", err)
 		return true, err
@@ -72,43 +72,45 @@ func (p *v2Puller) pullV2Repository(tag string) (err error) {
 
 	}
 
-	c, err := p.poolAdd("pull", taggedName)
-	if err != nil {
-		if c != nil {
-			// Another pull of the same repository is already taking place; just wait for it to finish
-			p.sf.FormatStatus("", "Repository %s already being pulled by another client. Waiting.", p.repoInfo.CanonicalName)
-			<-c
-			return nil
-		}
-		return err
+	broadcaster, found := p.poolAdd("pull", taggedName)
+	broadcaster.Add(p.config.OutStream)
+	if found {
+		// Another pull of the same repository is already taking place; just wait for it to finish
+		return broadcaster.Wait()
 	}
-	defer p.poolRemove("pull", taggedName)
+
+	// This must use a closure so it captures the value of err when the
+	// function returns, not when the 'defer' is evaluated.
+	defer func() {
+		p.poolRemoveWithError("pull", taggedName, err)
+	}()
 
 	var layersDownloaded bool
 	for _, tag := range tags {
 		// pulledNew is true if either new layers were downloaded OR if existing images were newly tagged
 		// TODO(tiborvass): should we change the name of `layersDownload`? What about message in WriteStatus?
-		pulledNew, err := p.pullV2Tag(tag, taggedName)
+		pulledNew, err := p.pullV2Tag(broadcaster, tag, taggedName)
 		if err != nil {
 			return err
 		}
 		layersDownloaded = layersDownloaded || pulledNew
 	}
 
-	writeStatus(taggedName, p.config.OutStream, p.sf, layersDownloaded)
+	writeStatus(taggedName, broadcaster, p.sf, layersDownloaded)
 
 	return nil
 }
 
 // downloadInfo is used to pass information from download to extractor
 type downloadInfo struct {
-	img      *image.Image
-	tmpFile  *os.File
-	digest   digest.Digest
-	layer    distribution.ReadSeekCloser
-	size     int64
-	err      chan error
-	verified bool
+	img         *image.Image
+	tmpFile     *os.File
+	digest      digest.Digest
+	layer       distribution.ReadSeekCloser
+	size        int64
+	err         chan error
+	poolKey     string
+	broadcaster *progressreader.Broadcaster
 }
 
 type errVerification struct{}
@@ -118,30 +120,9 @@ func (errVerification) Error() string { return "verification failed" }
 func (p *v2Puller) download(di *downloadInfo) {
 	logrus.Debugf("pulling blob %q to %s", di.digest, di.img.ID)
 
-	out := p.config.OutStream
+	blobs := p.repo.Blobs(context.Background())
 
-	if c, err := p.poolAdd("pull", "img:"+di.img.ID); err != nil {
-		if c != nil {
-			out.Write(p.sf.FormatProgress(stringid.TruncateID(di.img.ID), "Layer already being pulled by another client. Waiting.", nil))
-			<-c
-			out.Write(p.sf.FormatProgress(stringid.TruncateID(di.img.ID), "Download complete", nil))
-		} else {
-			logrus.Debugf("Image (id: %s) pull is already running, skipping: %v", di.img.ID, err)
-		}
-		di.err <- nil
-		return
-	}
-
-	defer p.poolRemove("pull", "img:"+di.img.ID)
-	tmpFile, err := ioutil.TempFile("", "GetImageBlob")
-	if err != nil {
-		di.err <- err
-		return
-	}
-
-	blobs := p.repo.Blobs(nil)
-
-	desc, err := blobs.Stat(nil, di.digest)
+	desc, err := blobs.Stat(context.Background(), di.digest)
 	if err != nil {
 		logrus.Debugf("Error statting layer: %v", err)
 		di.err <- err
@@ -149,7 +130,7 @@ func (p *v2Puller) download(di *downloadInfo) {
 	}
 	di.size = desc.Size
 
-	layerDownload, err := blobs.Open(nil, di.digest)
+	layerDownload, err := blobs.Open(context.Background(), di.digest)
 	if err != nil {
 		logrus.Debugf("Error fetching layer: %v", err)
 		di.err <- err
@@ -165,34 +146,34 @@ func (p *v2Puller) download(di *downloadInfo) {
 
 	reader := progressreader.New(progressreader.Config{
 		In:        ioutil.NopCloser(io.TeeReader(layerDownload, verifier)),
-		Out:       out,
+		Out:       di.broadcaster,
 		Formatter: p.sf,
-		Size:      int(di.size),
+		Size:      di.size,
 		NewLines:  false,
 		ID:        stringid.TruncateID(di.img.ID),
 		Action:    "Downloading",
 	})
-	io.Copy(tmpFile, reader)
+	io.Copy(di.tmpFile, reader)
 
-	out.Write(p.sf.FormatProgress(stringid.TruncateID(di.img.ID), "Verifying Checksum", nil))
+	di.broadcaster.Write(p.sf.FormatProgress(stringid.TruncateID(di.img.ID), "Verifying Checksum", nil))
 
-	di.verified = verifier.Verified()
-	if !di.verified {
-		logrus.Infof("Image verification failed for layer %s", di.digest)
+	if !verifier.Verified() {
+		err = fmt.Errorf("filesystem layer verification failed for digest %s", di.digest)
+		logrus.Error(err)
+		di.err <- err
+		return
 	}
 
-	out.Write(p.sf.FormatProgress(stringid.TruncateID(di.img.ID), "Download complete", nil))
+	di.broadcaster.Write(p.sf.FormatProgress(stringid.TruncateID(di.img.ID), "Download complete", nil))
 
-	logrus.Debugf("Downloaded %s to tempfile %s", di.img.ID, tmpFile.Name())
-	di.tmpFile = tmpFile
+	logrus.Debugf("Downloaded %s to tempfile %s", di.img.ID, di.tmpFile.Name())
 	di.layer = layerDownload
 
 	di.err <- nil
 }
 
-func (p *v2Puller) pullV2Tag(tag, taggedName string) (bool, error) {
+func (p *v2Puller) pullV2Tag(out io.Writer, tag, taggedName string) (verified bool, err error) {
 	logrus.Debugf("Pulling tag from V2 registry: %q", tag)
-	out := p.config.OutStream
 
 	manSvc, err := p.repo.Manifests(context.Background())
 	if err != nil {
@@ -203,7 +184,7 @@ func (p *v2Puller) pullV2Tag(tag, taggedName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	verified, err := p.validateManifest(manifest, tag)
+	verified, err = p.validateManifest(manifest, tag)
 	if err != nil {
 		return false, err
 	}
@@ -213,11 +194,21 @@ func (p *v2Puller) pullV2Tag(tag, taggedName string) (bool, error) {
 
 	out.Write(p.sf.FormatStatus(tag, "Pulling from %s", p.repo.Name()))
 
-	downloads := make([]downloadInfo, len(manifest.FSLayers))
+	var downloads []*downloadInfo
 
-	layerIDs := []string{}
+	var layerIDs []string
 	defer func() {
 		p.graph.Release(p.sessionID, layerIDs...)
+
+		for _, d := range downloads {
+			p.poolRemoveWithError("pull", d.poolKey, err)
+			if d.tmpFile != nil {
+				d.tmpFile.Close()
+				if err := os.RemoveAll(d.tmpFile.Name()); err != nil {
+					logrus.Errorf("Failed to remove temp file: %s", d.tmpFile.Name())
+				}
+			}
+		}
 	}()
 
 	for i := len(manifest.FSLayers) - 1; i >= 0; i-- {
@@ -226,66 +217,84 @@ func (p *v2Puller) pullV2Tag(tag, taggedName string) (bool, error) {
 			logrus.Debugf("error getting image v1 json: %v", err)
 			return false, err
 		}
-		downloads[i].img = img
-		downloads[i].digest = manifest.FSLayers[i].BlobSum
-
 		p.graph.Retain(p.sessionID, img.ID)
 		layerIDs = append(layerIDs, img.ID)
 
 		// Check if exists
 		if p.graph.Exists(img.ID) {
 			logrus.Debugf("Image already exists: %s", img.ID)
+			out.Write(p.sf.FormatProgress(stringid.TruncateID(img.ID), "Already exists", nil))
 			continue
 		}
-
 		out.Write(p.sf.FormatProgress(stringid.TruncateID(img.ID), "Pulling fs layer", nil))
 
-		downloads[i].err = make(chan error)
-		go p.download(&downloads[i])
+		d := &downloadInfo{
+			img:     img,
+			poolKey: "layer:" + img.ID,
+			digest:  manifest.FSLayers[i].BlobSum,
+			// TODO: seems like this chan buffer solved hanging problem in go1.5,
+			// this can indicate some deeper problem that somehow we never take
+			// error from channel in loop below
+			err: make(chan error, 1),
+		}
+
+		tmpFile, err := ioutil.TempFile("", "GetImageBlob")
+		if err != nil {
+			return false, err
+		}
+		d.tmpFile = tmpFile
+
+		downloads = append(downloads, d)
+
+		broadcaster, found := p.poolAdd("pull", d.poolKey)
+		broadcaster.Add(out)
+		d.broadcaster = broadcaster
+		if found {
+			d.err <- nil
+		} else {
+			go p.download(d)
+		}
 	}
 
 	var tagUpdated bool
-	for i := len(downloads) - 1; i >= 0; i-- {
-		d := &downloads[i]
-		if d.err != nil {
-			if err := <-d.err; err != nil {
+	for _, d := range downloads {
+		if err := <-d.err; err != nil {
+			return false, err
+		}
+
+		if d.layer == nil {
+			// Wait for a different pull to download and extract
+			// this layer.
+			err = d.broadcaster.Wait()
+			if err != nil {
 				return false, err
 			}
+			continue
 		}
-		verified = verified && d.verified
-		if d.layer != nil {
-			// if tmpFile is empty assume download and extracted elsewhere
-			defer os.Remove(d.tmpFile.Name())
-			defer d.tmpFile.Close()
-			d.tmpFile.Seek(0, 0)
-			if d.tmpFile != nil {
 
-				reader := progressreader.New(progressreader.Config{
-					In:        d.tmpFile,
-					Out:       out,
-					Formatter: p.sf,
-					Size:      int(d.size),
-					NewLines:  false,
-					ID:        stringid.TruncateID(d.img.ID),
-					Action:    "Extracting",
-				})
+		d.tmpFile.Seek(0, 0)
+		reader := progressreader.New(progressreader.Config{
+			In:        d.tmpFile,
+			Out:       d.broadcaster,
+			Formatter: p.sf,
+			Size:      d.size,
+			NewLines:  false,
+			ID:        stringid.TruncateID(d.img.ID),
+			Action:    "Extracting",
+		})
 
-				err = p.graph.Register(d.img, reader)
-				if err != nil {
-					return false, err
-				}
-
-				if err := p.graph.SetDigest(d.img.ID, d.digest); err != nil {
-					return false, err
-				}
-
-				// FIXME: Pool release here for parallel tag pull (ensures any downloads block until fully extracted)
-			}
-			out.Write(p.sf.FormatProgress(stringid.TruncateID(d.img.ID), "Pull complete", nil))
-			tagUpdated = true
-		} else {
-			out.Write(p.sf.FormatProgress(stringid.TruncateID(d.img.ID), "Already exists", nil))
+		err = p.graph.Register(d.img, reader)
+		if err != nil {
+			return false, err
 		}
+
+		if err := p.graph.SetDigest(d.img.ID, d.digest); err != nil {
+			return false, err
+		}
+
+		d.broadcaster.Write(p.sf.FormatProgress(stringid.TruncateID(d.img.ID), "Pull complete", nil))
+		d.broadcaster.Close()
+		tagUpdated = true
 	}
 
 	manifestDigest, _, err := digestFromManifest(manifest, p.repoInfo.LocalName)
@@ -312,17 +321,18 @@ func (p *v2Puller) pullV2Tag(tag, taggedName string) (bool, error) {
 		out.Write(p.sf.FormatStatus(p.repo.Name()+":"+tag, "The image you are pulling has been verified. Important: image verification is a tech preview feature and should not be relied on to provide security."))
 	}
 
+	firstID := layerIDs[len(layerIDs)-1]
 	if utils.DigestReference(tag) {
 		// TODO(stevvooe): Ideally, we should always set the digest so we can
 		// use the digest whether we pull by it or not. Unfortunately, the tag
 		// store treats the digest as a separate tag, meaning there may be an
 		// untagged digest image that would seem to be dangling by a user.
-		if err = p.SetDigest(p.repoInfo.LocalName, tag, downloads[0].img.ID); err != nil {
+		if err = p.SetDigest(p.repoInfo.LocalName, tag, firstID); err != nil {
 			return false, err
 		}
 	} else {
 		// only set the repository/tag -> image ID mapping when pulling by tag (i.e. not by digest)
-		if err = p.Tag(p.repoInfo.LocalName, tag, downloads[0].img.ID, true); err != nil {
+		if err = p.Tag(p.repoInfo.LocalName, tag, firstID, true); err != nil {
 			return false, err
 		}
 	}
@@ -368,6 +378,28 @@ func (p *v2Puller) verifyTrustedKeys(namespace string, keys []libtrust.PublicKey
 }
 
 func (p *v2Puller) validateManifest(m *manifest.SignedManifest, tag string) (verified bool, err error) {
+	// If pull by digest, then verify the manifest digest. NOTE: It is
+	// important to do this first, before any other content validation. If the
+	// digest cannot be verified, don't even bother with those other things.
+	if manifestDigest, err := digest.ParseDigest(tag); err == nil {
+		verifier, err := digest.NewDigestVerifier(manifestDigest)
+		if err != nil {
+			return false, err
+		}
+		payload, err := m.Payload()
+		if err != nil {
+			return false, err
+		}
+		if _, err := verifier.Write(payload); err != nil {
+			return false, err
+		}
+		if !verifier.Verified() {
+			err := fmt.Errorf("image verification failed for digest %s", manifestDigest)
+			logrus.Error(err)
+			return false, err
+		}
+	}
+
 	// TODO(tiborvass): what's the usecase for having manifest == nil and err == nil ? Shouldn't be the error be "DoesNotExist" ?
 	if m == nil {
 		return false, fmt.Errorf("image manifest does not exist for tag %q", tag)
@@ -388,22 +420,6 @@ func (p *v2Puller) validateManifest(m *manifest.SignedManifest, tag string) (ver
 	verified, err = p.verifyTrustedKeys(m.Name, keys)
 	if err != nil {
 		return false, fmt.Errorf("error verifying manifest keys: %v", err)
-	}
-	localDigest, err := digest.ParseDigest(tag)
-	// if pull by digest, then verify
-	if err == nil {
-		verifier, err := digest.NewDigestVerifier(localDigest)
-		if err != nil {
-			return false, err
-		}
-		payload, err := m.Payload()
-		if err != nil {
-			return false, err
-		}
-		if _, err := verifier.Write(payload); err != nil {
-			return false, err
-		}
-		verified = verified && verifier.Verified()
 	}
 	return verified, nil
 }

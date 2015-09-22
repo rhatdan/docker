@@ -116,11 +116,11 @@ images, or you can download Docker images that other people have already created
 Docker images are the **build** component of Docker.
 
 #### Docker registries
-Docker registries hold images. These are public or private stores from which you upload
-or download images. The public Docker registry is called
-[Docker Hub](http://hub.docker.com). It provides a huge collection of existing
-images for your use. These can be images you create yourself or you
-can use images that others have previously created. Docker registries are the 
+Docker registries hold images. These are public or private stores from which you
+upload or download images. The public Docker registry is provided with the
+[Docker Hub](http://hub.docker.com). It serves a huge collection of existing
+images for your use. These can be images you create yourself or you can use
+images that others have previously created. Docker registries are the
 **distribution** component of Docker.
 
 #### Docker containers
@@ -179,8 +179,9 @@ returns a final image.
 
 ### How does a Docker registry work?
 The Docker registry is the store for your Docker images. Once you build a Docker
-image you can *push* it to a public registry [Docker Hub](https://hub.docker.com) or to 
-your own registry running behind your firewall.
+image you can *push* it to a public registry such as the one provided by [Docker
+Hub](https://hub.docker.com) or to your own registry running behind your
+firewall.
 
 Using the Docker client, you can search for already published images and then
 pull them down to your Docker host to build containers from them.
@@ -239,8 +240,8 @@ You now have a running container! From here you can manage your container, inter
 your application and then, when finished, stop and remove your container.
 
 ## The underlying technology
-Docker is written in Go and makes use of several Linux kernel features to
-deliver the functionality we've seen.
+Docker is written in Go and makes use of several kernel features to
+deliver the functionality we've seen. 
 
 ### Namespaces
 Docker takes advantage of a technology called `namespaces` to provide the
@@ -250,7 +251,7 @@ creates a set of *namespaces* for that container.
 This provides a layer of isolation: each aspect of a container runs in its own
 namespace and does not have access outside it.
 
-Some of the namespaces that Docker uses are:
+Some of the namespaces that Docker uses on Linux are:
 
  - **The `pid` namespace:** Used for process isolation (PID: Process ID). 
  - **The `net` namespace:** Used for managing network interfaces (NET:
@@ -262,7 +263,7 @@ Some of the namespaces that Docker uses are:
 Timesharing System).
 
 ### Control groups
-Docker also makes use of another technology called `cgroups` or control groups.
+Docker on Linux also makes use of another technology called `cgroups` or control groups.
 A key to running applications in isolation is to have them only use the
 resources you want. This ensures containers are good multi-tenant citizens on a
 host. Control groups allow Docker to share available hardware resources to

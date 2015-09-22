@@ -14,6 +14,7 @@ import (
 	"github.com/Graylog2/go-gelf/gelf"
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/logger"
+	"github.com/docker/docker/daemon/logger/loggerutils"
 	"github.com/docker/docker/pkg/urlutil"
 )
 
@@ -64,6 +65,12 @@ func New(ctx logger.Context) (logger.Logger, error) {
 	// remove trailing slash from container name
 	containerName := bytes.TrimLeft([]byte(ctx.ContainerName), "/")
 
+	// parse log tag
+	tag, err := loggerutils.ParseLogTag(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+
 	fields := gelfFields{
 		hostname:      hostname,
 		containerID:   ctx.ContainerID,
@@ -71,7 +78,7 @@ func New(ctx logger.Context) (logger.Logger, error) {
 		imageID:       ctx.ContainerImageID,
 		imageName:     ctx.ContainerImageName,
 		command:       ctx.Command(),
-		tag:           ctx.Config["gelf-tag"],
+		tag:           tag,
 		created:       ctx.ContainerCreated,
 	}
 
@@ -135,32 +142,40 @@ func ValidateLogOpt(cfg map[string]string) error {
 		switch key {
 		case "gelf-address":
 		case "gelf-tag":
+		case "tag":
 		default:
 			return fmt.Errorf("unknown log opt '%s' for gelf log driver", key)
 		}
 	}
+
+	if _, err := parseAddress(cfg["gelf-address"]); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func parseAddress(address string) (string, error) {
-	if urlutil.IsTransportURL(address) {
-		url, err := url.Parse(address)
-		if err != nil {
-			return "", err
-		}
-
-		// we support only udp
-		if url.Scheme != "udp" {
-			return "", fmt.Errorf("gelf: endpoint needs to be UDP")
-		}
-
-		// get host and port
-		if _, _, err = net.SplitHostPort(url.Host); err != nil {
-			return "", fmt.Errorf("gelf: please provide gelf-address as udp://host:port")
-		}
-
-		return url.Host, nil
+	if address == "" {
+		return "", nil
+	}
+	if !urlutil.IsTransportURL(address) {
+		return "", fmt.Errorf("gelf-address should be in form proto://address, got %v", address)
+	}
+	url, err := url.Parse(address)
+	if err != nil {
+		return "", err
 	}
 
-	return "", nil
+	// we support only udp
+	if url.Scheme != "udp" {
+		return "", fmt.Errorf("gelf: endpoint needs to be UDP")
+	}
+
+	// get host and port
+	if _, _, err = net.SplitHostPort(url.Host); err != nil {
+		return "", fmt.Errorf("gelf: please provide gelf-address as udp://host:port")
+	}
+
+	return url.Host, nil
 }

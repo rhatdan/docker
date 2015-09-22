@@ -20,6 +20,7 @@ type DockerSuite struct {
 func (s *DockerSuite) TearDownTest(c *check.C) {
 	deleteAllContainers()
 	deleteAllImages()
+	deleteAllVolumes()
 }
 
 func init() {
@@ -38,8 +39,12 @@ func (s *DockerRegistrySuite) SetUpTest(c *check.C) {
 }
 
 func (s *DockerRegistrySuite) TearDownTest(c *check.C) {
-	s.reg.Close()
-	s.ds.TearDownTest(c)
+	if s.reg != nil {
+		s.reg.Close()
+	}
+	if s.ds != nil {
+		s.ds.TearDownTest(c)
+	}
 }
 
 func init() {
@@ -54,10 +59,12 @@ type DockerDaemonSuite struct {
 }
 
 func (s *DockerDaemonSuite) SetUpTest(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	s.d = NewDaemon(c)
 }
 
 func (s *DockerDaemonSuite) TearDownTest(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	s.d.Stop()
 	s.ds.TearDownTest(c)
 }

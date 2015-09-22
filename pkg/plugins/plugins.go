@@ -25,6 +25,7 @@ package plugins
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/tlsconfig"
@@ -63,6 +64,9 @@ type Plugin struct {
 	Client *Client `json:"-"`
 	// Manifest of the plugin (see above)
 	Manifest *Manifest `json:"-"`
+
+	activatErr   error
+	activateOnce sync.Once
 }
 
 func newLocalPlugin(name, addr string) *Plugin {
@@ -74,6 +78,13 @@ func newLocalPlugin(name, addr string) *Plugin {
 }
 
 func (p *Plugin) activate() error {
+	p.activateOnce.Do(func() {
+		p.activatErr = p.activateWithLock()
+	})
+	return p.activatErr
+}
+
+func (p *Plugin) activateWithLock() error {
 	c, err := NewClient(p.Addr, p.TLSConfig)
 	if err != nil {
 		return err
@@ -99,32 +110,55 @@ func (p *Plugin) activate() error {
 }
 
 func load(name string) (*Plugin, error) {
+	return loadWithRetry(name, true)
+}
+
+func loadWithRetry(name string, retry bool) (*Plugin, error) {
 	registry := newLocalRegistry()
-	pl, err := registry.Plugin(name)
-	if err != nil {
-		return nil, err
+	start := time.Now()
+
+	var retries int
+	for {
+		pl, err := registry.Plugin(name)
+		if err != nil {
+			if !retry {
+				return nil, err
+			}
+
+			timeOff := backoff(retries)
+			if abort(start, timeOff) {
+				return nil, err
+			}
+			retries++
+			logrus.Warnf("Unable to locate plugin: %s, retrying in %v", name, timeOff)
+			time.Sleep(timeOff)
+			continue
+		}
+
+		storage.Lock()
+		storage.plugins[name] = pl
+		storage.Unlock()
+
+		err = pl.activate()
+
+		if err != nil {
+			storage.Lock()
+			delete(storage.plugins, name)
+			storage.Unlock()
+		}
+
+		return pl, err
 	}
-	if err := pl.activate(); err != nil {
-		return nil, err
-	}
-	return pl, nil
 }
 
 func get(name string) (*Plugin, error) {
 	storage.Lock()
-	defer storage.Unlock()
 	pl, ok := storage.plugins[name]
+	storage.Unlock()
 	if ok {
-		return pl, nil
+		return pl, pl.activate()
 	}
-	pl, err := load(name)
-	if err != nil {
-		return nil, err
-	}
-
-	logrus.Debugf("Plugin: %v", pl)
-	storage.plugins[name] = pl
-	return pl, nil
+	return load(name)
 }
 
 // Get returns the plugin given the specified name and requested implementation.

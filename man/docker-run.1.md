@@ -21,6 +21,7 @@ docker-run - Run a command in a new container
 [**-d**|**--detach**[=*false*]]
 [**--device**[=*[]*]]
 [**--dns**[=*[]*]]
+[**--dns-opt**[=*[]*]]
 [**--dns-search**[=*[]*]]
 [**-e**|**--env**[=*[]*]]
 [**--entrypoint**[=*ENTRYPOINT*]]
@@ -31,6 +32,7 @@ docker-run - Run a command in a new container
 [**--help**]
 [**-i**|**--interactive**[=*false*]]
 [**--ipc**[=*IPC*]]
+[**--kernel-memory**[=*KERNEL-MEMORY*]]
 [**-l**|**--label**[=*[]*]]
 [**--label-file**[=*[]*]]
 [**--link**[=*[]*]]
@@ -52,6 +54,7 @@ docker-run - Run a command in a new container
 [**--restart**[=*RESTART*]]
 [**--rm**[=*false*]]
 [**--security-opt**[=*[]*]]
+[**--stop-signal**[=*SIGNAL*]]
 [**--sig-proxy**[=*true*]]
 [**-t**|**--tty**[=*false*]]
 [**-u**|**--user**[=*USER*]]
@@ -183,6 +186,9 @@ stopping the process by pressing the keys CTRL-P CTRL-Q.
 **--dns-search**=[]
    Set custom DNS search domains (Use --dns-search=. if you don't wish to set the search domain)
 
+**--dns-opt**=[]
+   Set custom DNS options
+
 **--dns**=[]
    Set custom DNS servers
 
@@ -242,6 +248,15 @@ ENTRYPOINT.
 **-l**, **--label**=[]
    Set metadata on the container (e.g., --label com.example.key=value)
 
+**--kernel-memory**=""
+   Kernel memory limit (format: `<number>[<unit>]`, where unit = b, k, m or g)
+
+   Constrains the kernel memory available to a container. If a limit of 0
+is specified (not using `--kernel-memory`), the container's kernel memory
+is not limited. If you specify a limit, it may be rounded up to a multiple
+of the operating system's page size and the value can be very large,
+millions of trillions.
+
 **--label-file**=[]
    Read in a line delimited file of labels
 
@@ -258,15 +273,16 @@ which interface and port to use.
 **--lxc-conf**=[]
    (lxc exec-driver only) Add custom lxc options --lxc-conf="lxc.cgroup.cpuset.cpus = 0,1"
 
-**--log-driver**="|*json-file*|*syslog*|*journald*|*gelf*|*fluentd*|*none*"
+**--log-driver**="|*json-file*|*syslog*|*journald*|*gelf*|*fluentd*|*awslogs*|*none*"
   Logging driver for container. Default is defined by daemon `--log-driver` flag.
-  **Warning**: `docker logs` command works only for `json-file` logging driver.
+  **Warning**: the `docker logs` command works only for the `json-file` and
+  `journald` logging drivers.
 
 **--log-opt**=[]
   Logging driver specific options.
 
 **-m**, **--memory**=""
-   Memory limit (format: <number><optional unit>, where unit = b, k, m or g)
+   Memory limit (format: <number>[<unit>], where unit = b, k, m or g)
 
    Allows you to constrain the memory available to a container. If the host
 supports swap memory, then the **-m** memory setting can be larger than physical
@@ -277,7 +293,7 @@ system's page size (the value would be very large, that's millions of trillions)
 **--memory-swap**=""
    Total memory limit (memory + swap)
 
-   Set `-1` to disable swap (format: <number><optional unit>, where unit = b, k, m or g).
+   Set `-1` to disable swap (format: <number>[<unit>], where unit = b, k, m or g).
 This value should always larger than **-m**, so you should always use this with **-m**.
 
 **--mac-address**=""
@@ -360,8 +376,8 @@ to write files anywhere.  By specifying the `--read-only` flag the container wil
 its root filesystem mounted as read only prohibiting any writes.
 
 **--restart**="no"
-   Restart policy to apply when a container exits (no, on-failure[:max-retry], always)
-      
+   Restart policy to apply when a container exits (no, on-failure[:max-retry], always, unless-stopped).
+
 **--rm**=*true*|*false*
    Automatically remove the container when it exits (incompatible with -d). The default is *false*.
 
@@ -373,6 +389,9 @@ its root filesystem mounted as read only prohibiting any writes.
     "label:type:TYPE"   : Set the label type for the container
     "label:level:LEVEL" : Set the label level for the container
     "label:disable"     : Turn off label confinement for the container
+
+**--stop-signal**=SIGTERM
+  Signal to stop a container. Default is SIGTERM.
 
 **--sig-proxy**=*true*|*false*
    Proxy received signals to the process (non-TTY mode only). SIGCHLD, SIGSTOP, and SIGKILL are not proxied. The default is *true*.
@@ -425,7 +444,20 @@ content label. Shared volume labels allow all containers to read/write content.
 The `Z` option tells Docker to label the content with a private unshared label.
 Only the current container can use a private volume.
 
-Note: Multiple Volume options can be added separated by a ","
+The `container-dir` must always be an absolute path such as `/src/docs`. 
+The `host-dir` can either be an absolute path or a `name` value. If you 
+supply an absolute path for the `host-dir`, Docker bind-mounts to the path 
+you specify. If you supply a `name`, Docker creates a named volume by that `name`.
+
+A `name` value must start with start with an alphanumeric character, 
+followed by `a-z0-9`, `_` (underscore), `.` (period) or `-` (hyphen). 
+An absolute path starts with a `/` (forward slash).
+
+For example, you can specify either `/foo` or `foo` for a `host-dir` value. 
+If you supply the `/foo` value, Docker creates a bind-mount. If you supply 
+the `foo` specification, Docker creates a named volume.
+
+**Note:** Multiple Volume options can be added separated by a , (comma).
 
 **--volumes-from**=[]
    Mount volumes from the specified container(s)

@@ -8,19 +8,12 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon"
 	"github.com/docker/docker/pkg/sockets"
-	"github.com/docker/docker/pkg/systemd"
-	"github.com/docker/docker/pkg/version"
-	"github.com/docker/docker/runconfig"
 	"github.com/docker/libnetwork/portallocator"
-)
 
-const (
-	// See http://git.kernel.org/cgit/linux/kernel/git/tip/tip.git/tree/kernel/sched/sched.h?id=8cd9234c64c584432f6992fe944ca9e46ca8ea76#n269
-	linuxMinCPUShares = 2
-	linuxMaxCPUShares = 262144
+	systemdActivation "github.com/coreos/go-systemd/activation"
+	systemdDaemon "github.com/coreos/go-systemd/daemon"
 )
 
 // newServer sets up the required serverClosers and does protocol specific checking.
@@ -31,7 +24,7 @@ func (s *Server) newServer(proto, addr string) ([]serverCloser, error) {
 	)
 	switch proto {
 	case "fd":
-		ls, err = systemd.ListenFD(addr)
+		ls, err = listenFD(addr)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +67,7 @@ func (s *Server) AcceptConnections(d *daemon.Daemon) {
 	// Tell the init daemon we are accepting requests
 	s.daemon = d
 	s.registerSubRouter()
-	go systemd.SdNotify("READY=1")
+	go systemdDaemon.SdNotify("READY=1")
 	// close the lock so the listeners start accepting connections
 	select {
 	case <-s.start:
@@ -110,27 +103,33 @@ func allocateDaemonPort(addr string) error {
 	return nil
 }
 
-func adjustCPUShares(version version.Version, hostConfig *runconfig.HostConfig) {
-	if version.LessThan("1.19") {
-		if hostConfig != nil && hostConfig.CPUShares > 0 {
-			// Handle unsupported CpuShares
-			if hostConfig.CPUShares < linuxMinCPUShares {
-				logrus.Warnf("Changing requested CpuShares of %d to minimum allowed of %d", hostConfig.CPUShares, linuxMinCPUShares)
-				hostConfig.CPUShares = linuxMinCPUShares
-			} else if hostConfig.CPUShares > linuxMaxCPUShares {
-				logrus.Warnf("Changing requested CpuShares of %d to maximum allowed of %d", hostConfig.CPUShares, linuxMaxCPUShares)
-				hostConfig.CPUShares = linuxMaxCPUShares
-			}
-		}
-	}
-}
-
-// getContainersByNameDownlevel performs processing for pre 1.20 APIs. This
-// is only relevant on non-Windows daemons.
-func getContainersByNameDownlevel(w http.ResponseWriter, s *Server, namevar string) error {
-	containerJSONRaw, err := s.daemon.ContainerInspectPre120(namevar)
+// listenFD returns the specified socket activated files as a slice of
+// net.Listeners or all of the activated files if "*" is given.
+func listenFD(addr string) ([]net.Listener, error) {
+	// socket activation
+	listeners, err := systemdActivation.Listeners(false)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return writeJSON(w, http.StatusOK, containerJSONRaw)
+
+	if listeners == nil || len(listeners) == 0 {
+		return nil, fmt.Errorf("No sockets found")
+	}
+
+	// default to all fds just like unix:// and tcp://
+	if addr == "" {
+		addr = "*"
+	}
+
+	fdNum, _ := strconv.Atoi(addr)
+	fdOffset := fdNum - 3
+	if (addr != "*") && (len(listeners) < int(fdOffset)+1) {
+		return nil, fmt.Errorf("Too few socket activated files passed in")
+	}
+
+	if addr == "*" {
+		return listeners, nil
+	}
+
+	return []net.Listener{listeners[fdOffset]}, nil
 }

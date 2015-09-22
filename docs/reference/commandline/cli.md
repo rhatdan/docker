@@ -10,17 +10,13 @@ parent = "smn_cli"
 
 # Using the command line
 
-> **Note:** If you are using a remote Docker daemon, such as Boot2Docker,
-> then _do not_ type the `sudo` before the `docker` commands shown in the
-> documentation's examples.
-
 To list available commands, either run `docker` with no parameters
 or execute `docker help`:
 
     $ docker
       Usage: docker [OPTIONS] COMMAND [arg...]
              docker daemon [ --help | ... ]
-             docker [ -h | --help | -v | --version ]
+             docker [ --help | -v | --version ]
 
         -H, --host=[]: The socket(s) to bind to in daemon mode, specified using one or more tcp://host:port, unix:///path/to/socket, fd://* or fd://socketfd.
 

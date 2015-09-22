@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"sort"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api/client"
@@ -28,16 +27,13 @@ func main() {
 	flag.Merge(flag.CommandLine, clientFlags.FlagSet, commonFlags.FlagSet)
 
 	flag.Usage = func() {
-		fmt.Fprint(os.Stdout, "Usage: docker [OPTIONS] COMMAND [arg...]\n"+daemonUsage+"       docker [ -h | --help | -v | --version ]\n\n")
+		fmt.Fprint(os.Stdout, "Usage: docker [OPTIONS] COMMAND [arg...]\n"+daemonUsage+"       docker [ --help | -v | --version ]\n\n")
 		fmt.Fprint(os.Stdout, "A self-sufficient runtime for containers.\n\nOptions:\n")
 
 		flag.CommandLine.SetOutput(os.Stdout)
 		flag.PrintDefaults()
 
 		help := "\nCommands:\n"
-
-		// TODO(tiborvass): no need to sort if we ensure dockerCommands is sorted
-		sort.Sort(byName(dockerCommands))
 
 		for _, cmd := range dockerCommands {
 			help += fmt.Sprintf("    %-10.10s%s\n", cmd.name, cmd.description)

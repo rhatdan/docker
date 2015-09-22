@@ -73,7 +73,7 @@ Docker daemon supports a configuration flag `--default-network` which takes conf
 `NETWORK` is the name of the network created using the `docker network create` command
 When a container is created and if the network mode (`--net`) is not specified, then this default network will be used to connect
 the container. If `--default-network` is not specified, the default network will be the `bridge` driver.
-Example : `docker -d --default-network=overlay:multihost`
+Example : `docker daemon --default-network=overlay:multihost`
 
 ## Using Services
 
@@ -99,7 +99,7 @@ Assuming we want to publish a service from container `a0ebc12d3e48` on network `
 
 This would make the container `a0ebc12d3e48` accessible as `my-service` on network `foo`. Any other container in network `foo` can use DNS to resolve the address of `my-service`
 
-This can also be acheived by using the `--publish-service` flag for `docker run`:
+This can also be achieved by using the `--publish-service` flag for `docker run`:
 
         docker run -itd --publish-service db.foo postgres
 

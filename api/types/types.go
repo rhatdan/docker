@@ -6,6 +6,7 @@ import (
 
 	"github.com/docker/docker/daemon/network"
 	"github.com/docker/docker/pkg/version"
+	"github.com/docker/docker/registry"
 	"github.com/docker/docker/runconfig"
 )
 
@@ -19,35 +20,41 @@ type ContainerCreateResponse struct {
 	Warnings []string `json:"Warnings"`
 }
 
-// POST /containers/{name:.*}/exec
+// ContainerExecCreateResponse contains response of Remote API:
+// POST "/containers/{name:.*}/exec"
 type ContainerExecCreateResponse struct {
 	// ID is the exec ID.
 	ID string `json:"Id"`
 }
 
-// POST /auth
+// AuthResponse contains response of Remote API:
+// POST "/auth"
 type AuthResponse struct {
 	// Status is the authentication status
 	Status string `json:"Status"`
 }
 
+// ContainerWaitResponse contains response of Remote API:
 // POST "/containers/"+containerID+"/wait"
 type ContainerWaitResponse struct {
 	// StatusCode is the status code of the wait job
 	StatusCode int `json:"StatusCode"`
 }
 
+// ContainerCommitResponse contains response of Remote API:
 // POST "/commit?container="+containerID
 type ContainerCommitResponse struct {
 	ID string `json:"Id"`
 }
 
+// ContainerChange contains response of Remote API:
 // GET "/containers/{name:.*}/changes"
 type ContainerChange struct {
 	Kind int
 	Path string
 }
 
+// ImageHistory contains response of Remote API:
 // GET "/images/{name:.*}/history"
 type ImageHistory struct {
 	ID        string `json:"Id"`
@@ -58,32 +65,38 @@ type ImageHistory struct {
 	Comment   string
 }
 
+// ImageDelete contains response of Remote API:
 // DELETE "/images/{name:.*}"
 type ImageDelete struct {
 	Untagged string `json:",omitempty"`
 	Deleted  string `json:",omitempty"`
 }
 
+// Image contains response of Remote API:
 // GET "/images/json"
 type Image struct {
 	ID          string `json:"Id"`
-	ParentId    string
+	ParentID    string `json:"ParentId"`
 	RepoTags    []string
 	RepoDigests []string
-	Created     int
-	Size        int
-	VirtualSize int
+	Created     int64
+	Size        int64
+	VirtualSize int64
 	Labels      map[string]string
 }
 
+// GraphDriverData returns Image's graph driver config info
+// when calling inspect command
 type GraphDriverData struct {
 	Name string
 	Data map[string]string
 }
 
+// ImageInspect contains response of Remote API:
 // GET "/images/{name:.*}/json"
 type ImageInspect struct {
-	Id              string
+	ID              string `json:"Id"`
+	Tags            []string
 	Parent          string
 	Comment         string
 	Created         string
@@ -99,7 +112,8 @@ type ImageInspect struct {
 	GraphDriver     GraphDriverData
 }
 
-// GET  "/containers/json"
+// Port stores open ports info of container
+// e.g. {"PrivatePort": 8080, "PublicPort": 80, "Type": "tcp"}
 type Port struct {
 	IP          string `json:",omitempty"`
 	PrivatePort int
@@ -107,15 +121,17 @@ type Port struct {
 	Type        string
 }
 
+// Container contains response of Remote API:
+// GET  "/containers/json"
 type Container struct {
 	ID         string `json:"Id"`
 	Names      []string
 	Image      string
 	Command    string
-	Created    int
+	Created    int64
 	Ports      []Port
-	SizeRw     int `json:",omitempty"`
-	SizeRootFs int `json:",omitempty"`
+	SizeRw     int64 `json:",omitempty"`
+	SizeRootFs int64 `json:",omitempty"`
 	Labels     map[string]string
 	Status     string
 	HostConfig struct {
@@ -123,14 +139,15 @@ type Container struct {
 	}
 }
 
+// CopyConfig contains request body of Remote API:
 // POST "/containers/"+containerID+"/copy"
 type CopyConfig struct {
 	Resource string
 }
 
 // ContainerPathStat is used to encode the header from
-// 	GET /containers/{name:.*}/archive
-// "name" is basename of the resource.
+// GET "/containers/{name:.*}/archive"
+// "Name" is the file or directory name.
 type ContainerPathStat struct {
 	Name       string      `json:"name"`
 	Size       int64       `json:"size"`
@@ -139,15 +156,18 @@ type ContainerPathStat struct {
 	LinkTarget string      `json:"linkTarget"`
 }
 
+// ContainerProcessList contains response of Remote API:
 // GET "/containers/{name:.*}/top"
 type ContainerProcessList struct {
 	Processes [][]string
 	Titles    []string
 }
 
+// Version contains response of Remote API:
+// GET "/version"
 type Version struct {
 	Version       string
-	ApiVersion    version.Version
+	APIVersion    version.Version `json:"ApiVersion"`
 	GitCommit     string
 	GoVersion     string
 	Os            string
@@ -157,6 +177,7 @@ type Version struct {
 	BuildTime     string `json:",omitempty"`
 }
 
+// Info contains response of Remote API:
 // GET "/info"
 type Info struct {
 	ID                 string
@@ -166,11 +187,11 @@ type Info struct {
 	DriverStatus       [][2]string
 	MemoryLimit        bool
 	SwapLimit          bool
-	CpuCfsPeriod       bool
-	CpuCfsQuota        bool
+	CPUCfsPeriod       bool `json:"CpuCfsPeriod"`
+	CPUCfsQuota        bool `json:"CpuCfsQuota"`
 	IPv4Forwarding     bool
 	BridgeNfIptables   bool
-	BridgeNfIp6tables  bool
+	BridgeNfIP6tables  bool `json:"BridgeNfIp6tables"`
 	Debug              bool
 	NFd                int
 	OomKillDisable     bool
@@ -182,21 +203,22 @@ type Info struct {
 	KernelVersion      string
 	OperatingSystem    string
 	IndexServerAddress string
-	RegistryConfig     interface{}
+	RegistryConfig     *registry.ServiceConfig
 	InitSha1           string
 	InitPath           string
 	NCPU               int
 	MemTotal           int64
 	DockerRootDir      string
-	HttpProxy          string
-	HttpsProxy         string
+	HTTPProxy          string `json:"HttpProxy"`
+	HTTPSProxy         string `json:"HttpsProxy"`
 	NoProxy            string
 	Name               string
 	Labels             []string
 	ExperimentalBuild  bool
+	ServerVersion      string
 }
 
-// This struct is a temp struct used by execStart
+// ExecStartCheck is a temp struct used by execStart
 // Config fields is part of ExecConfig in runconfig package
 type ExecStartCheck struct {
 	// ExecStart will first check if it's detached
@@ -205,7 +227,10 @@ type ExecStartCheck struct {
 	Tty bool
 }
 
+// ContainerState stores container's running state
+// it's part of ContainerJSONBase and will return by "inspect" command
 type ContainerState struct {
+	Status     string
 	Running    bool
 	Paused     bool
 	Restarting bool
@@ -218,9 +243,10 @@ type ContainerState struct {
 	FinishedAt string
 }
 
+// ContainerJSONBase contains response of Remote API:
 // GET "/containers/{name:.*}/json"
 type ContainerJSONBase struct {
-	Id              string
+	ID              string `json:"Id"`
 	Created         string
 	Path            string
 	Args            []string
@@ -243,29 +269,46 @@ type ContainerJSONBase struct {
 	GraphDriver     GraphDriverData
 }
 
+// ContainerJSON is newly used struct along with MountPoint
 type ContainerJSON struct {
 	*ContainerJSONBase
 	Mounts []MountPoint
 	Config *runconfig.Config
 }
 
-// backcompatibility struct along with ContainerConfig. Note this is not
-// used by the Windows daemon.
+// ContainerJSON120 is a backcompatibility struct along with ContainerConfig120.
+type ContainerJSON120 struct {
+	*ContainerJSONBase
+	Mounts []MountPoint
+	Config *ContainerConfig120
+}
+
+// ContainerJSONPre120 is a backcompatibility struct along with ContainerConfigPre120.
+// Note this is not used by the Windows daemon.
 type ContainerJSONPre120 struct {
 	*ContainerJSONBase
 	Volumes   map[string]string
 	VolumesRW map[string]bool
-	Config    *ContainerConfig
+	Config    *ContainerConfigPre120
 }
 
-type ContainerConfig struct {
+// ContainerConfigPre120 is a backcompatibility struct used in ContainerJSONPre120
+type ContainerConfigPre120 struct {
 	*runconfig.Config
 
 	// backward compatibility, they now live in HostConfig
-	Memory     int64
-	MemorySwap int64
-	CpuShares  int64
-	Cpuset     string
+	VolumeDriver string
+	Memory       int64
+	MemorySwap   int64
+	CPUShares    int64  `json:"CpuShares"`
+	CPUSet       string `json:"CpuSet"`
+}
+
+// ContainerConfig120 is a backcompatibility struct used in ContainerJSON120
+type ContainerConfig120 struct {
+	*runconfig.Config
+	// backward compatibility, it lives now in HostConfig
+	VolumeDriver string
 }
 
 // MountPoint represents a mount point configuration inside the container.
@@ -276,4 +319,25 @@ type MountPoint struct {
 	Driver      string `json:",omitempty"`
 	Mode        string
 	RW          bool
+}
+
+// Volume represents the configuration of a volume for the remote API
+type Volume struct {
+	Name       string // Name is the name of the volume
+	Driver     string // Driver is the Driver name used to create the volume
+	Mountpoint string // Mountpoint is the location on disk of the volume
+}
+
+// VolumesListResponse contains the response for the remote API:
+// GET "/volumes"
+type VolumesListResponse struct {
+	Volumes []*Volume // Volumes is the list of volumes being returned
+}
+
+// VolumeCreateRequest contains the response for the remote API:
+// POST "/volumes"
+type VolumeCreateRequest struct {
+	Name       string            // Name is the requested name of the volume
+	Driver     string            // Driver is the name of the driver that should be used to create the volume
+	DriverOpts map[string]string // DriverOpts holds the driver specific options to use for when creating the volume.
 }

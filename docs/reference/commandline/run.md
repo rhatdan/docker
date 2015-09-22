@@ -30,6 +30,7 @@ weight=1
       -d, --detach=false            Run container in background and print container ID
       --device=[]                   Add a host device to the container
       --dns=[]                      Set custom DNS servers
+      --dns-opt=[]                  Set custom DNS options
       --dns-search=[]               Set custom DNS search domains
       -e, --env=[]                  Set environment variables
       --entrypoint=""               Overwrite the default ENTRYPOINT of the image
@@ -40,6 +41,7 @@ weight=1
       --help=false                  Print usage
       -i, --interactive=false       Keep STDIN open even if not attached
       --ipc=""                      IPC namespace to use
+      --kernel-memory=""            Kernel memory limit
       -l, --label=[]                Set metadata on the container (e.g., --label=com.example.key=value)
       --label-file=[]               Read in a file of labels (EOL delimited)
       --link=[]                     Add link to another container
@@ -58,9 +60,10 @@ weight=1
       --pid=""                      PID namespace to use
       --privileged=false            Give extended privileges to this container
       --read-only=false             Mount the container's root filesystem as read only
-      --restart="no"                Restart policy (no, on-failure[:max-retry], always)
+      --restart="no"                Restart policy (no, on-failure[:max-retry], always, unless-stopped)
       --rm=false                    Automatically remove the container when it exits
       --security-opt=[]             Security Options
+      --stop-signal="SIGTERM"       Signal to stop a container
       --sig-proxy=true              Proxy received signals to the process
       -t, --tty=false               Allocate a pseudo-TTY
       -u, --user=""                 Username or UID (format: <name|uid>[:<group|gid>])
@@ -440,7 +443,16 @@ Docker supports the following restart policies:
       <td>
         Always restart the container regardless of the exit status.
         When you specify always, the Docker daemon will try to restart
-        the container indefinitely.
+        the container indefinitely. The container will also always start
+        on daemon startup, regardless of the current state of the container.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>unless-stopped</strong></td>
+      <td>
+        Always restart the container regardless of the exit status, but
+        do not start it on daemon startup if the container has been put
+        to a stopped state before.
       </td>
     </tr>
   </tbody>
@@ -521,3 +533,9 @@ containers with `daemon` user:
 The 4th container fails and reports "[8] System error: resource temporarily unavailable" error. 
 This fails because the caller set `nproc=3` resulting in the first three containers using up 
 the three processes quota set for the `daemon` user.
+
+### Stopping a container with a specific signal
+
+The `--stop-signal` flag sets the system call signal that will be sent to the container to exit.
+This signal can be a valid unsigned number that matches a position in the kernel's syscall table, for instance 9,
+or a signal name in the format SIGNAME, for instance SIGKILL.

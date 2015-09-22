@@ -35,14 +35,12 @@ if [ -z "$DOCKER_TEST_HOST" ]; then
 		(
 			set -x
 			/etc/init.d/apparmor start
-
-			/sbin/apparmor_parser -r -W -T contrib/apparmor/
 		)
 	fi
 
 	export DOCKER_HOST="unix://$(cd "$DEST" && pwd)/docker.sock" # "pwd" tricks to make sure $DEST is an absolute path, not a relative one
 	( set -x; exec \
-		docker --daemon --debug \
+		docker daemon --debug \
 		--host "$DOCKER_HOST" \
 		--storage-driver "$DOCKER_GRAPHDRIVER" \
 		--exec-driver "$DOCKER_EXECDRIVER" \
@@ -57,8 +55,8 @@ else
 	export DOCKER_HOST="$DOCKER_TEST_HOST"
 fi
 
-# give it a second to come up so it's "ready"
-tries=10
+# give it a little time to come up so it's "ready"
+tries=30
 while ! docker version &> /dev/null; do
 	(( tries-- ))
 	if [ $tries -le 0 ]; then

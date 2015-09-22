@@ -2,61 +2,32 @@
 
 package daemon
 
-import (
-	"testing"
-
-	"github.com/docker/docker/runconfig"
-	"github.com/docker/docker/volume"
-	"github.com/docker/docker/volume/drivers"
-)
-
-type fakeDriver struct{}
-
-func (fakeDriver) Name() string                              { return "fake" }
-func (fakeDriver) Create(name string) (volume.Volume, error) { return nil, nil }
-func (fakeDriver) Remove(v volume.Volume) error              { return nil }
-
-func TestGetVolumeDriver(t *testing.T) {
-	_, err := getVolumeDriver("missing")
-	if err == nil {
-		t.Fatal("Expected error, was nil")
-	}
-
-	volumedrivers.Register(fakeDriver{}, "fake")
-	d, err := getVolumeDriver("fake")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d.Name() != "fake" {
-		t.Fatalf("Expected fake driver, got %s\n", d.Name())
-	}
-}
+import "testing"
 
 func TestParseBindMount(t *testing.T) {
 	cases := []struct {
-		bind       string
-		driver     string
-		expDest    string
-		expSource  string
-		expName    string
-		expDriver  string
-		mountLabel string
-		expRW      bool
-		fail       bool
+		bind      string
+		driver    string
+		expDest   string
+		expSource string
+		expName   string
+		expDriver string
+		expRW     bool
+		fail      bool
 	}{
-		{"/tmp:/tmp", "", "/tmp", "/tmp", "", "", "", true, false},
-		{"/tmp:/tmp:ro", "", "/tmp", "/tmp", "", "", "", false, false},
-		{"/tmp:/tmp:rw", "", "/tmp", "/tmp", "", "", "", true, false},
-		{"/tmp:/tmp:foo", "", "/tmp", "/tmp", "", "", "", false, true},
-		{"name:/tmp", "", "/tmp", "", "name", "local", "", true, false},
-		{"name:/tmp", "external", "/tmp", "", "name", "external", "", true, false},
-		{"name:/tmp:ro", "local", "/tmp", "", "name", "local", "", false, false},
-		{"local/name:/tmp:rw", "", "/tmp", "", "local/name", "local", "", true, false},
+		{"/tmp:/tmp", "", "/tmp", "/tmp", "", "", true, false},
+		{"/tmp:/tmp:ro", "", "/tmp", "/tmp", "", "", false, false},
+		{"/tmp:/tmp:rw", "", "/tmp", "/tmp", "", "", true, false},
+		{"/tmp:/tmp:foo", "", "/tmp", "/tmp", "", "", false, true},
+		{"name:/tmp", "", "/tmp", "", "name", "local", true, false},
+		{"name:/tmp", "external", "/tmp", "", "name", "external", true, false},
+		{"name:/tmp:ro", "local", "/tmp", "", "name", "local", false, false},
+		{"local/name:/tmp:rw", "", "/tmp", "", "local/name", "local", true, false},
+		{"/tmp:tmp", "", "", "", "", "", true, true},
 	}
 
 	for _, c := range cases {
-		conf := &runconfig.Config{VolumeDriver: c.driver}
-		m, err := parseBindMount(c.bind, c.mountLabel, conf)
+		m, err := parseBindMount(c.bind, c.driver)
 		if c.fail {
 			if err == nil {
 				t.Fatalf("Expected error, was nil, for spec %s\n", c.bind)

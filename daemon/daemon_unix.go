@@ -1,4 +1,4 @@
-// +build !windows
+// +build linux freebsd
 
 package daemon
 
@@ -14,15 +14,13 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/autogen/dockerversion"
 	"github.com/docker/docker/daemon/graphdriver"
-	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/parsers"
 	"github.com/docker/docker/pkg/parsers/kernel"
+	"github.com/docker/docker/pkg/sysinfo"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
-	volumedrivers "github.com/docker/docker/volume/drivers"
-	"github.com/docker/docker/volume/local"
 	"github.com/docker/libnetwork"
 	nwapi "github.com/docker/libnetwork/api"
 	nwconfig "github.com/docker/libnetwork/config"
@@ -31,15 +29,12 @@ import (
 	"github.com/opencontainers/runc/libcontainer/label"
 )
 
-func (daemon *Daemon) Changes(container *Container) ([]archive.Change, error) {
-	initID := fmt.Sprintf("%s-init", container.ID)
-	return daemon.driver.Changes(container.ID, initID)
-}
-
-func (daemon *Daemon) Diff(container *Container) (archive.Archive, error) {
-	initID := fmt.Sprintf("%s-init", container.ID)
-	return daemon.driver.Diff(container.ID, initID)
-}
+const (
+	// See https://git.kernel.org/cgit/linux/kernel/git/tip/tip.git/tree/kernel/sched/sched.h?id=8cd9234c64c584432f6992fe944ca9e46ca8ea76#n269
+	linuxMinCPUShares = 2
+	linuxMaxCPUShares = 262144
+	platformSupported = true
+)
 
 func parseSecurityOpt(container *Container, config *runconfig.HostConfig) error {
 	var (
@@ -66,34 +61,15 @@ func parseSecurityOpt(container *Container, config *runconfig.HostConfig) error 
 	return err
 }
 
-func (daemon *Daemon) createRootfs(container *Container) error {
-	// Step 1: create the container directory.
-	// This doubles as a barrier to avoid race conditions.
-	if err := os.Mkdir(container.root, 0700); err != nil {
-		return err
+func checkKernelVersion(k, major, minor int) bool {
+	if v, err := kernel.GetKernelVersion(); err != nil {
+		logrus.Warnf("%s", err)
+	} else {
+		if kernel.CompareKernelVersion(*v, kernel.VersionInfo{Kernel: k, Major: major, Minor: minor}) < 0 {
+			return false
+		}
 	}
-	initID := fmt.Sprintf("%s-init", container.ID)
-	if err := daemon.driver.Create(initID, container.ImageID); err != nil {
-		return err
-	}
-	initPath, err := daemon.driver.Get(initID, "")
-	if err != nil {
-		return err
-	}
-
-	if err := setupInitLayer(initPath); err != nil {
-		daemon.driver.Put(initID)
-		return err
-	}
-
-	// We want to unmount init layer before we take snapshot of it
-	// for the actual container.
-	daemon.driver.Put(initID)
-
-	if err := daemon.driver.Create(container.ID, initID); err != nil {
-		return err
-	}
-	return nil
+	return true
 }
 
 func checkKernel() error {
@@ -104,13 +80,10 @@ func checkKernel() error {
 	// without actually causing a kernel panic, so we need this workaround until
 	// the circumstances of pre-3.10 crashes are clearer.
 	// For details see https://github.com/docker/docker/issues/407
-	if k, err := kernel.GetKernelVersion(); err != nil {
-		logrus.Warnf("%s", err)
-	} else {
-		if kernel.CompareKernelVersion(*k, kernel.VersionInfo{Kernel: 3, Major: 10, Minor: 0}) < 0 {
-			if os.Getenv("DOCKER_NOWARN_KERNEL_VERSION") == "" {
-				logrus.Warnf("You are running linux kernel version %s, which might be unstable running docker. Please upgrade your kernel to 3.10.0.", k.String())
-			}
+	if !checkKernelVersion(3, 10, 0) {
+		v, _ := kernel.GetKernelVersion()
+		if os.Getenv("DOCKER_NOWARN_KERNEL_VERSION") == "" {
+			logrus.Warnf("Your Linux kernel version %s can be unstable running docker. Please upgrade your kernel to 3.10.0.", v.String())
 		}
 	}
 	return nil
@@ -118,9 +91,20 @@ func checkKernel() error {
 
 // adaptContainerSettings is called during container creation to modify any
 // settings necessary in the HostConfig structure.
-func (daemon *Daemon) adaptContainerSettings(hostConfig *runconfig.HostConfig) {
+func (daemon *Daemon) adaptContainerSettings(hostConfig *runconfig.HostConfig, adjustCPUShares bool) {
 	if hostConfig == nil {
 		return
+	}
+
+	if adjustCPUShares && hostConfig.CPUShares > 0 {
+		// Handle unsupported CPUShares
+		if hostConfig.CPUShares < linuxMinCPUShares {
+			logrus.Warnf("Changing requested CPUShares of %d to minimum allowed of %d", hostConfig.CPUShares, linuxMinCPUShares)
+			hostConfig.CPUShares = linuxMinCPUShares
+		} else if hostConfig.CPUShares > linuxMaxCPUShares {
+			logrus.Warnf("Changing requested CPUShares of %d to maximum allowed of %d", hostConfig.CPUShares, linuxMaxCPUShares)
+			hostConfig.CPUShares = linuxMaxCPUShares
+		}
 	}
 	if hostConfig.Memory > 0 && hostConfig.MemorySwap == 0 {
 		// By default, MemorySwap is set to twice the size of Memory.
@@ -131,20 +115,24 @@ func (daemon *Daemon) adaptContainerSettings(hostConfig *runconfig.HostConfig) {
 // verifyPlatformContainerSettings performs platform-specific validation of the
 // hostconfig and config structures.
 func verifyPlatformContainerSettings(daemon *Daemon, hostConfig *runconfig.HostConfig, config *runconfig.Config) ([]string, error) {
-	var warnings []string
+	warnings := []string{}
+	sysInfo := sysinfo.New(true)
 
 	if hostConfig.LxcConf.Len() > 0 && !strings.Contains(daemon.ExecutionDriver().Name(), "lxc") {
 		return warnings, fmt.Errorf("Cannot use --lxc-conf with execdriver: %s", daemon.ExecutionDriver().Name())
 	}
+
+	// memory subsystem checks and adjustments
 	if hostConfig.Memory != 0 && hostConfig.Memory < 4194304 {
 		return warnings, fmt.Errorf("Minimum memory limit allowed is 4MB")
 	}
-	if hostConfig.Memory > 0 && !daemon.SystemConfig().MemoryLimit {
+	if hostConfig.Memory > 0 && !sysInfo.MemoryLimit {
 		warnings = append(warnings, "Your kernel does not support memory limit capabilities. Limitation discarded.")
 		logrus.Warnf("Your kernel does not support memory limit capabilities. Limitation discarded.")
 		hostConfig.Memory = 0
+		hostConfig.MemorySwap = -1
 	}
-	if hostConfig.Memory > 0 && hostConfig.MemorySwap != -1 && !daemon.SystemConfig().SwapLimit {
+	if hostConfig.Memory > 0 && hostConfig.MemorySwap != -1 && !sysInfo.SwapLimit {
 		warnings = append(warnings, "Your kernel does not support swap limit capabilities, memory limited without swap.")
 		logrus.Warnf("Your kernel does not support swap limit capabilities, memory limited without swap.")
 		hostConfig.MemorySwap = -1
@@ -155,7 +143,7 @@ func verifyPlatformContainerSettings(daemon *Daemon, hostConfig *runconfig.HostC
 	if hostConfig.Memory == 0 && hostConfig.MemorySwap > 0 {
 		return warnings, fmt.Errorf("You should always set the Memory limit when using Memoryswap limit, see usage.")
 	}
-	if hostConfig.MemorySwappiness != nil && !daemon.SystemConfig().MemorySwappiness {
+	if hostConfig.MemorySwappiness != nil && *hostConfig.MemorySwappiness != -1 && !sysInfo.MemorySwappiness {
 		warnings = append(warnings, "Your kernel does not support memory swappiness capabilities, memory swappiness discarded.")
 		logrus.Warnf("Your kernel does not support memory swappiness capabilities, memory swappiness discarded.")
 		hostConfig.MemorySwappiness = nil
@@ -166,24 +154,50 @@ func verifyPlatformContainerSettings(daemon *Daemon, hostConfig *runconfig.HostC
 			return warnings, fmt.Errorf("Invalid value: %v, valid memory swappiness range is 0-100.", swappiness)
 		}
 	}
-	if hostConfig.CPUPeriod > 0 && !daemon.SystemConfig().CpuCfsPeriod {
+	if hostConfig.KernelMemory > 0 && !sysInfo.KernelMemory {
+		warnings = append(warnings, "Your kernel does not support kernel memory limit capabilities. Limitation discarded.")
+		logrus.Warnf("Your kernel does not support kernel memory limit capabilities. Limitation discarded.")
+		hostConfig.KernelMemory = 0
+	}
+	if hostConfig.KernelMemory > 0 && !checkKernelVersion(4, 0, 0) {
+		warnings = append(warnings, "You specified a kernel memory limit on a kernel older than 4.0. Kernel memory limits are experimental on older kernels, it won't work as expected and can cause your system to be unstable.")
+		logrus.Warnf("You specified a kernel memory limit on a kernel older than 4.0. Kernel memory limits are experimental on older kernels, it won't work as expected and can cause your system to be unstable.")
+	}
+	if hostConfig.CPUShares > 0 && !sysInfo.CPUShares {
+		warnings = append(warnings, "Your kernel does not support CPU shares. Shares discarded.")
+		logrus.Warnf("Your kernel does not support CPU shares. Shares discarded.")
+		hostConfig.CPUShares = 0
+	}
+	if hostConfig.CPUPeriod > 0 && !sysInfo.CPUCfsPeriod {
 		warnings = append(warnings, "Your kernel does not support CPU cfs period. Period discarded.")
 		logrus.Warnf("Your kernel does not support CPU cfs period. Period discarded.")
 		hostConfig.CPUPeriod = 0
 	}
-	if hostConfig.CPUQuota > 0 && !daemon.SystemConfig().CpuCfsQuota {
+	if hostConfig.CPUQuota > 0 && !sysInfo.CPUCfsQuota {
 		warnings = append(warnings, "Your kernel does not support CPU cfs quota. Quota discarded.")
 		logrus.Warnf("Your kernel does not support CPU cfs quota. Quota discarded.")
 		hostConfig.CPUQuota = 0
 	}
+	if (hostConfig.CpusetCpus != "" || hostConfig.CpusetMems != "") && !sysInfo.Cpuset {
+		warnings = append(warnings, "Your kernel does not support cpuset. Cpuset discarded.")
+		logrus.Warnf("Your kernel does not support cpuset. Cpuset discarded.")
+		hostConfig.CpusetCpus = ""
+		hostConfig.CpusetMems = ""
+	}
+	if hostConfig.BlkioWeight > 0 && !sysInfo.BlkioWeight {
+		warnings = append(warnings, "Your kernel does not support Block I/O weight. Weight discarded.")
+		logrus.Warnf("Your kernel does not support Block I/O weight. Weight discarded.")
+		hostConfig.BlkioWeight = 0
+	}
 	if hostConfig.BlkioWeight > 0 && (hostConfig.BlkioWeight < 10 || hostConfig.BlkioWeight > 1000) {
 		return warnings, fmt.Errorf("Range of blkio weight is from 10 to 1000.")
 	}
-	if hostConfig.OomKillDisable && !daemon.SystemConfig().OomKillDisable {
+	if hostConfig.OomKillDisable && !sysInfo.OomKillDisable {
 		hostConfig.OomKillDisable = false
 		return warnings, fmt.Errorf("Your kernel does not support oom kill disable.")
 	}
-	if daemon.SystemConfig().IPv4ForwardingDisabled {
+
+	if sysInfo.IPv4ForwardingDisabled {
 		warnings = append(warnings, "IPv4 forwarding is disabled. Networking will not work.")
 		logrus.Warnf("IPv4 forwarding is disabled. Networking will not work")
 	}
@@ -220,9 +234,9 @@ func checkSystem() error {
 func configureKernelSecuritySupport(config *Config, driverName string) error {
 	if config.EnableSelinuxSupport {
 		if selinuxEnabled() {
-			// As Docker on btrfs and SELinux are incompatible at present, error on both being enabled
-			if driverName == "btrfs" {
-				return fmt.Errorf("SELinux is not supported with the BTRFS graph driver")
+			// As Docker on either btrfs or overlayFS and SELinux are incompatible at present, error on both being enabled
+			if driverName == "btrfs" || driverName == "overlay" {
+				return fmt.Errorf("SELinux is not supported with the %s graph driver", driverName)
 			}
 			logrus.Debug("SELinux enabled successfully")
 		} else {
@@ -237,15 +251,6 @@ func configureKernelSecuritySupport(config *Config, driverName string) error {
 // MigrateIfDownlevel is a wrapper for AUFS migration for downlevel
 func migrateIfDownlevel(driver graphdriver.Driver, root string) error {
 	return migrateIfAufs(driver, root)
-}
-
-func configureVolumes(config *Config) error {
-	volumesDriver, err := local.New(config.Root)
-	if err != nil {
-		return err
-	}
-	volumedrivers.Register(volumesDriver, volumesDriver.Name())
-	return nil
 }
 
 func configureSysInit(config *Config) (string, error) {
@@ -351,19 +356,19 @@ func initNetworkController(config *Config) (libnetwork.NetworkController, error)
 
 func initBridgeDriver(controller libnetwork.NetworkController, config *Config) error {
 	option := options.Generic{
-		"EnableIPForwarding": config.Bridge.EnableIPForward}
+		"EnableIPForwarding":  config.Bridge.EnableIPForward,
+		"EnableIPTables":      config.Bridge.EnableIPTables,
+		"EnableUserlandProxy": config.Bridge.EnableUserlandProxy}
 
 	if err := controller.ConfigureNetworkDriver("bridge", options.Generic{netlabel.GenericData: option}); err != nil {
 		return fmt.Errorf("Error initializing bridge driver: %v", err)
 	}
 
 	netOption := options.Generic{
-		"BridgeName":          config.Bridge.Iface,
-		"Mtu":                 config.Mtu,
-		"EnableIPTables":      config.Bridge.EnableIPTables,
-		"EnableIPMasquerade":  config.Bridge.EnableIPMasq,
-		"EnableICC":           config.Bridge.InterContainerCommunication,
-		"EnableUserlandProxy": config.Bridge.EnableUserlandProxy,
+		"BridgeName":         config.Bridge.Iface,
+		"Mtu":                config.Mtu,
+		"EnableIPMasquerade": config.Bridge.EnableIPMasq,
+		"EnableICC":          config.Bridge.InterContainerCommunication,
 	}
 
 	if config.Bridge.IP != "" {
@@ -477,11 +482,14 @@ func setupInitLayer(initLayer string) error {
 	return nil
 }
 
-func (daemon *Daemon) NetworkApiRouter() func(w http.ResponseWriter, req *http.Request) {
+// NetworkAPIRouter implements a feature for server-experimental,
+// directly calling into libnetwork.
+func (daemon *Daemon) NetworkAPIRouter() func(w http.ResponseWriter, req *http.Request) {
 	return nwapi.NewHTTPHandler(daemon.netController)
 }
 
-func (daemon *Daemon) RegisterLinks(container *Container, hostConfig *runconfig.HostConfig) error {
+// registerLinks writes the links to a file.
+func (daemon *Daemon) registerLinks(container *Container, hostConfig *runconfig.HostConfig) error {
 	if hostConfig == nil || hostConfig.Links == nil {
 		return nil
 	}
@@ -506,7 +514,7 @@ func (daemon *Daemon) RegisterLinks(container *Container, hostConfig *runconfig.
 		if child.hostConfig.NetworkMode.IsHost() {
 			return runconfig.ErrConflictHostNetworkAndLinks
 		}
-		if err := daemon.RegisterLink(container, child, alias); err != nil {
+		if err := daemon.registerLink(container, child, alias); err != nil {
 			return err
 		}
 	}
@@ -514,7 +522,7 @@ func (daemon *Daemon) RegisterLinks(container *Container, hostConfig *runconfig.
 	// After we load all the links into the daemon
 	// set them to nil on the hostconfig
 	hostConfig.Links = nil
-	if err := container.WriteHostConfig(); err != nil {
+	if err := container.writeHostConfig(); err != nil {
 		return err
 	}
 

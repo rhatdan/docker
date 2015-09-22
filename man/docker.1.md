@@ -23,7 +23,7 @@ its own man page which explain usage and arguments.
 To see the man page for a command run **man docker <command>**.
 
 # OPTIONS
-**-h**, **--help**
+**--help**
   Print usage statement
 
 **--api-cors-header**=""
@@ -50,8 +50,17 @@ To see the man page for a command run **man docker <command>**.
 **--default-gateway-v6**=""
   IPv6 address of the container default gateway
 
+**--default-ulimit**=[]
+  Set default ulimits for containers.
+
 **--dns**=""
   Force Docker to use specific DNS servers
+
+**--dns-opt**=[]
+  DNS options to use.
+
+**--dns-search**=[]
+  DNS search domains to use.
 
 **-e**, **--exec-driver**=""
   Force Docker to use specific exec driver. Default is `native`.
@@ -60,7 +69,7 @@ To see the man page for a command run **man docker <command>**.
   Set exec driver options. See EXEC DRIVER OPTIONS.
 
 **--exec-root**=""
-  Path to use as the root of the Docker execdriver. Default is `/var/run/docker`.
+  Path to use as the root of the Docker exec driver. Default is `/var/run/docker`.
 
 **--fixed-cidr**=""
   IPv4 subnet for fixed IPs (e.g., 10.20.0.0/16); this subnet must be nested in the bridge subnet (which is defined by \-b or \-\-bip)
@@ -82,6 +91,13 @@ unix://[/path/to/socket] to use.
 
 **--icc**=*true*|*false*
   Allow unrestricted inter\-container and Docker daemon host communication. If disabled, containers can still be linked together using **--link** option (see **docker-run(1)**). Default is true.
+
+**--insecure-registry**=[]
+  Enable insecure registry communication, i.e., enable un-encrypted and/or untrusted communication.
+  
+  List of insecure registries can contain an element with CIDR notation to specify a whole subnet. Insecure registries accept HTTP and/or accept HTTPS with certificates from unknown CAs.
+  
+  Enabling `--insecure-registry` is useful when running a local registry.  However, because its use creates security vulnerabilities it should ONLY be enabled for testing purposes.  For increased security, users should add their CA to their system's list of trusted CAs instead of using `--insecure-registry`. 
 
 **--ip**=""
   Default IP address to use when binding container ports. Default is `0.0.0.0`.
@@ -106,9 +122,10 @@ unix://[/path/to/socket] to use.
 **--label**="[]"
   Set key=value labels to the daemon (displayed in `docker info`)
 
-**--log-driver**="*json-file*|*syslog*|*journald*|*gelf*|*fluentd*|*none*"
+**--log-driver**="*json-file*|*syslog*|*journald*|*gelf*|*fluentd*|*awslogs*|*none*"
   Default driver for container logs. Default is `json-file`.
-  **Warning**: `docker logs` command works only for `json-file` logging driver.
+  **Warning**: the `docker logs` command works only for the `json-file` and
+  `journald` logging drivers.
 
 **--log-opt**=[]
   Logging driver specific options.
@@ -131,10 +148,19 @@ unix://[/path/to/socket] to use.
 **--storage-opt**=[]
   Set storage driver options. See STORAGE DRIVER OPTIONS.
 
-**-tls**=*true*|*false*
+**--tls**=*true*|*false*
   Use TLS; implied by --tlsverify. Default is false.
 
-**-tlsverify**=*true*|*false*
+**--tlscacert**=~/.docker/ca.pem
+  Trust certs signed only by this CA.
+
+**--tlscert**=~/.docker/cert.pem
+  Path to TLS certificate file.
+
+**--tlskey**=~/.docker/key.pem
+  Path to TLS key file.
+
+**--tlsverify**=*true*|*false*
   Use TLS and verify the remote (daemon: verify client, client: verify daemon).
   Default is false.
 
@@ -242,8 +268,12 @@ inside it)
   Push an image or a repository to a Docker Registry
   See **docker-push(1)** for full documentation on the **push** command.
 
+**rename**
+  Rename a container.
+  See **docker-rename(1)** for full documentation on the **rename** command.
+
 **restart**
-  Restart a running container
+  Restart a container
   See **docker-restart(1)** for full documentation on the **restart** command.
 
 **rm**
@@ -337,7 +367,7 @@ feature include: automatic or interactive thin-pool resize support, dynamically
 changing thin-pool features, automatic thinp metadata checking when lvm activates
 the thin-pool, etc.
 
-Example use: `docker -d --storage-opt dm.thinpooldev=/dev/mapper/thin-pool`
+Example use: `docker daemon --storage-opt dm.thinpooldev=/dev/mapper/thin-pool`
 
 #### dm.basesize
 
@@ -356,26 +386,26 @@ value requires additional steps to take effect:
         $ sudo rm -rf /var/lib/docker
         $ sudo service docker start
 
-Example use: `docker -d --storage-opt dm.basesize=20G`
+Example use: `docker daemon --storage-opt dm.basesize=20G`
 
 #### dm.fs
 
 Specifies the filesystem type to use for the base device. The
 supported options are `ext4` and `xfs`. The default is `ext4`.
 
-Example use: `docker -d --storage-opt dm.fs=xfs`
+Example use: `docker daemon --storage-opt dm.fs=xfs`
 
 #### dm.mkfsarg
 
 Specifies extra mkfs arguments to be used when creating the base device.
 
-Example use: `docker -d --storage-opt "dm.mkfsarg=-O ^has_journal"`
+Example use: `docker daemon --storage-opt "dm.mkfsarg=-O ^has_journal"`
 
 #### dm.mountopt
 
 Specifies extra mount options used when mounting the thin devices.
 
-Example use: `docker -d --storage-opt dm.mountopt=nodiscard`
+Example use: `docker daemon --storage-opt dm.mountopt=nodiscard`
 
 #### dm.use_deferred_removal
 
@@ -393,7 +423,7 @@ the container exit still succeeds and this option causes the system to schedule
 the device for deferred removal. It does not wait in a loop trying to remove a busy
 device.
 
-Example use: `docker -d --storage-opt dm.use_deferred_removal=true`
+Example use: `docker daemon --storage-opt dm.use_deferred_removal=true`
 
 #### dm.loopdatasize
 
@@ -404,18 +434,18 @@ Specifies the size to use when creating the loopback file for the
 100G. The file is sparse, so it will not initially take up
 this much space.
 
-Example use: `docker -d --storage-opt dm.loopdatasize=200G`
+Example use: `docker daemon --storage-opt dm.loopdatasize=200G`
 
 #### dm.loopmetadatasize
 
 **Note**: This option configures devicemapper loopback, which should not be used in production.
 
 Specifies the size to use when creating the loopback file for the
-"metadadata" device which is used for the thin pool. The default size
+"metadata" device which is used for the thin pool. The default size
 is 2G. The file is sparse, so it will not initially take up
 this much space.
 
-Example use: `docker -d --storage-opt dm.loopmetadatasize=4G`
+Example use: `docker daemon --storage-opt dm.loopmetadatasize=4G`
 
 #### dm.datadev
 
@@ -438,7 +468,7 @@ deprecated.
 Specifies a custom blocksize to use for the thin pool.  The default
 blocksize is 64K.
 
-Example use: `docker -d --storage-opt dm.blocksize=512K`
+Example use: `docker daemon --storage-opt dm.blocksize=512K`
 
 #### dm.blkdiscard
 
@@ -452,7 +482,7 @@ times, but it also prevents the space used in `/var/lib/docker` directory
 from being returned to the system for other use when containers are
 removed.
 
-Example use: `docker -d --storage-opt dm.blkdiscard=false`
+Example use: `docker daemon --storage-opt dm.blkdiscard=false`
 
 #### dm.override_udev_sync_check
 
@@ -473,7 +503,7 @@ When `udev` sync support is `true`, then `devicemapper` and `udev` can
 coordinate the activation and deactivation of devices for containers.
 
 When `udev` sync support is `false`, a race condition occurs between
-the`devicemapper` and `udev` during create and cleanup. The race
+the `devicemapper` and `udev` during create and cleanup. The race
 condition results in errors and failures. (For information on these
 failures, see
 [docker#4036](https://github.com/docker/docker/issues/4036))
@@ -481,7 +511,7 @@ failures, see
 To allow the `docker` daemon to start, regardless of whether `udev` sync is
 `false`, set `dm.override_udev_sync_check` to true:
 
-        $ docker -d --storage-opt dm.override_udev_sync_check=true
+        $ docker daemon --storage-opt dm.override_udev_sync_check=true
 
 When this value is `true`, the driver continues and simply warns you
 the errors are happening.

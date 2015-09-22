@@ -50,6 +50,14 @@ container:
 And you saw why this isn't such a great idea because it constrains you to
 only one container on that specific port.
 
+Instead, you may specify a range of host ports to bind a container port to
+that is different than the default *ephemeral port range*:
+
+    $ docker run -d -p 8000-9000:5000 training/webapp python app.py
+
+This would bind port 5000 in the container to a randomly available port
+between 8000 and 9000 on the host.
+
 There are also a few other ways you can configure the `-p` flag. By
 default the `-p` flag will bind the specified port to all interfaces on
 the host machine. But you can also specify a binding to a specific
@@ -227,11 +235,11 @@ The components in this prefix are:
 Docker uses this prefix format to define three distinct environment variables:
 
 * The `prefix_ADDR` variable contains the IP Address from the URL, for
-example `WEBDB_PORT_8080_TCP_ADDR=172.17.0.82`.
+example `WEBDB_PORT_5432_TCP_ADDR=172.17.0.82`.
 * The `prefix_PORT` variable contains just the port number from the URL for
-example `WEBDB_PORT_8080_TCP_PORT=8080`.
+example `WEBDB_PORT_5432_TCP_PORT=5432`.
 * The `prefix_PROTO` variable contains just the protocol from the URL for
-example `WEBDB_PORT_8080_TCP_PROTO=tcp`.
+example `WEBDB_PORT_5432_TCP_PROTO=tcp`.
 
 If the container exposes multiple ports, an environment variable set is
 defined for each one. This means, for example, if a container exposes 4 ports
@@ -240,7 +248,7 @@ that Docker creates 12 environment variables, 3 for each port.
 Additionally, Docker creates an environment variable called `<alias>_PORT`.
 This variable contains the URL of the source container's first exposed port.
 The  'first' port is defined as the exposed port with the lowest number.
-For example, consider the `WEBDB_PORT=tcp://172.17.0.82:8080` variable.  If
+For example, consider the `WEBDB_PORT=tcp://172.17.0.82:5432` variable.  If
 that port is used for both tcp and udp, then the tcp one is specified.
 
 Finally, Docker also exposes each Docker originated environment variable

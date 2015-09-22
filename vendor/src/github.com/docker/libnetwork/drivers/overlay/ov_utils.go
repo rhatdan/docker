@@ -4,11 +4,12 @@ import (
 	"fmt"
 
 	"github.com/docker/libnetwork/netutils"
-	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/osl"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 )
 
-func validateID(nid, eid types.UUID) error {
+func validateID(nid, eid string) error {
 	if nid == "" {
 		return fmt.Errorf("invalid network id")
 	}
@@ -21,6 +22,8 @@ func validateID(nid, eid types.UUID) error {
 }
 
 func createVethPair() (string, string, error) {
+	defer osl.InitOSContext()()
+
 	// Generate a name for what will be the host side pipe interface
 	name1, err := netutils.GenerateIfaceName(vethPrefix, vethLen)
 	if err != nil {
@@ -45,6 +48,8 @@ func createVethPair() (string, string, error) {
 }
 
 func createVxlan(vni uint32) (string, error) {
+	defer osl.InitOSContext()()
+
 	name, err := netutils.GenerateIfaceName("vxlan", 7)
 	if err != nil {
 		return "", fmt.Errorf("error generating vxlan name: %v", err)
@@ -54,7 +59,7 @@ func createVxlan(vni uint32) (string, error) {
 		LinkAttrs: netlink.LinkAttrs{Name: name},
 		VxlanId:   int(vni),
 		Learning:  true,
-		Port:      vxlanPort,
+		Port:      int(nl.Swap16(vxlanPort)), //network endian order
 		Proxy:     true,
 		L3miss:    true,
 		L2miss:    true,
@@ -68,6 +73,8 @@ func createVxlan(vni uint32) (string, error) {
 }
 
 func deleteVxlan(name string) error {
+	defer osl.InitOSContext()()
+
 	link, err := netlink.LinkByName(name)
 	if err != nil {
 		return fmt.Errorf("failed to find vxlan interface with name %s: %v", name, err)

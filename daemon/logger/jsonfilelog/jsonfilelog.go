@@ -74,7 +74,7 @@ func New(ctx logger.Context) (logger.Logger, error) {
 			return nil, err
 		}
 		if maxFiles < 1 {
-			return nil, fmt.Errorf("max-files cannot be less than 1")
+			return nil, fmt.Errorf("max-file cannot be less than 1")
 		}
 	}
 	return &JSONFileLogger{
@@ -97,7 +97,7 @@ func (l *JSONFileLogger) Log(msg *logger.Message) error {
 	if err != nil {
 		return err
 	}
-	err = (&jsonlog.JSONLogBytes{Log: append(msg.Line, '\n'), Stream: msg.Source, Created: timestamp}).MarshalJSONBuf(l.buf)
+	err = (&jsonlog.JSONLogs{Log: append(msg.Line, '\n'), Stream: msg.Source, Created: timestamp}).MarshalJSONBuf(l.buf)
 	if err != nil {
 		return err
 	}

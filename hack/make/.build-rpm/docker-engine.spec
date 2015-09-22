@@ -26,6 +26,7 @@ Packager: Docker <support@docker.com>
 # only require systemd on those systems
 %if 0%{?is_systemd}
 BuildRequires: pkgconfig(systemd)
+BuildRequires: pkgconfig(libsystemd-journal)
 Requires: systemd-units
 %else
 Requires(post): chkconfig
@@ -50,13 +51,41 @@ Requires: kernel-uek >= 3.8
 Requires: device-mapper >= 1.02.90-2
 %endif
 
+# docker-selinux conditional
+%if 0%{?fedora} >= 20 || 0%{?centos} >= 7 || 0%{?rhel} >= 7 || 0%{?oraclelinux} >= 7
+%global with_selinux 1
+%endif
+
+# start if with_selinux
+%if 0%{?with_selinux}
+# Version of SELinux we were using
+%if 0%{?fedora} == 20
+%global selinux_policyver 3.12.1-197
+%endif # fedora 20
+%if 0%{?fedora} == 21
+%global selinux_policyver 3.13.1-105
+%endif # fedora 21
+%if 0%{?fedora} >= 22
+%global selinux_policyver 3.13.1-128
+%endif # fedora 22
+%if 0%{?centos} >= 7 || 0%{?rhel} >= 7 || 0%{?oraclelinux} >= 7
+%global selinux_policyver 3.13.1-23
+%endif # centos,oraclelinux 7
+%endif # with_selinux
+
+# RE: rhbz#1195804 - ensure min NVR for selinux-policy
+%if 0%{?with_selinux}
+Requires: selinux-policy >= %{selinux_policyver}
+Requires(pre): %{name}-selinux >= %{epoch}:%{version}-%{release}
+%endif # with_selinux
+
 # conflicting packages
 Conflicts: docker
 Conflicts: docker-io
 
 %description
-Docker is an open source project to pack, ship and run any application as a
-lightweight container
+Docker is an open source project to build, ship and run any application as a
+lightweight container.
 
 Docker containers are both hardware-agnostic and platform-agnostic. This means
 they can run anywhere, from your laptop to the largest EC2 compute instance and
@@ -101,11 +130,10 @@ install -d $RPM_BUILD_ROOT/%{_initddir}
 install -d $RPM_BUILD_ROOT/%{_unitdir}
 install -p -m 644 contrib/init/systemd/docker.service $RPM_BUILD_ROOT/%{_unitdir}/docker.service
 install -p -m 644 contrib/init/systemd/docker.socket $RPM_BUILD_ROOT/%{_unitdir}/docker.socket
-%endif
-
+%else
 install -p -m 644 contrib/init/sysvinit-redhat/docker.sysconfig $RPM_BUILD_ROOT/etc/sysconfig/docker
 install -p -m 755 contrib/init/sysvinit-redhat/docker $RPM_BUILD_ROOT/%{_initddir}/docker
-
+%endif
 # add bash completions
 install -d $RPM_BUILD_ROOT/usr/share/bash-completion/completions
 install -d $RPM_BUILD_ROOT/usr/share/zsh/vendor-completions
@@ -140,9 +168,10 @@ install -p -m 644 contrib/syntax/nano/Dockerfile.nanorc $RPM_BUILD_ROOT/usr/shar
 %if 0%{?is_systemd}
 /%{_unitdir}/docker.service
 /%{_unitdir}/docker.socket
-%endif
-/etc/sysconfig/docker
+%else
+%config(noreplace,missingok) /etc/sysconfig/docker
 /%{_initddir}/docker
+%endif
 /usr/share/bash-completion/completions/docker
 /usr/share/zsh/vendor-completions/_docker
 /usr/share/fish/completions/docker.fish

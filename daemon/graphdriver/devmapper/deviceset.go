@@ -70,8 +70,8 @@ type devInfo struct {
 	//
 	// WARNING: In order to avoid AB-BA deadlocks when releasing
 	// the global lock while holding the per-device locks all
-	// device locks must be aquired *before* the device lock, and
-	// multiple device locks should be aquired parent before child.
+	// device locks must be acquired *before* the device lock, and
+	// multiple device locks should be acquired parent before child.
 	lock sync.Mutex
 }
 
@@ -266,7 +266,7 @@ func (devices *DeviceSet) allocateTransactionID() uint64 {
 }
 
 func (devices *DeviceSet) updatePoolTransactionID() error {
-	if err := devicemapper.SetTransactionId(devices.getPoolDevName(), devices.TransactionID, devices.OpenTransactionID); err != nil {
+	if err := devicemapper.SetTransactionID(devices.getPoolDevName(), devices.TransactionID, devices.OpenTransactionID); err != nil {
 		return fmt.Errorf("Error setting devmapper transaction ID: %s", err)
 	}
 	devices.TransactionID = devices.OpenTransactionID
@@ -596,7 +596,7 @@ func (devices *DeviceSet) createRegisterDevice(hash string) (*devInfo, error) {
 
 	for {
 		if err := devicemapper.CreateDevice(devices.getPoolDevName(), deviceID); err != nil {
-			if devicemapper.DeviceIdExists(err) {
+			if devicemapper.DeviceIDExists(err) {
 				// Device ID already exists. This should not
 				// happen. Now we have a mechianism to find
 				// a free device ID. So something is not right.
@@ -648,7 +648,7 @@ func (devices *DeviceSet) createRegisterSnapDevice(hash string, baseInfo *devInf
 
 	for {
 		if err := devicemapper.CreateSnapDevice(devices.getPoolDevName(), deviceID, baseInfo.Name(), baseInfo.DeviceID); err != nil {
-			if devicemapper.DeviceIdExists(err) {
+			if devicemapper.DeviceIDExists(err) {
 				// Device ID already exists. This should not
 				// happen. Now we have a mechianism to find
 				// a free device ID. So something is not right.
@@ -768,7 +768,7 @@ func (devices *DeviceSet) setupBaseImage() error {
 		}
 
 		if err := devices.verifyBaseDeviceUUID(oldInfo); err != nil {
-			return fmt.Errorf("Base Device UUID verification failed. Possibly using a different thin pool then last invocation:%v", err)
+			return fmt.Errorf("Base Device UUID verification failed. Possibly using a different thin pool than last invocation:%v", err)
 		}
 		return nil
 	}
@@ -1257,7 +1257,7 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 
 	// https://github.com/docker/docker/issues/4036
 	if supported := devicemapper.UdevSetSyncSupport(true); !supported {
-		logrus.Warn("Udev sync is not supported. This will lead to unexpected behavior, data loss and errors. For more information, see https://docs.docker.com/reference/commandline/cli/#daemon-storage-driver-option")
+		logrus.Warn("Udev sync is not supported. This will lead to unexpected behavior, data loss and errors. For more information, see https://docs.docker.com/reference/commandline/daemon/#daemon-storage-driver-option")
 	}
 
 	if err := os.MkdirAll(devices.metadataDir(), 0700); err != nil {
@@ -1397,6 +1397,12 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 		}
 	}
 
+	if devices.thinPoolDevice == "" {
+		if devices.metadataLoopFile != "" || devices.dataLoopFile != "" {
+			logrus.Warnf("Usage of loopback devices is strongly discouraged for production use. Please use `--storage-opt dm.thinpooldev` or use `man docker` to refer to dm.thinpooldev section.")
+		}
+	}
+
 	// Right now this loads only NextDeviceID. If there is more metadata
 	// down the line, we might have to move it earlier.
 	if err := devices.loadDeviceSetMetaData(); err != nil {
@@ -1509,12 +1515,16 @@ func (devices *DeviceSet) deactivatePool() error {
 	if err != nil {
 		return err
 	}
-	if d, err := devicemapper.GetDeps(devname); err == nil {
-		// Access to more Debug output
-		logrus.Debugf("[devmapper] devicemapper.GetDeps() %s: %#v", devname, d)
+
+	if devinfo.Exists == 0 {
+		return nil
 	}
-	if devinfo.Exists != 0 {
-		return devicemapper.RemoveDevice(devname)
+	if err := devicemapper.RemoveDevice(devname); err != nil {
+		return err
+	}
+
+	if d, err := devicemapper.GetDeps(devname); err == nil {
+		logrus.Warnf("[devmapper] device %s still has %d active dependents", devname, d.Count)
 	}
 
 	return nil

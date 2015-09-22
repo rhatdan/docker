@@ -118,6 +118,13 @@ func (c *linuxContainer) Start(process *Process) error {
 	return nil
 }
 
+func (c *linuxContainer) Signal(s os.Signal) error {
+	if err := c.initProcess.signal(s); err != nil {
+		return newSystemError(err)
+	}
+	return nil
+}
+
 func (c *linuxContainer) newParentProcess(p *Process, doInit bool) (parentProcess, error) {
 	parentPipe, childPipe, err := newPipe()
 	if err != nil {
@@ -164,6 +171,7 @@ func (c *linuxContainer) newInitProcess(p *Process, cmd *exec.Cmd, parentPipe, c
 			// user mappings are not supported
 			return nil, err
 		}
+		enableSetgroups(cmd.SysProcAttr)
 		// Default to root user when user namespaces are enabled.
 		if cmd.SysProcAttr.Credential == nil {
 			cmd.SysProcAttr.Credential = &syscall.Credential{}
@@ -177,6 +185,7 @@ func (c *linuxContainer) newInitProcess(p *Process, cmd *exec.Cmd, parentPipe, c
 		parentPipe: parentPipe,
 		manager:    c.cgroupManager,
 		config:     c.newInitConfig(p),
+		container:  c,
 	}, nil
 }
 
@@ -239,6 +248,17 @@ func (c *linuxContainer) Destroy() error {
 		err = rerr
 	}
 	c.initProcess = nil
+	if c.config.Hooks != nil {
+		s := configs.HookState{
+			ID:   c.id,
+			Root: c.config.Rootfs,
+		}
+		for _, hook := range c.config.Hooks.Poststop {
+			if err := hook.Run(s); err != nil {
+				return err
+			}
+		}
+	}
 	return err
 }
 
@@ -273,7 +293,7 @@ func (c *linuxContainer) checkCriuVersion() error {
 
 	out, err := exec.Command(c.criuPath, "-V").Output()
 	if err != nil {
-		return err
+		return fmt.Errorf("Unable to execute CRIU command: %s", c.criuPath)
 	}
 
 	n, err := fmt.Sscanf(string(out), "Version: %d.%d.%d\n", &x, &y, &z) // 1.5.2
@@ -291,7 +311,20 @@ func (c *linuxContainer) checkCriuVersion() error {
 	return nil
 }
 
-const descriptors_filename = "descriptors.json"
+const descriptorsFilename = "descriptors.json"
+
+func (c *linuxContainer) addCriuDumpMount(req *criurpc.CriuReq, m *configs.Mount) {
+	mountDest := m.Destination
+	if strings.HasPrefix(mountDest, c.config.Rootfs) {
+		mountDest = mountDest[len(c.config.Rootfs):]
+	}
+
+	extMnt := &criurpc.ExtMountMap{
+		Key: proto.String(mountDest),
+		Val: proto.String(mountDest),
+	}
+	req.Opts.ExtMnt = append(req.Opts.ExtMnt, extMnt)
+}
 
 func (c *linuxContainer) Checkpoint(criuOpts *CriuOpts) error {
 	c.m.Lock()
@@ -356,22 +389,25 @@ func (c *linuxContainer) Checkpoint(criuOpts *CriuOpts) error {
 	}
 
 	t := criurpc.CriuReqType_DUMP
-	req := criurpc.CriuReq{
+	req := &criurpc.CriuReq{
 		Type: &t,
 		Opts: &rpcOpts,
 	}
 
 	for _, m := range c.config.Mounts {
-		if m.Device == "bind" {
-			mountDest := m.Destination
-			if strings.HasPrefix(mountDest, c.config.Rootfs) {
-				mountDest = mountDest[len(c.config.Rootfs):]
+		switch m.Device {
+		case "bind":
+			c.addCriuDumpMount(req, m)
+			break
+		case "cgroup":
+			binds, err := getCgroupMounts(m)
+			if err != nil {
+				return err
 			}
-
-			extMnt := new(criurpc.ExtMountMap)
-			extMnt.Key = proto.String(mountDest)
-			extMnt.Val = proto.String(mountDest)
-			req.Opts.ExtMnt = append(req.Opts.ExtMnt, extMnt)
+			for _, b := range binds {
+				c.addCriuDumpMount(req, b)
+			}
+			break
 		}
 	}
 
@@ -382,16 +418,29 @@ func (c *linuxContainer) Checkpoint(criuOpts *CriuOpts) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(filepath.Join(criuOpts.ImagesDirectory, descriptors_filename), fdsJSON, 0655)
+	err = ioutil.WriteFile(filepath.Join(criuOpts.ImagesDirectory, descriptorsFilename), fdsJSON, 0655)
 	if err != nil {
 		return err
 	}
 
-	err = c.criuSwrk(nil, &req, criuOpts)
+	err = c.criuSwrk(nil, req, criuOpts)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func (c *linuxContainer) addCriuRestoreMount(req *criurpc.CriuReq, m *configs.Mount) {
+	mountDest := m.Destination
+	if strings.HasPrefix(mountDest, c.config.Rootfs) {
+		mountDest = mountDest[len(c.config.Rootfs):]
+	}
+
+	extMnt := &criurpc.ExtMountMap{
+		Key: proto.String(mountDest),
+		Val: proto.String(m.Source),
+	}
+	req.Opts.ExtMnt = append(req.Opts.ExtMnt, extMnt)
 }
 
 func (c *linuxContainer) Restore(process *Process, criuOpts *CriuOpts) error {
@@ -449,7 +498,7 @@ func (c *linuxContainer) Restore(process *Process, criuOpts *CriuOpts) error {
 	defer syscall.Unmount(root, syscall.MNT_DETACH)
 
 	t := criurpc.CriuReqType_RESTORE
-	req := criurpc.CriuReq{
+	req := &criurpc.CriuReq{
 		Type: &t,
 		Opts: &criurpc.CriuOpts{
 			ImagesDirFd:    proto.Int32(int32(imageDir.Fd())),
@@ -468,16 +517,19 @@ func (c *linuxContainer) Restore(process *Process, criuOpts *CriuOpts) error {
 		},
 	}
 	for _, m := range c.config.Mounts {
-		if m.Device == "bind" {
-			mountDest := m.Destination
-			if strings.HasPrefix(mountDest, c.config.Rootfs) {
-				mountDest = mountDest[len(c.config.Rootfs):]
+		switch m.Device {
+		case "bind":
+			c.addCriuRestoreMount(req, m)
+			break
+		case "cgroup":
+			binds, err := getCgroupMounts(m)
+			if err != nil {
+				return err
 			}
-
-			extMnt := new(criurpc.ExtMountMap)
-			extMnt.Key = proto.String(mountDest)
-			extMnt.Val = proto.String(m.Source)
-			req.Opts.ExtMnt = append(req.Opts.ExtMnt, extMnt)
+			for _, b := range binds {
+				c.addCriuRestoreMount(req, b)
+			}
+			break
 		}
 	}
 	for _, iface := range c.config.Networks {
@@ -492,13 +544,19 @@ func (c *linuxContainer) Restore(process *Process, criuOpts *CriuOpts) error {
 			break
 		}
 	}
+	for _, i := range criuOpts.VethPairs {
+		veth := new(criurpc.CriuVethPair)
+		veth.IfOut = proto.String(i.HostInterfaceName)
+		veth.IfIn = proto.String(i.ContainerInterfaceName)
+		req.Opts.Veths = append(req.Opts.Veths, veth)
+	}
 
 	var (
 		fds    []string
 		fdJSON []byte
 	)
 
-	if fdJSON, err = ioutil.ReadFile(filepath.Join(criuOpts.ImagesDirectory, descriptors_filename)); err != nil {
+	if fdJSON, err = ioutil.ReadFile(filepath.Join(criuOpts.ImagesDirectory, descriptorsFilename)); err != nil {
 		return err
 	}
 
@@ -515,7 +573,7 @@ func (c *linuxContainer) Restore(process *Process, criuOpts *CriuOpts) error {
 		}
 	}
 
-	err = c.criuSwrk(process, &req, criuOpts)
+	err = c.criuSwrk(process, req, criuOpts)
 	if err != nil {
 		return err
 	}
@@ -528,6 +586,7 @@ func (c *linuxContainer) criuSwrk(process *Process, req *criurpc.CriuReq, opts *
 		return err
 	}
 
+	logPath := filepath.Join(opts.WorkDirectory, req.GetOpts().GetLogFile())
 	criuClient := os.NewFile(uintptr(fds[0]), "criu-transport-client")
 	criuServer := os.NewFile(uintptr(fds[1]), "criu-transport-server")
 	defer criuClient.Close()
@@ -591,7 +650,8 @@ func (c *linuxContainer) criuSwrk(process *Process, req *criurpc.CriuReq, opts *
 			return err
 		}
 		if !resp.GetSuccess() {
-			return fmt.Errorf("criu failed: type %s errno %d", req.GetType().String(), resp.GetCrErrno())
+			typeString := req.GetType().String()
+			return fmt.Errorf("criu failed: type %s errno %d\nlog file: %s", typeString, resp.GetCrErrno(), logPath)
 		}
 
 		t := resp.GetType()
@@ -631,7 +691,7 @@ func (c *linuxContainer) criuSwrk(process *Process, req *criurpc.CriuReq, opts *
 		return err
 	}
 	if !st.Success() {
-		return fmt.Errorf("criu failed: %s", st.String())
+		return fmt.Errorf("criu failed: %s\nlog file: %s", st.String(), logPath)
 	}
 	return nil
 }

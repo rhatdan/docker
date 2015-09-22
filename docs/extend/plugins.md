@@ -37,6 +37,11 @@ The following plugins exist:
   environments with features that include tenant isolation, automated
   provisioning, encryption, secure deletion, snapshots and QoS.
 
+* The [Convoy plugin](https://github.com/rancher/convoy) is a volume plugin for a
+  variety of storage back-ends including device mapper and NFS. It's a simple standalone
+  executable written in Go and provides the framework to support vendor-specific extensions
+  such as snapshots, backups and restore.
+
 * The [Flocker plugin](https://clusterhq.com/docker-plugin/) is a volume plugin
   which provides multi-host portable volumes for Docker, enabling you to run
   databases and other stateful containers and move them around across a cluster
@@ -49,6 +54,10 @@ The following plugins exist:
 * The [Keywhiz plugin](https://github.com/calavera/docker-volume-keywhiz) is
   a plugin that provides credentials and secret management using Keywhiz as
   a central repository.
+
+* The [Pachyderm PFS plugin](https://github.com/pachyderm/pachyderm/tree/master/src/cmd/pfs-volume-driver)
+  is a volume plugin written in Go that provides functionality to mount Pachyderm File System (PFS)
+  repositories at specific commits as volumes within Docker containers.
 
 * The [REX-Ray plugin](https://github.com/emccode/rexraycli) is a volume plugin
   which is written in Go and provides advanced storage functionality for many

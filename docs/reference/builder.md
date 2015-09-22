@@ -10,48 +10,50 @@ parent = "mn_reference"
 
 # Dockerfile reference
 
-**Docker can build images automatically** by reading the instructions
-from a `Dockerfile`. A `Dockerfile` is a text document that contains all
-the commands you would normally execute manually in order to build a
-Docker image. By calling `docker build` from your terminal, you can have
-Docker build your image step by step, executing the instructions
-successively.
+Docker can build images automatically by reading the instructions from a
+`Dockerfile`. A `Dockerfile` is a text document that contains all the commands a
+user could call on the command line to assemble an image. Using `docker build`
+users can create an automated build that executes several command-line
+instructions in succession.
 
-This page discusses the specifics of all the instructions you can use in your
-`Dockerfile`. To further help you write a clear, readable, maintainable
-`Dockerfile`, we've also written a [`Dockerfile` Best Practices
-guide](/articles/dockerfile_best-practices). Lastly, you can test your
-Dockerfile knowledge with the [Dockerfile tutorial](/userguide/level1).
+This page describes the commands you can use in a `Dockerfile`. When you are
+done reading this page, refer to the [`Dockerfile` Best
+Practices](/articles/dockerfile_best-practices) for a tip-oriented guide.
 
 ## Usage
 
-To [*build*](/reference/commandline/cli/#build) an image from a source repository,
-create a description file called `Dockerfile` at the root of your repository.
-This file will describe the steps to assemble the image.
+The [`docker build`](/reference/commandline/build/) command builds an image from
+a `Dockerfile` and a *context*. The build's context is the files at a specified
+location `PATH` or `URL`. The `PATH` is a directory on your local filesystem.
+The `URL` is a the location of a Git repository.
 
-Then call `docker build` with the path of your source repository as the argument
-(for example, `.`):
+A context is processed recursively. So, a `PATH` includes any subdirectories and
+the `URL` includes the repository and its submodules. A simple build command
+that uses the current directory as context:
 
     $ docker build .
+    Sending build context to Docker daemon  6.51 MB
+    ...
 
-The path to the source repository defines where to find the *context* of
-the build. The build is run by the Docker daemon, not by the CLI, so the
-whole context must be transferred to the daemon. The Docker CLI reports
-"Sending build context to Docker daemon" when the context is sent to the daemon.
+The build is run by the Docker daemon, not by the CLI. The first thing a build
+process does is send the entire context (recursively) to the daemon.  In most
+cases, it's best to start with an empty directory as context and keep your
+Dockerfile in that directory. Add only the files needed for building the
+Dockerfile.
 
-> **Warning**
-> Avoid using your root directory, `/`, as the root of the source repository. The 
-> `docker build` command will use whatever directory contains the Dockerfile as the build
-> context (including all of its subdirectories). The build context will be sent to the
-> Docker daemon before building the image, which means if you use `/` as the source
-> repository, the entire contents of your hard drive will get sent to the daemon (and
-> thus to the machine running the daemon). You probably don't want that.
+>**Warning**: Do not use your root directory, `/`, as the `PATH` as it causes
+>the build to transfer the entire contents of your hard drive to the Docker
+>daemon. 
 
-In most cases, it's best to put each Dockerfile in an empty directory. Then,
-only add the files needed for building the Dockerfile to the directory. To
-increase the build's performance, you can exclude files and directories by
-adding a `.dockerignore` file to the directory.  For information about how to
-[create a `.dockerignore` file](#dockerignore-file) on this page.
+To use a file in the build context, the `Dockerfile` refers to the file with
+an instruction, for example,  a `COPY` instruction. To increase the build's
+performance, exclude files and directories by adding a `.dockerignore` file to
+the context directory.  For information about how to [create a `.dockerignore`
+file](#dockerignore-file) see the documentation on this page.
+
+Traditionally, the `Dockerfile` is called `Dockerfile` and located in the root
+of the context. You use the `-f` flag with `docker build` to point to a Dockerfile
+anywhere in your file system.
 
 You can specify a repository and tag at which to save the new image if
 the build succeeds:
@@ -100,7 +102,7 @@ be UPPERCASE in order to distinguish them from arguments more easily.
 
 Docker runs the instructions in a `Dockerfile` in order. **The
 first instruction must be \`FROM\`** in order to specify the [*Base
-Image*](/terms/image/#base-image) from which you are building.
+Image*](/reference/glossary/#base-image) from which you are building.
 
 Docker will treat lines that *begin* with `#` as a
 comment. A `#` marker anywhere else in the line will
@@ -113,12 +115,6 @@ Here is the set of instructions you can use in a `Dockerfile` for building
 images.
 
 ### Environment replacement
-
-> **Note**: prior to 1.3, `Dockerfile` environment variables were handled
-> similarly, in that they would be replaced as described below. However, there
-> was no formal definition on as to which instructions handled environment
-> replacement at the time. After 1.3 this behavior will be preserved and
-> canonical.
 
 Environment variables (declared with [the `ENV` statement](#env)) can also be
 used in certain instructions as variables to be interpreted by the
@@ -162,6 +158,7 @@ the `Dockerfile`:
 * `USER`
 * `WORKDIR`
 * `VOLUME`
+* `STOPSIGNAL`
 
 as well as:
 
@@ -172,13 +169,13 @@ as well as:
 > variable, even when combined with any of the instructions listed above.
 
 Environment variable substitution will use the same value for each variable
-throughout the entire command.  In other words, in this example:
+throughout the entire command. In other words, in this example:
 
     ENV abc=hello
     ENV abc=bye def=$abc
     ENV ghi=$abc
 
-will result in `def` having a value of `hello`, not `bye`.  However, 
+will result in `def` having a value of `hello`, not `bye`. However, 
 `ghi` will have a value of `bye` because it is not part of the same command
 that set `abc` to `bye`.
 
@@ -197,7 +194,7 @@ expansion) is done using Go's
 
 You can specify exceptions to exclusion rules. To do this, simply prefix a
 pattern with an `!` (exclamation mark) in the same way you would in a
-`.gitignore` file.  Currently there is no support for regular expressions.
+`.gitignore` file. Currently there is no support for regular expressions.
 Formats like `[^temp*]` are ignored. 
 
 The following is an example `.dockerignore` file:
@@ -257,7 +254,7 @@ Or
 
     FROM <image>@<digest>
 
-The `FROM` instruction sets the [*Base Image*](/terms/image/#base-image)
+The `FROM` instruction sets the [*Base Image*](/reference/glossary/#base-image)
 for subsequent instructions. As such, a valid `Dockerfile` must have `FROM` as
 its first instruction. The image can be any valid image – it is especially easy
 to start by **pulling an image** from the [*Public Repositories*](
@@ -298,6 +295,17 @@ any point in an image's history, much like source control.
 The *exec* form makes it possible to avoid shell string munging, and to `RUN`
 commands using a base image that does not contain `/bin/sh`.
 
+In the *shell* form you can use a `\` (backslash) to continue a single
+RUN instruction onto the next line. For example, consider these two lines:
+```
+RUN /bin/bash -c 'source $HOME/.bashrc ;\
+echo $HOME'
+```
+Together they are equivalent to this single line:
+```
+RUN /bin/bash -c 'source $HOME/.bashrc ; echo $HOME'
+```
+
 > **Note**:
 > To use a different shell, other than '/bin/sh', use the *exec* form
 > passing in the desired shell. For example,
@@ -316,7 +324,7 @@ commands using a base image that does not contain `/bin/sh`.
 
 The cache for `RUN` instructions isn't invalidated automatically during
 the next build. The cache for an instruction like 
-`RUN apt-get dist-upgrade -y` will be reused during the next build.  The 
+`RUN apt-get dist-upgrade -y` will be reused during the next build. The 
 cache for `RUN` instructions can be invalidated by using the `--no-cache` 
 flag, for example `docker build --no-cache`.
 
@@ -894,9 +902,9 @@ The `VOLUME` instruction creates a mount point with the specified name
 and marks it as holding externally mounted volumes from native host or other
 containers. The value can be a JSON array, `VOLUME ["/var/log/"]`, or a plain
 string with multiple arguments, such as `VOLUME /var/log` or `VOLUME /var/log
-/var/db`.  For more information/examples and mounting instructions via the
+/var/db`. For more information/examples and mounting instructions via the
 Docker client, refer to 
-[*Share Directories via Volumes*](/userguide/dockervolumes/#volume)
+[*Share Directories via Volumes*](/userguide/dockervolumes/#mount-a-host-directory-as-a-data-volume)
 documentation.
 
 The `docker run` command initializes the newly created volume with any data 
@@ -911,6 +919,10 @@ consider the following Dockerfile snippet:
 This Dockerfile results in an image that causes `docker run`, to
 create a new mount point at `/myvol` and copy the  `greeting` file 
 into the newly created volume.
+
+> **Note**:
+> If any build steps change the data within the volume after it has been
+> declared, those changes will be discarded.
 
 > **Note**:
 > The list is parsed as a JSON array, which means that
@@ -949,9 +961,132 @@ For example:
 
     ENV DIRPATH /path
     WORKDIR $DIRPATH/$DIRNAME
+    RUN pwd
 
 The output of the final `pwd` command in this `Dockerfile` would be
 `/path/$DIRNAME`
+
+## ARG
+
+    ARG <name>[=<default value>]
+
+The `ARG` instruction defines a variable that users can pass at build-time to
+the builder with the `docker build` command using the `--build-arg
+<varname>=<value>` flag. If a user specifies a build argument that was not
+defined in the Dockerfile, the build outputs an error.
+
+```
+One or more build-args were not consumed, failing build.
+```
+
+The Dockerfile author can define a single variable by specifying `ARG` once or many
+variables by specifying `ARG` more than once. For example, a valid Dockerfile:
+
+```
+FROM busybox
+ARG user1
+ARG buildno
+...
+```
+
+A Dockerfile author may optionally specify a default value for an `ARG` instruction:
+
+```
+FROM busybox
+ARG user1=someuser
+ARG buildno=1
+...
+```
+
+If an `ARG` value has a default and if there is no value passed at build-time, the
+builder uses the default.
+
+An `ARG` variable definition comes into effect from the line on which it is
+defined in the `Dockerfile` not from the argument's use on the command-line or
+elsewhere.  For example, consider this Dockerfile:
+
+```
+1 FROM busybox
+2 USER ${user:-some_user}
+3 ARG user
+4 USER $user
+...
+```
+A user builds this file by calling:
+
+```
+$ docker build --build-arg user=what_user Dockerfile
+```
+
+The `USER` at line 2 evaluates to `some_user` as the `user` variable is defined on the
+subsequent line 3. The `USER` at line 4 evaluates to `what_user` as `user` is
+defined and the `what_user` value was passed on the command line. Prior to its definition by an
+`ARG` instruction, any use of a variable results in an empty string.
+
+> **Note:** It is not recommended to use build-time variables for
+>  passing secrets like github keys, user credentials etc.
+
+You can use an `ARG` or an `ENV` instruction to specify variables that are
+available to the `RUN` instruction. Environment variables defined using the
+`ENV` instruction always override an `ARG` instruction of the same name. Consider
+this Dockerfile with an `ENV` and `ARG` instruction.
+
+```
+1 FROM ubuntu
+2 ARG CONT_IMG_VER
+3 ENV CONT_IMG_VER v1.0.0
+4 RUN echo $CONT_IMG_VER
+```
+Then, assume this image is built with this command:
+
+```
+$ docker build --build-arg CONT_IMG_VER=v2.0.1 Dockerfile
+```
+
+In this case, the `RUN` instruction uses `v1.0.0` instead of the `ARG` setting
+passed by the user:`v2.0.1` This behavior is similar to a shell
+script where a locally scoped variable overrides the variables passed as
+arguments or inherited from environment, from its point of definition.
+
+Using the example above but a different `ENV` specification you can create more
+useful interactions between `ARG` and `ENV` instructions:
+
+```
+1 FROM ubuntu
+2 ARG CONT_IMG_VER
+3 ENV CONT_IMG_VER ${CONT_IMG_VER:-v1.0.0}
+4 RUN echo $CONT_IMG_VER
+```
+
+Unlike an `ARG` instruction, `ENV` values are always persisted in the built
+image. Consider a docker build without the --build-arg flag:
+
+```
+$ docker build Dockerfile
+```
+
+Using this Dockerfile example, `CONT_IMG_VER` is still persisted in the image but
+its value would be `v1.0.0` as it is the default set in line 3 by the `ENV` instruction.
+
+The variable expansion technique in this example allows you to pass arguments
+from the command line and persist them in the final image by leveraging the
+`ENV` instruction. Variable expansion is only supported for [a limited set of
+Dockerfile instructions.](#environment-replacement)
+
+Docker has a set of predefined `ARG` variables that you can use without a
+corresponding `ARG` instruction in the Dockerfile.
+
+* `HTTP_PROXY`
+* `http_proxy`
+* `HTTPS_PROXY`
+* `https_proxy`
+* `FTP_PROXY`
+* `ftp_proxy`
+* `NO_PROXY`
+* `no_proxy`
+
+To use these, simply pass them on the command line using the `--build-arg
+<varname>=<value>` flag.
 
 ## ONBUILD
 
@@ -1010,6 +1145,14 @@ For example you might add something like this:
 > **Warning**: Chaining `ONBUILD` instructions using `ONBUILD ONBUILD` isn't allowed.
 
 > **Warning**: The `ONBUILD` instruction may not trigger `FROM` or `MAINTAINER` instructions.
+
+## STOPSIGNAL
+
+	STOPSIGNAL signal
+
+The `STOPSIGNAL` instruction sets the system call signal that will be sent to the container to exit.
+This signal can be a valid unsigned number that matches a position in the kernel's syscall table, for instance 9,
+or a signal name in the format SIGNAME, for instance SIGKILL.
 
 ## Dockerfile examples
 

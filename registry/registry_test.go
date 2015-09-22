@@ -185,7 +185,7 @@ func TestGetRemoteImageJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertEqual(t, size, 154, "Expected size 154")
+	assertEqual(t, size, int64(154), "Expected size 154")
 	if len(json) <= 0 {
 		t.Fatal("Expected non-empty json")
 	}
@@ -675,6 +675,35 @@ func TestNewIndexInfo(t *testing.T) {
 		},
 	}
 	testIndexInfo(config, expectedIndexInfos)
+}
+
+func TestMirrorEndpointLookup(t *testing.T) {
+	containsMirror := func(endpoints []APIEndpoint) bool {
+		for _, pe := range endpoints {
+			if pe.URL == "my.mirror" {
+				return true
+			}
+		}
+		return false
+	}
+	s := Service{Config: makeServiceConfig([]string{"my.mirror"}, nil)}
+	imageName := IndexName + "/test/image"
+
+	pushAPIEndpoints, err := s.LookupPushEndpoints(imageName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containsMirror(pushAPIEndpoints) {
+		t.Fatal("Push endpoint should not contain mirror")
+	}
+
+	pullAPIEndpoints, err := s.LookupPullEndpoints(imageName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsMirror(pullAPIEndpoints) {
+		t.Fatal("Pull endpoint should contain mirror")
+	}
 }
 
 func TestPushRegistryTag(t *testing.T) {

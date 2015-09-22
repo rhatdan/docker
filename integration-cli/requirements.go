@@ -24,6 +24,14 @@ type testRequirement struct {
 var (
 	daemonExecDriver string
 
+	DaemonIsWindows = testRequirement{
+		func() bool { return daemonPlatform == "windows" },
+		"Test requires a Windows daemon",
+	}
+	DaemonIsLinux = testRequirement{
+		func() bool { return daemonPlatform == "linux" },
+		"Test requires a Linux daemon",
+	}
 	SameHostDaemon = testRequirement{
 		func() bool { return isLocalDaemon },
 		"Test requires docker daemon to runs on the same machine as CLI",
@@ -128,6 +136,16 @@ var (
 			return false
 		},
 		"Test requires support for IPv6",
+	}
+	NotGCCGO = testRequirement{
+		func() bool {
+			out, err := exec.Command("go", "version").Output()
+			if err != nil && strings.Contains(string(out), "gccgo") {
+				return true
+			}
+			return false
+		},
+		"Test requires native Golang compiler instead of GCCGO",
 	}
 )
 

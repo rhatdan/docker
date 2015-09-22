@@ -42,15 +42,10 @@ func parseSubCommand(rest string) (*Node, map[string]bool, error) {
 	return &Node{Children: []*Node{child}}, nil, nil
 }
 
-// parse environment like statements. Note that this does *not* handle
-// variable interpolation, which will be handled in the evaluator.
-func parseNameVal(rest string, key string) (*Node, map[string]bool, error) {
-	// This is kind of tricky because we need to support the old
-	// variant:   KEY name value
-	// as well as the new one:    KEY name=value ...
-	// The trigger to know which one is being used will be whether we hit
-	// a space or = first.  space ==> old, "=" ==> new
-
+// helper to parse words (i.e space delimited or quoted strings) in a statement.
+// The quotes are preserved as part of this function and they are stripped later
+// as part of processWords().
+func parseWords(rest string) []string {
 	const (
 		inSpaces = iota // looking for start of a word
 		inWord
@@ -89,15 +84,6 @@ func parseNameVal(rest string, key string) (*Node, map[string]bool, error) {
 				phase = inSpaces
 				if blankOK || len(word) > 0 {
 					words = append(words, word)
-
-					// Look for = and if not there assume
-					// we're doing the old stuff and
-					// just read the rest of the line
-					if !strings.Contains(word, "=") {
-						word = strings.TrimSpace(rest[pos:])
-						words = append(words, word)
-						break
-					}
 				}
 				word = ""
 				blankOK = false
@@ -141,13 +127,26 @@ func parseNameVal(rest string, key string) (*Node, map[string]bool, error) {
 		}
 	}
 
+	return words
+}
+
+// parse environment like statements. Note that this does *not* handle
+// variable interpolation, which will be handled in the evaluator.
+func parseNameVal(rest string, key string) (*Node, map[string]bool, error) {
+	// This is kind of tricky because we need to support the old
+	// variant:   KEY name value
+	// as well as the new one:    KEY name=value ...
+	// The trigger to know which one is being used will be whether we hit
+	// a space or = first.  space ==> old, "=" ==> new
+
+	words := parseWords(rest)
 	if len(words) == 0 {
 		return nil, nil, nil
 	}
 
-	// Old format (KEY name value)
 	var rootnode *Node
 
+	// Old format (KEY name value)
 	if !strings.Contains(words[0], "=") {
 		node := &Node{}
 		rootnode = node
@@ -195,6 +194,38 @@ func parseLabel(rest string) (*Node, map[string]bool, error) {
 	return parseNameVal(rest, "LABEL")
 }
 
+// parses a statement containing one or more keyword definition(s) and/or
+// value assignments, like `name1 name2= name3="" name4=value`.
+// Note that this is a stricter format than the old format of assignment,
+// allowed by parseNameVal(), in a way that this only allows assignment of the
+// form `keyword=[<value>]` like  `name2=`, `name3=""`, and `name4=value` above.
+// In addition, a keyword definition alone is of the form `keyword` like `name1`
+// above. And the assignments `name2=` and `name3=""` are equivalent and
+// assign an empty value to the respective keywords.
+func parseNameOrNameVal(rest string) (*Node, map[string]bool, error) {
+	words := parseWords(rest)
+	if len(words) == 0 {
+		return nil, nil, nil
+	}
+
+	var (
+		rootnode *Node
+		prevNode *Node
+	)
+	for i, word := range words {
+		node := &Node{}
+		node.Value = word
+		if i == 0 {
+			rootnode = node
+		} else {
+			prevNode.Next = node
+		}
+		prevNode = node
+	}
+
+	return rootnode, nil, nil
+}
+
 // parses a whitespace-delimited set of arguments. The result is effectively a
 // linked list of string arguments.
 func parseStringsWhitespaceDelimited(rest string) (*Node, map[string]bool, error) {
@@ -232,6 +263,11 @@ func parseString(rest string) (*Node, map[string]bool, error) {
 
 // parseJSON converts JSON arrays to an AST.
 func parseJSON(rest string) (*Node, map[string]bool, error) {
+	rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
+	if !strings.HasPrefix(rest, "[") {
+		return nil, nil, fmt.Errorf(`Error parsing "%s" as a JSON array`, rest)
+	}
+
 	var myJSON []interface{}
 	if err := json.NewDecoder(strings.NewReader(rest)).Decode(&myJSON); err != nil {
 		return nil, nil, err

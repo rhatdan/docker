@@ -72,7 +72,7 @@ type bufReader struct {
 
 // NewBufReader returns a new bufReader.
 func NewBufReader(r io.Reader) io.ReadCloser {
-	timeout := rand.New(rndSrc).Intn(120) + 180
+	timeout := rand.New(rndSrc).Intn(90)
 
 	reader := &bufReader{
 		buf:                  &bytes.Buffer{},
@@ -233,7 +233,7 @@ func HashData(src io.Reader) (string, error) {
 }
 
 // OnEOFReader wraps a io.ReadCloser and a function
-// the fuction will run at the end of file or close the file.
+// the function will run at the end of file or close the file.
 type OnEOFReader struct {
 	Rc io.ReadCloser
 	Fn func()

@@ -8,6 +8,7 @@ import (
 )
 
 func (s *DockerSuite) TestRenameStoppedContainer(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	out, _ := dockerCmd(c, "run", "--name", "first_name", "-d", "busybox", "sh")
 
 	cleanedContainerID := strings.TrimSpace(out)
@@ -28,6 +29,7 @@ func (s *DockerSuite) TestRenameStoppedContainer(c *check.C) {
 }
 
 func (s *DockerSuite) TestRenameRunningContainer(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	out, _ := dockerCmd(c, "run", "--name", "first_name", "-d", "busybox", "sh")
 
 	newName := "new_name" + stringid.GenerateNonCryptoID()
@@ -44,6 +46,7 @@ func (s *DockerSuite) TestRenameRunningContainer(c *check.C) {
 }
 
 func (s *DockerSuite) TestRenameCheckNames(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "--name", "first_name", "-d", "busybox", "sh")
 
 	newName := "new_name" + stringid.GenerateNonCryptoID()
@@ -64,10 +67,19 @@ func (s *DockerSuite) TestRenameCheckNames(c *check.C) {
 }
 
 func (s *DockerSuite) TestRenameInvalidName(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "--name", "myname", "-d", "busybox", "top")
 
 	if out, _, err := dockerCmdWithError("rename", "myname", "new:invalid"); err == nil || !strings.Contains(out, "Invalid container name") {
 		c.Fatalf("Renaming container to invalid name should have failed: %s\n%v", out, err)
+	}
+
+	if out, _, err := dockerCmdWithError("rename", "myname", ""); err == nil || !strings.Contains(out, "may be empty") {
+		c.Fatalf("Renaming container to empty name should have failed: %s\n%v", out, err)
+	}
+
+	if out, _, err := dockerCmdWithError("rename", "", "newname"); err == nil || !strings.Contains(out, "may be empty") {
+		c.Fatalf("Renaming container to empty name should have failed: %s\n%v", out, err)
 	}
 
 	if out, _, err := dockerCmdWithError("ps", "-a"); err != nil || !strings.Contains(out, "myname") {

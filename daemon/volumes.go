@@ -8,14 +8,19 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/api/types"
+	derr "github.com/docker/docker/errors"
 	"github.com/docker/docker/pkg/chrootarchive"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/volume"
 )
 
-// ErrVolumeReadonly is used to signal an error when trying to copy data into
-// a volume mount that is not writable.
-var ErrVolumeReadonly = errors.New("mounted volume is marked read-only")
+var (
+	// ErrVolumeReadonly is used to signal an error when trying to copy data into
+	// a volume mount that is not writable.
+	ErrVolumeReadonly = errors.New("mounted volume is marked read-only")
+)
 
 // mountPoint is the intersection point between a volume and a container. It
 // specifies which volume is to be used and where inside a container it should
@@ -42,6 +47,7 @@ func (m *mountPoint) Setup() (string, error) {
 			if !os.IsNotExist(err) {
 				return "", err
 			}
+			logrus.Warnf("Auto-creating non-existant volume host path %s, this is deprecated and will be removed soon", m.Source)
 			if err := system.MkdirAll(m.Source, 0755); err != nil {
 				return "", err
 			}
@@ -49,7 +55,7 @@ func (m *mountPoint) Setup() (string, error) {
 		return m.Source, nil
 	}
 
-	return "", fmt.Errorf("Unable to setup mount point, neither source nor volume defined")
+	return "", derr.ErrorCodeMountSetup
 }
 
 // hasResource checks whether the given absolute path for a container is in
@@ -91,4 +97,13 @@ func copyExistingContents(source, destination string) error {
 		}
 	}
 	return copyOwnership(source, destination)
+}
+
+// volumeToAPIType converts a volume.Volume to the type used by the remote API
+func volumeToAPIType(v volume.Volume) *types.Volume {
+	return &types.Volume{
+		Name:       v.Name(),
+		Driver:     v.DriverName(),
+		Mountpoint: v.Path(),
+	}
 }

@@ -28,7 +28,7 @@ Docker.
 
 A *data volume* is a specially-designated directory within one or more
 containers that bypasses the [*Union File
-System*](/terms/layer/#union-file-system). Data volumes provide several 
+System*](/reference/glossary#union-file-system). Data volumes provide several 
 useful features for persistent or shared data:
 
 - Volumes are initialized when a container is created. If the container's
@@ -74,62 +74,97 @@ The output will provide details on the container configurations including the
 volumes. The output should look something similar to the following:
 
     ...
-    "Volumes": {
-        "/webapp": "/var/lib/docker/volumes/fac362...80535"
-    },
-    "VolumesRW": {
-        "/webapp": true
-    }
+    Mounts": [
+        {
+            "Name": "fac362...80535",
+            "Source": "/var/lib/docker/volumes/fac362...80535/_data",
+            "Destination": "/webapp",
+            "Driver": "local",
+            "Mode": "",
+            "RW": true
+        }
+    ]
     ...
 
-You will notice in the above 'Volumes' is specifying the location on the host and 
-'VolumesRW' is specifying that the volume is read/write.
+You will notice in the above 'Source' is specifying the location on the host and 
+'Destination' is specifying the volume location inside the container. `RW` shows
+if the volume is read/write.
 
 ### Mount a host directory as a data volume
 
 In addition to creating a volume using the `-v` flag you can also mount a
 directory from your Docker daemon's host into a container.
 
-> **Note:**
-> If you are using Boot2Docker, your Docker daemon only has limited access to
-> your OS X/Windows filesystem. Boot2Docker tries to auto-share your `/Users`
-> (OS X) or `C:\Users` (Windows) directory - and so you can mount files or directories
-> using `docker run -v /Users/<path>:/<container path> ...` (OS X) or
-> `docker run -v /c/Users/<path>:/<container path ...` (Windows). All other paths
-> come from the Boot2Docker virtual machine's filesystem.
+```
+$ docker run -d -P --name web -v /src/webapp:/opt/webapp training/webapp python app.py
+```
 
-    $ docker run -d -P --name web -v /src/webapp:/opt/webapp training/webapp python app.py
+This command mounts the host directory, `/src/webapp`, into the container at
+`/opt/webapp`.  If the path `/opt/webapp` already exists inside the container's
+image, the `/src/webapp` mount overlays but does not remove the pre-existing
+content. Once the mount is removed, the content is accessible again. This is
+consistent with the expected behavior of the `mount` command.
 
-This will mount the host directory, `/src/webapp`, into the container at
-`/opt/webapp`.
+The `container-dir` must always be an absolute path such as `/src/docs`. 
+The `host-dir` can either be an absolute path or a `name` value. If you 
+supply an absolute path for the `host-dir`, Docker bind-mounts to the path 
+you specify. If you supply a `name`, Docker creates a named volume by that `name`.
 
-> **Note:**
-> If the path `/opt/webapp` already exists inside the container's image, its
-> contents will be replaced by the contents of `/src/webapp` on the host to stay
-> consistent with the expected behavior of `mount`
->
-> When using Boot2Docker on Windows through git bash, there might be an issue with the 
-> way the source directory name is parsed. You can fix it by using a double slash at
-> the beginning of the source directory name as explained in [issue #12751](https://github.com/docker/docker/issues/12751)
+A `name` value must start with start with an alphanumeric character, 
+followed by `a-z0-9`, `_` (underscore), `.` (period) or `-` (hyphen). 
+An absolute path starts with a `/` (forward slash).
 
-This is very useful for testing, for example we can
-mount our source code inside the container and see our application at work as
-we change the source code. The directory on the host must be specified as an
-absolute path and if the directory doesn't exist Docker will automatically
+For example, you can specify either `/foo` or `foo` for a `host-dir` value. 
+If you supply the `/foo` value, Docker creates a bind-mount. If you supply 
+the `foo` specification, Docker creates a named volume.
+
+If you are using Docker Machine on Mac or Windows, your Docker daemon has only limited access to your OS X or Windows filesystem. Docker Machine tries
+to auto-share your `/Users` (OS X) or `C:\Users` (Windows) directory.  So,
+you can mount files or directories on OS X using.
+
+```
+docker run -v /Users/<path>:/<container path> ...
+```
+
+On Windows, mount directories using:
+
+```
+docker run -v /c/Users/<path>:/<container path> ...` 
+```
+
+All other paths come from your virtual machine's filesystem.  For example, if
+you are using VirtualBox some other folder available for sharing, you need to do
+additional work. In the case of VirtualBox you need to make the host folder
+available as a shared folder in VirtualBox. Then, you can mount it using the
+Docker `-v` flag.
+
+Mounting a host directory can be useful for testing. For example, you can mount
+source code inside a container. Then, change the source code and see its effect
+on the application in real time. The directory on the host must be specified as
+an absolute path and if the directory doesn't exist Docker will automatically
 create it for you.
 
-> **Note:** 
-> This is not available from a `Dockerfile` due to the portability
-> and sharing purpose of built images. The host directory is, by its nature,
-> host-dependent, so a host directory specified in a `Dockerfile` probably
-> wouldn't work on all hosts.
+Docker volumes default to mount in read-write mode, but you can also set it to
+be mounted read-only.
 
-Docker volumes default to mount in read-write mode, but you can also set it to be mounted read-only.
-
-    $ docker run -d -P --name web -v /src/webapp:/opt/webapp:ro training/webapp python app.py
+```
+$ docker run -d -P --name web -v /src/webapp:/opt/webapp:ro training/webapp python app.py
+```
 
 Here we've mounted the same `/src/webapp` directory but we've added the `ro`
 option to specify that the mount should be read-only.
+
+Because of [limitations in the `mount`
+function](http://lists.linuxfoundation.org/pipermail/containers/2015-April/
+035788.html), moving subdirectories within the host's source directory can give
+access from the container to the host's file system. This requires a malicious
+user with access to host and its mounted directory. 
+
+>**Note**: The host directory is, by its nature, host-dependent. For this
+>reason, you can't mount a host directory from `Dockerfile` because built images
+>should be portable. A host directory wouldn't be available on all potential
+>hosts.
+
 
 ### Mount a host file as a data volume
 
@@ -233,4 +268,3 @@ combine Docker with the services available on
 repositories.
 
 Go to [Working with Docker Hub](/userguide/dockerrepos).
-

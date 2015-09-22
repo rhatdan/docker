@@ -23,7 +23,7 @@ each result.
     Print usage statement
 
 **-f**, **--format**=""
-    Format the output using the given go template.
+    Format the output using the given Go template.
 
 **--type**=*container*|*image*
     Return JSON for specified type, permissible values are "image" or "container"
@@ -79,7 +79,6 @@ To get information on a container use its ID or instance name:
         "LinkLocalIPv6PrefixLen": 0,
         "MacAddress": "",
         "NetworkID": "",
-        "PortMapping": null,
         "Ports": null,
         "SandboxKey": "",
         "SecondaryIPAddresses": null,
@@ -124,6 +123,7 @@ To get information on a container use its ID or instance name:
         "PublishAllPorts": false,
         "Dns": null,
         "DnsSearch": null,
+        "DnsOptions": null,
         "ExtraHosts": null,
         "VolumesFrom": null,
         "Devices": [],
@@ -181,7 +181,8 @@ To get information on a container use its ID or instance name:
         "Memory": 0,
         "MemorySwap": 0,
         "CpuShares": 0,
-        "Cpuset": ""
+        "Cpuset": "",
+        "StopSignal": "SIGTERM"
     }
     }
     ]
@@ -201,8 +202,8 @@ output:
       {{$p}} -> {{(index $conf 0).HostPort}} {{end}}' d2cc496561d6
       80/tcp -> 80
 
-You can get more information about how to write a go template from:
-http://golang.org/pkg/text/template/.
+You can get more information about how to write a Go template from:
+https://golang.org/pkg/text/template/.
 
 ## Getting information on an image
 

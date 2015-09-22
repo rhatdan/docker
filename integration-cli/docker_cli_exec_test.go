@@ -19,6 +19,7 @@ import (
 )
 
 func (s *DockerSuite) TestExec(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--name", "testing", "busybox", "sh", "-c", "echo test > /tmp/file && top")
 
 	out, _ := dockerCmd(c, "exec", "testing", "cat", "/tmp/file")
@@ -30,6 +31,7 @@ func (s *DockerSuite) TestExec(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecInteractive(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--name", "testing", "busybox", "sh", "-c", "echo test > /tmp/file && top")
 
 	execCmd := exec.Command(dockerBinary, "exec", "-i", "testing", "sh")
@@ -76,6 +78,7 @@ func (s *DockerSuite) TestExecInteractive(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecAfterContainerRestart(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	out, _ := dockerCmd(c, "run", "-d", "busybox", "top")
 	cleanedContainerID := strings.TrimSpace(out)
 	dockerCmd(c, "restart", cleanedContainerID)
@@ -88,6 +91,7 @@ func (s *DockerSuite) TestExecAfterContainerRestart(c *check.C) {
 }
 
 func (s *DockerDaemonSuite) TestExecAfterDaemonRestart(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	testRequires(c, SameHostDaemon)
 
 	if err := s.d.StartWithBusybox(); err != nil {
@@ -119,6 +123,7 @@ func (s *DockerDaemonSuite) TestExecAfterDaemonRestart(c *check.C) {
 
 // Regression test for #9155, #9044
 func (s *DockerSuite) TestExecEnv(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-e", "LALA=value1", "-e", "LALA=value2",
 		"-d", "--name", "testing", "busybox", "top")
 
@@ -131,6 +136,7 @@ func (s *DockerSuite) TestExecEnv(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecExitStatus(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--name", "top", "busybox", "top")
 
 	// Test normal (non-detached) case first
@@ -142,6 +148,7 @@ func (s *DockerSuite) TestExecExitStatus(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecPausedContainer(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	defer unpauseAllContainers()
 
 	out, _ := dockerCmd(c, "run", "-d", "--name", "testing", "busybox", "top")
@@ -161,6 +168,7 @@ func (s *DockerSuite) TestExecPausedContainer(c *check.C) {
 
 // regression test for #9476
 func (s *DockerSuite) TestExecTtyCloseStdin(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "-it", "--name", "exec_tty_stdin", "busybox")
 
 	cmd := exec.Command(dockerBinary, "exec", "-i", "exec_tty_stdin", "cat")
@@ -184,11 +192,10 @@ func (s *DockerSuite) TestExecTtyCloseStdin(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecTtyWithoutStdin(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	out, _ := dockerCmd(c, "run", "-d", "-ti", "busybox")
 	id := strings.TrimSpace(out)
-	if err := waitRun(id); err != nil {
-		c.Fatal(err)
-	}
+	c.Assert(waitRun(id), check.IsNil)
 
 	errChan := make(chan error)
 	go func() {
@@ -219,6 +226,7 @@ func (s *DockerSuite) TestExecTtyWithoutStdin(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecParseError(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--name", "top", "busybox", "top")
 
 	// Test normal (non-detached) case first
@@ -229,6 +237,7 @@ func (s *DockerSuite) TestExecParseError(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecStopNotHanging(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--name", "testing", "busybox", "top")
 
 	if err := exec.Command(dockerBinary, "exec", "testing", "top").Start(); err != nil {
@@ -255,6 +264,7 @@ func (s *DockerSuite) TestExecStopNotHanging(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecCgroup(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--name", "testing", "busybox", "top")
 
 	out, _ := dockerCmd(c, "exec", "testing", "cat", "/proc/1/cgroup")
@@ -305,6 +315,7 @@ func (s *DockerSuite) TestExecCgroup(c *check.C) {
 }
 
 func (s *DockerSuite) TestInspectExecID(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	out, _ := dockerCmd(c, "run", "-d", "busybox", "top")
 	id := strings.TrimSuffix(out, "\n")
 
@@ -316,9 +327,9 @@ func (s *DockerSuite) TestInspectExecID(c *check.C) {
 		c.Fatalf("ExecIDs should be empty, got: %s", out)
 	}
 
-	// Start an exec, have it block waiting for input so we can do some checking
-	cmd := exec.Command(dockerBinary, "exec", "-i", id, "sh", "-c", "read a")
-	execStdin, _ := cmd.StdinPipe()
+	// Start an exec, have it block waiting so we can do some checking
+	cmd := exec.Command(dockerBinary, "exec", id, "sh", "-c",
+		"while ! test -e /tmp/execid1; do sleep 1; done")
 
 	if err = cmd.Start(); err != nil {
 		c.Fatalf("failed to start the exec cmd: %q", err)
@@ -349,8 +360,15 @@ func (s *DockerSuite) TestInspectExecID(c *check.C) {
 		c.Fatalf("failed to get the exec id: %v", err)
 	}
 
-	// End the exec by closing its stdin, and wait for it to end
-	execStdin.Close()
+	// End the exec by creating the missing file
+	err = exec.Command(dockerBinary, "exec", id,
+		"sh", "-c", "touch /tmp/execid1").Run()
+
+	if err != nil {
+		c.Fatalf("failed to run the 2nd exec cmd: %q", err)
+	}
+
+	// Wait for 1st exec to complete
 	cmd.Wait()
 
 	// All execs for the container should be gone now
@@ -378,11 +396,12 @@ func (s *DockerSuite) TestInspectExecID(c *check.C) {
 	}
 	sc, body, err = sockRequest("GET", "/exec/"+execID+"/json", nil)
 	if sc != http.StatusNotFound {
-		c.Fatalf("received status != 404: %s\n%s", sc, body)
+		c.Fatalf("received status != 404: %d\n%s", sc, body)
 	}
 }
 
 func (s *DockerSuite) TestLinksPingLinkedContainersOnRename(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	var out string
 	out, _ = dockerCmd(c, "run", "-d", "--name", "container1", "busybox", "top")
 	idA := strings.TrimSpace(out)
@@ -512,6 +531,7 @@ func (s *DockerSuite) TestRunMutableNetworkFiles(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecWithUser(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--name", "parent", "busybox", "top")
 
 	out, _ := dockerCmd(c, "exec", "-u", "1", "parent", "id")
@@ -525,7 +545,46 @@ func (s *DockerSuite) TestExecWithUser(c *check.C) {
 	}
 }
 
+func (s *DockerSuite) TestExecWithPrivileged(c *check.C) {
+	testRequires(c, DaemonIsLinux)
+	// Start main loop which attempts mknod repeatedly
+	dockerCmd(c, "run", "-d", "--name", "parent", "--cap-drop=ALL", "busybox", "sh", "-c", `while (true); do if [ -e /exec_priv ]; then cat /exec_priv && mknod /tmp/sda b 8 0 && echo "Success"; else echo "Privileged exec has not run yet"; fi; usleep 10000; done`)
+
+	// Check exec mknod doesn't work
+	cmd := exec.Command(dockerBinary, "exec", "parent", "sh", "-c", "mknod /tmp/sdb b 8 16")
+	out, _, err := runCommandWithOutput(cmd)
+	if err == nil || !strings.Contains(out, "Operation not permitted") {
+		c.Fatalf("exec mknod in --cap-drop=ALL container without --privileged should fail")
+	}
+
+	// Check exec mknod does work with --privileged
+	cmd = exec.Command(dockerBinary, "exec", "--privileged", "parent", "sh", "-c", `echo "Running exec --privileged" > /exec_priv && mknod /tmp/sdb b 8 16 && usleep 50000 && echo "Finished exec --privileged" > /exec_priv && echo ok`)
+	out, _, err = runCommandWithOutput(cmd)
+	if err != nil {
+		c.Fatal(err, out)
+	}
+
+	if actual := strings.TrimSpace(out); actual != "ok" {
+		c.Fatalf("exec mknod in --cap-drop=ALL container with --privileged failed: %v, output: %q", err, out)
+	}
+
+	// Check subsequent unprivileged exec cannot mknod
+	cmd = exec.Command(dockerBinary, "exec", "parent", "sh", "-c", "mknod /tmp/sdc b 8 32")
+	out, _, err = runCommandWithOutput(cmd)
+	if err == nil || !strings.Contains(out, "Operation not permitted") {
+		c.Fatalf("repeating exec mknod in --cap-drop=ALL container after --privileged without --privileged should fail")
+	}
+
+	// Confirm at no point was mknod allowed
+	logCmd := exec.Command(dockerBinary, "logs", "parent")
+	if out, _, err := runCommandWithOutput(logCmd); err != nil || strings.Contains(out, "Success") {
+		c.Fatal(out, err)
+	}
+
+}
+
 func (s *DockerSuite) TestExecWithImageUser(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	name := "testbuilduser"
 	_, err := buildImage(name,
 		`FROM busybox
@@ -545,8 +604,21 @@ func (s *DockerSuite) TestExecWithImageUser(c *check.C) {
 }
 
 func (s *DockerSuite) TestExecOnReadonlyContainer(c *check.C) {
+	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--read-only", "--name", "parent", "busybox", "top")
 	if _, status := dockerCmd(c, "exec", "parent", "true"); status != 0 {
 		c.Fatalf("exec into a read-only container failed with exit status %d", status)
+	}
+}
+
+// #15750
+func (s *DockerSuite) TestExecStartFails(c *check.C) {
+	testRequires(c, DaemonIsLinux)
+	name := "exec-15750"
+	dockerCmd(c, "run", "-d", "--name", name, "busybox", "top")
+
+	_, errmsg, status := dockerCmdWithStdoutStderr(nil, "exec", name, "no-such-cmd")
+	if status == 255 && !strings.Contains(errmsg, "executable file not found") {
+		c.Fatal("exec error message not received. The daemon might had crashed")
 	}
 }

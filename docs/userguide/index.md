@@ -10,7 +10,7 @@ parent = "mn_fun_docker"
 
 # Welcome to the Docker user guide
 
-In the [Introduction](/) you got a taste of what Docker is and how it
+In the [Introduction](/misc) you got a taste of what Docker is and how it
 works. In this guide we're going to take you through the fundamentals of
 using Docker and integrating it into your environment.
 
@@ -33,7 +33,7 @@ Docker Hub is the central hub for Docker. It hosts public Docker images
 and provides services to help you build and manage your Docker
 environment. To learn more:
 
-Go to [Using Docker Hub](/userguide/dockerhub).
+Go to [Using Docker Hub](/docker-hub).
 
 ## Dockerizing applications: A "Hello world"
 
