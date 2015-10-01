@@ -243,6 +243,9 @@ func (d *Driver) Create(id, parent, mountLabel string) (retErr error) {
 	if err := idtools.MkdirAs(dir, 0700, rootUID, rootGID); err != nil {
 		return err
 	}
+	if err := label.SetFileLabel(dir, mountLabel); err != nil {
+		return err
+	}
 
 	defer func() {
 		// Clean up on failure
