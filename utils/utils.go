@@ -42,7 +42,7 @@ func SelfPath() string {
 	return path
 }
 
-func dockerInitSha1(target string) string {
+func dockerSha1(target string) string {
 	f, err := os.Open(target)
 	if err != nil {
 		return ""
@@ -56,7 +56,7 @@ func dockerInitSha1(target string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func isValidDockerInitPath(target string, selfPath string) bool { // target and selfPath should be absolute (InitPath and SelfPath already do this)
+func isValidDockerPath(target string, selfPath string, sha1 string) bool { // target and selfPath should be absolute (InitPath and SelfPath already do this)
 	if target == "" {
 		return false
 	}
@@ -77,13 +77,13 @@ func isValidDockerInitPath(target string, selfPath string) bool { // target and 
 		}
 		return os.SameFile(targetFileInfo, selfPathFileInfo)
 	}
-	return dockerversion.INITSHA1 != "" && dockerInitSha1(target) == dockerversion.INITSHA1
+	return sha1 != "" && dockerSha1(target) == sha1
 }
 
 // DockerInitPath figures out the path of our dockerinit (which may be SelfPath())
 func DockerInitPath(localCopy string) string {
 	selfPath := SelfPath()
-	if isValidDockerInitPath(selfPath, selfPath) {
+	if isValidDockerPath(selfPath, selfPath, dockerversion.INITSHA1) {
 		// if we're valid, don't bother checking anything else
 		return selfPath
 	}
@@ -113,7 +113,48 @@ func DockerInitPath(localCopy string) string {
 				// LookPath already validated that this file exists and is executable (following symlinks), so how could Abs fail?
 				panic(err)
 			}
-			if isValidDockerInitPath(path, selfPath) {
+			if isValidDockerPath(path, selfPath, dockerversion.INITSHA1) {
+				return path
+			}
+		}
+	}
+	return ""
+}
+
+// DockerHooksPath figures out the path of our dockerhooks (which may be SelfPath())
+func DockerHooksPath(localCopy string) string {
+	selfPath := SelfPath()
+	if isValidDockerPath(selfPath, selfPath, dockerversion.HOOKSSHA1) {
+		// if we're valid, don't bother checking anything else
+		return selfPath
+	}
+	var possibleHooks = []string{
+		localCopy,
+		dockerversion.HOOKSPATH,
+		filepath.Join(filepath.Dir(selfPath), "dockerhooks"),
+
+		// FHS 3.0 Draft: "/usr/libexec includes internal binaries that are not intended to be executed directly by users or shell scripts. Applications may use a single subdirectory under /usr/libexec."
+		// https://www.linuxbase.org/betaspecs/fhs/fhs.html#usrlibexec
+		"/usr/libexec/docker/dockerhooks",
+		"/usr/local/libexec/docker/dockerhooks",
+
+		// FHS 2.3: "/usr/lib includes object files, libraries, and internal binaries that are not intended to be executed directly by users or shell scripts."
+		// https://refspecs.linuxfoundation.org/FHS_2.3/fhs-2.3.html#USRLIBLIBRARIESFORPROGRAMMINGANDPA
+		"/usr/lib/docker/dockerhooks",
+		"/usr/local/lib/docker/dockerhooks",
+	}
+	for _, dockerHooks := range possibleHooks {
+		if dockerHooks == "" {
+			continue
+		}
+		path, err := exec.LookPath(dockerHooks)
+		if err == nil {
+			path, err = filepath.Abs(path)
+			if err != nil {
+				// LookPath already validated that this file exists and is executable (following symlinks), so how could Abs fail?
+				panic(err)
+			}
+			if isValidDockerPath(path, selfPath, dockerversion.HOOKSSHA1) {
 				return path
 			}
 		}

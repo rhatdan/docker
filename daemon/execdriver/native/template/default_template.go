@@ -1,8 +1,10 @@
 package template
 
 import (
+	"path/filepath"
 	"syscall"
 
+	"github.com/docker/docker/utils"
 	"github.com/opencontainers/runc/libcontainer/apparmor"
 	"github.com/opencontainers/runc/libcontainer/configs"
 )
@@ -91,6 +93,29 @@ func New() *configs.Config {
 
 	if apparmor.IsEnabled() {
 		container.AppArmorProfile = "docker-default"
+	}
+	hooksPath := utils.DockerHooksPath("")
+	if hooksPath != "" {
+		hooksDir := filepath.Join(filepath.Dir(hooksPath), "hooks.d")
+		container.Hooks = &configs.Hooks{}
+		cmd := configs.Command{
+			Path: hooksPath,
+			Args: []string{"prestart"},
+			Env: []string{
+				"container=docker",
+				"DOCKER_HOOKS_PATH=" + hooksDir,
+			},
+		}
+		container.Hooks.Prestart = append(container.Hooks.Prestart, configs.NewCommandHook(cmd))
+		cmd = configs.Command{
+			Path: hooksPath,
+			Args: []string{"poststop"},
+			Env: []string{
+				"container=docker",
+				"DOCKER_HOOKS_PATH=" + hooksDir,
+			},
+		}
+		container.Hooks.Poststop = append(container.Hooks.Poststop, configs.NewCommandHook(cmd))
 	}
 
 	return container

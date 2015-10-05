@@ -1,0 +1,31 @@
+#!/bin/bash
+set -e
+
+IAMSTATIC="true"
+source "${MAKEDIR}/.go-autogen"
+
+# dockerhooks still needs to be a static binary, even if docker is dynamic
+go build --compiler=gccgo \
+	-o "$DEST/dockerhooks-$VERSION" \
+	"${BUILDFLAGS[@]}" \
+	--gccgoflags "
+		-g
+		-Wl,--no-export-dynamic
+		$EXTLDFLAGS_STATIC
+		-lnetgo
+	" \
+	./dockerhooks
+
+echo "Created binary: $DEST/dockerhooks-$VERSION"
+ln -sf "dockerhooks-$VERSION" "$DEST/dockerhooks"
+
+sha1sum=
+if command -v sha1sum &> /dev/null; then
+	sha1sum=sha1sum
+else
+	echo >&2 'error: cannot find sha1sum command or equivalent'
+	exit 1
+fi
+
+# sha1 our new dockerhooks to ensure separate docker and dockerhooks always run in a perfect pair compiled for one another
+export DOCKER_HOOKSSHA1=$($sha1sum "$DEST/dockerhooks-$VERSION" | cut -d' ' -f1)

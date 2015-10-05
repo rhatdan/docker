@@ -147,24 +147,21 @@ func (d *Driver) createNetwork(container *configs.Config, c *execdriver.Command,
 	}
 	// only set up prestart hook if the namespace path is not set (this should be
 	// all cases *except* for --net=host shared networking)
-	container.Hooks = &configs.Hooks{
-		Prestart: []configs.Hook{
-			configs.NewFunctionHook(func(s configs.HookState) error {
-				if len(hooks.PreStart) > 0 {
-					for _, fnHook := range hooks.PreStart {
-						// A closed channel for OOM is returned here as it will be
-						// non-blocking and return the correct result when read.
-						chOOM := make(chan struct{})
-						close(chOOM)
-						if err := fnHook(&c.ProcessConfig, s.Pid, chOOM); err != nil {
-							return err
-						}
+	container.Hooks.Prestart = append(container.Hooks.Prestart,
+		configs.NewFunctionHook(func(s configs.HookState) error {
+			if len(hooks.PreStart) > 0 {
+				for _, fnHook := range hooks.PreStart {
+					// A closed channel for OOM is returned here as it will be
+					// non-blocking and return the correct result when read.
+					chOOM := make(chan struct{})
+					close(chOOM)
+					if err := fnHook(&c.ProcessConfig, s.Pid, chOOM); err != nil {
+						return err
 					}
 				}
-				return nil
-			}),
-		},
-	}
+			}
+			return nil
+		}))
 	return nil
 }
 
