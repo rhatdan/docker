@@ -19,6 +19,7 @@
       "  libvirt-client \\",
       "  libguestfs-tools \\",
       "  make \\",
+      "  mingw64-gcc \\",
       "  net-tools \\",
       "  php-devel \\",
       "  python-websocket-client \\",
