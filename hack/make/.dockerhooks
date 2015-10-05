@@ -1,0 +1,33 @@
+#!/bin/bash
+set -e
+
+IAMSTATIC="true"
+source "${MAKEDIR}/.go-autogen"
+
+# dockerhooks still needs to be a static binary, even if docker is dynamic
+go build \
+	-o "$DEST/dockerhooks-$VERSION" \
+	"${BUILDFLAGS[@]}" \
+	-ldflags "
+		$LDFLAGS
+		$LDFLAGS_STATIC
+		-extldflags \"$EXTLDFLAGS_STATIC\"
+	" \
+	./dockerhooks
+
+echo "Created binary: $DEST/dockerhooks-$VERSION"
+ln -sf "dockerhooks-$VERSION" "$DEST/dockerhooks"
+
+sha1sum=
+if command -v sha1sum &> /dev/null; then
+	sha1sum=sha1sum
+elif command -v shasum &> /dev/null; then
+	# Mac OS X - why couldn't they just use the same command name and be happy?
+	sha1sum=shasum
+else
+	echo >&2 'error: cannot find sha1sum command or equivalent'
+	exit 1
+fi
+
+# sha1 our new dockerhooks to ensure separate docker and dockerhooks always run in a perfect pair compiled for one another
+export DOCKER_HOOKSSHA1=$($sha1sum "$DEST/dockerhooks-$VERSION" | cut -d' ' -f1)

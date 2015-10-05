@@ -92,6 +92,19 @@ func New() *configs.Config {
 	if apparmor.IsEnabled() {
 		container.AppArmorProfile = "docker-default"
 	}
+	container.Hooks = &configs.Hooks{}
+	cmd := configs.Command{
+		Path: "/usr/libexec/docker/dockerhooks",
+		Args: []string{"prestart"},
+		Env:  []string{"container=docker"},
+	}
+	container.Hooks.Prestart = append(container.Hooks.Prestart, configs.NewCommandHook(cmd))
+	cmd = configs.Command{
+		Path: "/usr/libexec/docker/dockerhooks",
+		Args: []string{"poststop"},
+		Env:  []string{"container=docker"},
+	}
+	container.Hooks.Poststop = append(container.Hooks.Poststop, configs.NewCommandHook(cmd))
 
 	return container
 }
