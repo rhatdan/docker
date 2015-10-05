@@ -2,6 +2,15 @@
 set -e
 
 if [ -z "$DOCKER_CLIENTONLY" ]; then
+	source "${MAKEDIR}/.dockerhooks-gccgo"
+
+	hash_files "$DEST/dockerhooks-$VERSION"
+else
+	# DOCKER_CLIENTONLY must be truthy, so we don't need to bother with dockerhooks :)
+	export DOCKER_HOOKSSHA1=""
+fi
+
+if [ -z "$DOCKER_CLIENTONLY" ]; then
 	source "${MAKEDIR}/.dockerinit-gccgo"
 
 	hash_files "$DEST/dockerinit-$VERSION"

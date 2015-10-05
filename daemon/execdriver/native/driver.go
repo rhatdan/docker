@@ -190,7 +190,6 @@ func (d *Driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, hooks execd
 		}
 		ps = execErr.ProcessState
 	}
-	cont.Destroy()
 	_, oomKill := <-oom
 	return execdriver.ExitStatus{ExitCode: utils.ExitStatus(ps.Sys().(syscall.WaitStatus)), OOMKilled: oomKill}, nil
 }

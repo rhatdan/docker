@@ -15,6 +15,8 @@ var (
 	IAMSTATIC string = "${IAMSTATIC:-true}"
 	INITSHA1  string = "$DOCKER_INITSHA1"
 	INITPATH  string = "$DOCKER_INITPATH"
+	HOOKSSHA1  string = "$DOCKER_HOOKSSHA1"
+	HOOKSPATH  string = "$DOCKER_HOOKSPATH"
 )
 DVEOF
 
