@@ -36,7 +36,7 @@ clone git github.com/hashicorp/consul v0.5.2
 
 # get graph and distribution packages
 clone git github.com/docker/distribution ec87e9b6971d831f0eff752ddb54fb64693e51cd # docker/1.8 branch
-clone git github.com/vbatts/tar-split v0.9.6
+clone git github.com/vbatts/tar-split v0.9.10
 
 clone git github.com/docker/notary 8e8122eb5528f621afcd4e2854c47302f17392f7
 clone git github.com/endophage/gotuf a592b03b28b02bb29bb5878308fb1abed63383b5
