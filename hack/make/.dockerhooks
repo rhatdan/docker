@@ -3,6 +3,7 @@ set -e
 
 IAMSTATIC="true"
 source "${MAKEDIR}/.go-autogen"
+LDFLAGS_STATIC=""
 
 # dockerhooks still needs to be a static binary, even if docker is dynamic
 go build \
