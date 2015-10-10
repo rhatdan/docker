@@ -1631,13 +1631,13 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 	// we probably created pool earlier and could not remove it as some
 	// containers were still using it. Detect some of the properties of
 	// pool, like is it using loop devices.
-	if info.Exists != 0 && devices.thinPoolDevice == "" {
-		if err := devices.loadThinPoolProperties(); err != nil {
-			logrus.Debugf("Failed to load thin pool properties:%v", err)
-			return err
+	/*	if info.Exists != 0 && devices.thinPoolDevice == "" {
+			if err := devices.loadThinPoolProperties(); err != nil {
+				logrus.Debugf("Failed to load thin pool properties:%v", err)
+				return err
+			}
 		}
-	}
-
+	*/
 	// If we didn't just create the data or metadata image, we need to
 	// load the transaction id and migrate old metadata
 	if !createdLoopback {
