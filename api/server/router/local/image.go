@@ -190,6 +190,7 @@ func (s *router) postImagesPush(ctx context.Context, w http.ResponseWriter, r *h
 		MetaHeaders: metaHeaders,
 		AuthConfig:  authConfig,
 		Tag:         r.Form.Get("tag"),
+		Force:       httputils.BoolValue(r, "force"),
 		OutStream:   output,
 	}
 
@@ -267,12 +268,89 @@ func (s *router) getImagesByName(ctx context.Context, w http.ResponseWriter, r *
 		return fmt.Errorf("Missing parameter")
 	}
 
-	imageInspect, err := s.daemon.LookupImage(vars["name"])
+	name := vars["name"]
+
+	if httputils.BoolValue(r, "remote") {
+		authEncoded := r.Header.Get("X-Registry-Auth")
+		authConfig := &cliconfig.AuthConfig{}
+		if authEncoded != "" {
+			authJSON := base64.NewDecoder(base64.URLEncoding, strings.NewReader(authEncoded))
+			if err := json.NewDecoder(authJSON).Decode(authConfig); err != nil {
+				// for a pull it is not an error if no auth was given
+				// to increase compatibility with the existing api it is defaulting to be empty
+				authConfig = &cliconfig.AuthConfig{}
+			}
+		}
+
+		image, tag := parsers.ParseRepositoryTag(name)
+		metaHeaders := map[string][]string{}
+		for k, v := range r.Header {
+			if strings.HasPrefix(k, "X-Meta-") {
+				metaHeaders[k] = v
+			}
+		}
+		lookupRemoteConfig := &graph.LookupRemoteConfig{
+			MetaHeaders: metaHeaders,
+			AuthConfig:  authConfig,
+		}
+		imageInspect, err := s.daemon.LookupRemote(image, tag, lookupRemoteConfig)
+		if err != nil {
+			return err
+		}
+		return httputils.WriteJSON(w, http.StatusOK, imageInspect)
+	}
+
+	imageInspect, err := s.daemon.LookupImage(name)
 	if err != nil {
 		return err
 	}
 
 	return httputils.WriteJSON(w, http.StatusOK, imageInspect)
+}
+
+func (s *router) getImagesTags(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	name := vars["name"]
+	authEncoded := r.Header.Get("X-Registry-Auth")
+	authConfig := &cliconfig.AuthConfig{}
+	if authEncoded != "" {
+		authJSON := base64.NewDecoder(base64.URLEncoding, strings.NewReader(authEncoded))
+		if err := json.NewDecoder(authJSON).Decode(authConfig); err != nil {
+			// for a pull it is not an error if no auth was given
+			// to increase compatibility with the existing api it is defaulting to be empty
+			authConfig = &cliconfig.AuthConfig{}
+		}
+	}
+
+	var (
+		tagList *types.RepositoryTagList
+		err     error
+	)
+	if !httputils.BoolValue(r, "remote") {
+		tagList, err = s.daemon.Tags(name)
+		if err != nil {
+			logrus.Warnf("failed to get local tags for %q", name)
+		}
+	}
+	if tagList == nil || err != nil {
+		metaHeaders := map[string][]string{}
+		for k, v := range r.Header {
+			if strings.HasPrefix(k, "X-Meta-") {
+				metaHeaders[k] = v
+			}
+		}
+		tagsConfig := &graph.RemoteTagsConfig{
+			MetaHeaders: metaHeaders,
+			AuthConfig:  authConfig,
+		}
+		tagList, err = s.daemon.RemoteTags(name, tagsConfig)
+		if err != nil {
+			logrus.Warnf("failed to get remote tags for %q: %v", name, err)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	return httputils.WriteJSON(w, http.StatusOK, tagList)
 }
 
 func (s *router) postBuild(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -425,7 +503,7 @@ func (s *router) postBuild(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if repoName != "" {
-		if err := s.daemon.TagImage(repoName, tag, string(imgID), true); err != nil {
+		if err := s.daemon.TagImage(repoName, tag, string(imgID), true, true); err != nil {
 			return errf(err)
 		}
 	}
@@ -473,7 +551,7 @@ func (s *router) postImagesTag(ctx context.Context, w http.ResponseWriter, r *ht
 	tag := r.Form.Get("tag")
 	name := vars["name"]
 	force := httputils.BoolValue(r, "force")
-	if err := s.daemon.TagImage(repo, tag, name, force); err != nil {
+	if err := s.daemon.TagImage(repo, tag, name, force, true); err != nil {
 		return err
 	}
 	s.daemon.EventsService.Log("tag", utils.ImageReference(repo, tag), "")
@@ -504,9 +582,9 @@ func (s *router) getImagesSearch(ctx context.Context, w http.ResponseWriter, r *
 			headers[k] = v
 		}
 	}
-	query, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers)
+	results, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers, httputils.BoolValue(r, "noIndex"))
 	if err != nil {
 		return err
 	}
-	return httputils.WriteJSON(w, http.StatusOK, query.Results)
+	return httputils.WriteJSON(w, http.StatusOK, results)
 }

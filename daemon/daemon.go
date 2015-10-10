@@ -735,11 +735,12 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 	eventsService := events.New()
 	logrus.Debug("Creating repository list")
 	tagCfg := &graph.TagStoreConfig{
-		Graph:    g,
-		Key:      trustKey,
-		Registry: registryService,
-		Events:   eventsService,
-		Trust:    trustService,
+		Graph:          g,
+		Key:            trustKey,
+		Registry:       registryService,
+		Events:         eventsService,
+		Trust:          trustService,
+		ConfirmDefPush: config.ConfirmDefPush,
 	}
 	repositories, err := graph.NewTagStore(filepath.Join(config.Root, "repositories-"+d.driver.String()), tagCfg)
 	if err != nil {
@@ -1014,8 +1015,8 @@ func (daemon *Daemon) Graph() *graph.Graph {
 // TagImage creates a tag in the repository reponame, pointing to the image named
 // imageName. If force is true, an existing tag with the same name may be
 // overwritten.
-func (daemon *Daemon) TagImage(repoName, tag, imageName string, force bool) error {
-	return daemon.repositories.Tag(repoName, tag, imageName, force)
+func (daemon *Daemon) TagImage(repoName, tag, imageName string, force, keepUnqualified bool) error {
+	return daemon.repositories.Tag(repoName, tag, imageName, force, keepUnqualified)
 }
 
 // PullImage initiates a pull operation. image is the repository name to pull, and
@@ -1052,6 +1053,11 @@ func (daemon *Daemon) LookupImage(name string) (*types.ImageInspect, error) {
 	return daemon.repositories.Lookup(name)
 }
 
+// LookupRemote looks up an image in remote repository.
+func (daemon *Daemon) LookupRemote(name, tag string, config *graph.LookupRemoteConfig) (*types.RemoteImageInspect, error) {
+	return daemon.repositories.LookupRemote(name, tag, config)
+}
+
 // LoadImage uploads a set of images into the repository. This is the
 // complement of ImageExport.  The input stream is an uncompressed tar
 // ball containing images and metadata.
@@ -1079,6 +1085,16 @@ func (daemon *Daemon) ImageHistory(name string) ([]*types.ImageHistory, error) {
 // be used.
 func (daemon *Daemon) GetImage(name string) (*image.Image, error) {
 	return daemon.repositories.LookupImage(name)
+}
+
+// Tags returns a tag list for given local repository.
+func (daemon *Daemon) Tags(name string) (*types.RepositoryTagList, error) {
+	return daemon.repositories.Tags(name)
+}
+
+// RemoteTags fetches a tag list from remote repository.
+func (daemon *Daemon) RemoteTags(name string, config *graph.RemoteTagsConfig) (*types.RepositoryTagList, error) {
+	return daemon.repositories.RemoteTags(name, config)
 }
 
 func (daemon *Daemon) config() *Config {
