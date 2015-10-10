@@ -13,7 +13,7 @@ import (
 
 func getHooks() (string, []os.FileInfo, error) {
 	hookPath := os.Getenv("DOCKER_HOOKS_PATH")
-	if hookPath != "" {
+	if hookPath == "" {
 		hookPath = "hooks.d"
 	}
 	// find any hooks executables
