@@ -26,6 +26,7 @@
 # Cut for distribution specific
 FROM fedora
   RUN dnf -y update && dnf install -y \
+  audit-libs-devel \
   binutils \
   btrfs-progs-devel \
   btrfs-progs \
