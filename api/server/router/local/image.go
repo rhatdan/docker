@@ -188,6 +188,7 @@ func (s *router) postImagesPush(ctx context.Context, w http.ResponseWriter, r *h
 		MetaHeaders: metaHeaders,
 		AuthConfig:  authConfig,
 		Tag:         r.Form.Get("tag"),
+		Force:       httputils.BoolValue(r, "force"),
 		OutStream:   output,
 	}
 
