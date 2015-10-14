@@ -589,7 +589,7 @@ func (s *router) getImagesSearch(ctx context.Context, w http.ResponseWriter, r *
 			headers[k] = v
 		}
 	}
-	results, err := s.daemon.RegistryService.Search(r.Form.Get("term"), config, headers, httputils.BoolValue(r, "noIndex"))
+	results, err := s.daemon.SearchRegistryForImages(r.Form.Get("term"), config, headers, httputils.BoolValue(r, "noIndex"))
 	if err != nil {
 		return err
 	}
