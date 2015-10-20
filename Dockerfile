@@ -23,7 +23,6 @@
 # the case. Therefore, you don't have to disable it anymore.
 #
 
-# Cut for distribution specific
 FROM ubuntu:14.04
 MAINTAINER Tianon Gravi <admwiggin@gmail.com> (@tianon)
 
@@ -34,11 +33,16 @@ RUN	echo deb http://ppa.launchpad.net/zfs-native/stable/ubuntu trusty main > /et
 RUN apt-get update && apt-get install -y \
 	apparmor \
 	aufs-tools \
+	automake \
+	bash-completion \
 	btrfs-tools \
 	build-essential \
 	createrepo \
+	curl \
 	dpkg-sig \
 	gcc-mingw-w64 \
+	git \
+	iptables \
 	libapparmor-dev \
 	libcap-dev \
 	libsqlite3-dev \
@@ -55,17 +59,7 @@ RUN apt-get update && apt-get install -y \
 	s3cmd=1.1.0* \
 	ubuntu-zfs \
 	libzfs-dev \
-	--no-install-recommends \
-# End dependencies cut
-	automake \
-	bash-completion \
-	curl \
-	git \
-	iptables \
-	mercurial \
-	parallel \
-	python-mock \
-	python-pip
+	--no-install-recommends
 
 # Get lvm2 source for compiling statically
 RUN git clone -b v2_02_103 https://git.fedorahosted.org/git/lvm2.git /usr/local/lvm2
@@ -77,8 +71,6 @@ RUN cd /usr/local/lvm2 \
 	&& make device-mapper \
 	&& make install_device-mapper
 # see https://git.fedorahosted.org/cgit/lvm2.git/tree/INSTALL
-
-# Sqlite3 install manually
 
 # Install lxc
 ENV LXC_VERSION 1.1.2
@@ -179,9 +171,7 @@ RUN useradd --create-home --gid docker unprivilegeduser
 
 VOLUME /var/lib/docker
 WORKDIR /go/src/github.com/docker/docker
-#  Cut for buildtags distribution specific
 ENV DOCKER_BUILDTAGS apparmor selinux
-# End buildtags cut
 
 # Let us use a .bashrc file
 RUN ln -sfv $PWD/.bashrc ~/.bashrc
