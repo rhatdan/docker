@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Return package version for the specified package or executable path
+// Version returns package version for the specified package or executable path
 func Version(name string) (string, error) {
 	var (
 		err    error
