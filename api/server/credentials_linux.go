@@ -172,7 +172,7 @@ func (s *Server) LogAction(w http.ResponseWriter, r *http.Request) error {
 	var (
 		message  string
 		username string
-		loginuid int = -1
+		loginuid = -1
 	)
 
 	action, c := s.parseRequest(r)
@@ -247,7 +247,7 @@ func logSyslog(message string) {
 
 //Logs an API event to the audit log
 func logAuditlog(c *daemon.Container, action string, username string, loginuid int, success bool) {
-	virt := audit.VIRT_CONTROL
+	virt := audit.AuditVirtControl
 	vm := "?"
 	vmPid := "?"
 	exe := "?"

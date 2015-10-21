@@ -1,4 +1,5 @@
 // +build linux
+
 /*
   The audit package is a go bindings to libaudit that only allows for
   logging audit events.
@@ -21,10 +22,12 @@ import (
 	"unsafe"
 )
 
+// viraudit.c: auditing support
+// AUDIT_VIRT_CONTROL, AUDIT_VIRT_RESOURCE, AUDIT_VIRT_MACHINE_ID
 const (
-	VIRT_CONTROL    = 2500
-	VIRT_RESOURCE   = 2501
-	VIRT_MACHINE_ID = 2502
+	AuditVirtControl = 2500
+	VirtResource     = 2501
+	VirtMachineID    = 2502
 )
 
 // ValueNeedsEncoding returns true if audit value needs encoding
