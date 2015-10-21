@@ -55,7 +55,7 @@ func EncodeNVString(name string, value string) string {
 }
 
 // LogUserEvent logs a generate user message
-func LogUserEvent(event_type int, message string, result bool) error {
+func LogUserEvent(eventType int, message string, result bool) error {
 	var r int
 	fd := C.audit_open()
 	defer C.close(fd)
@@ -67,7 +67,7 @@ func LogUserEvent(event_type int, message string, result bool) error {
 	if fd > 0 {
 		cmsg := C.CString(message)
 		defer C.free(unsafe.Pointer(cmsg))
-		_, err := C.audit_log_user_message(fd, C.int(event_type), cmsg, nil, nil, nil, C.int(r))
+		_, err := C.audit_log_user_message(fd, C.int(eventType), cmsg, nil, nil, nil, C.int(r))
 		return err
 	}
 	return nil
