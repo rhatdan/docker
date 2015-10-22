@@ -57,6 +57,7 @@ RUN apt-get update && apt-get install -y \
 	libzfs-dev \
 	--no-install-recommends \
 # End dependencies cut
+	libaudit-dev \
 	automake \
 	bash-completion \
 	curl \
