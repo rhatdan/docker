@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/docker/docker/daemon/execdriver"
+	"github.com/docker/docker/dockerhooks"
 
 	"github.com/opencontainers/runc/libcontainer/apparmor"
 	"github.com/opencontainers/runc/libcontainer/configs"
@@ -131,6 +132,11 @@ func (d *Driver) createNetwork(container *configs.Config, c *execdriver.Command,
 		container.Namespaces.Add(configs.NEWNET, c.Network.NamespacePath)
 		return nil
 	}
+
+	container.Hooks = &configs.Hooks{}
+	container.Hooks.Prestart = append(container.Hooks.Prestart, configs.NewFunctionHook(dockerhooks.Prestart))
+	container.Hooks.Poststop = append(container.Hooks.Poststop, configs.NewFunctionHook(dockerhooks.Poststop))
+
 	// only set up prestart hook if the namespace path is not set (this should be
 	// all cases *except* for --net=host shared networking)
 	container.Hooks.Prestart = append(container.Hooks.Prestart,

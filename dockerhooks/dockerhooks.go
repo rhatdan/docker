@@ -1,33 +1,34 @@
 // +build linux
 
-package main
+package dockerhooks
 
 import (
+	"bytes"
+	"encoding/json"
 	"io/ioutil"
-	"log"
-	"log/syslog"
 	"os"
 	"os/exec"
 	"path"
+
+	"github.com/opencontainers/runc/libcontainer/configs"
 )
 
-func getHooks() (string, []os.FileInfo, error) {
-	hookPath := os.Getenv("DOCKER_HOOKS_PATH")
-	if hookPath == "" {
-		hookPath = "hooks.d"
-	}
-	// find any hooks executables
-	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
-		return "", nil, nil
-	}
-	hooks, err := ioutil.ReadDir(hookPath)
-	return hookPath, hooks, err
-}
+const (
+	hookDirPath = "/usr/libexec/docker/hooks.d"
+)
 
-func prestart(hooks []os.FileInfo, hookPath string, stdinbytes []byte) error {
+func Prestart(state configs.HookState) error {
+	hooks, hooksPath, err := getHooks()
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
 	for _, item := range hooks {
 		if item.Mode().IsRegular() {
-			if err := run(path.Join(hookPath, item.Name()), stdinbytes); err != nil {
+			if err := runHook(path.Join(hookDirPath, item.Name()), "prestart", hooksPath, b); err != nil {
 				return err
 			}
 		}
@@ -35,72 +36,52 @@ func prestart(hooks []os.FileInfo, hookPath string, stdinbytes []byte) error {
 	return nil
 }
 
-func poststop(hooks []os.FileInfo, hookPath string, stdinbytes []byte) error {
+func Poststop(state configs.HookState) error {
+	hooks, hooksPath, err := getHooks()
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
 	for i := len(hooks) - 1; i >= 0; i-- {
 		fn := hooks[i].Name()
-		if hooks[i].Mode().IsRegular() {
-			if err := run(path.Join(hookPath, fn), stdinbytes); err != nil {
-				return err
+		for _, item := range hooks {
+			if item.Mode().IsRegular() && fn == item.Name() {
+				if err := runHook(path.Join(hookDirPath, item.Name()), "poststop", hooksPath, b); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	return nil
 }
 
-func run(hookfile string, incoming []byte) error {
-	cmd := exec.Command(hookfile)
-	cmd.Args = os.Args
-	cmd.Env = os.Environ()
-	log.Print("Run docker hook: ", hookfile, cmd.Args, cmd.Env)
-	stdinPipe, err := cmd.StdinPipe()
-	if err != nil {
-		return err
+func getHooks() ([]os.FileInfo, string, error) {
+	hooksPath := os.Getenv("DOCKER_HOOKS_PATH")
+	if hooksPath == "" {
+		hooksPath = "/usr/libexec/docker/hooks.d"
 	}
-	err = cmd.Start()
-	if err != nil {
-		return err
+
+	// find any hooks executables
+	if _, err := os.Stat(hookDirPath); os.IsNotExist(err) {
+		return nil, "", nil
 	}
-	stdinPipe.Write(incoming)
-	return nil
+
+	hooks, err := ioutil.ReadDir(hookDirPath)
+	return hooks, hooksPath, err
 }
 
-func main() {
-	var (
-		err       error
-		hooks     []os.FileInfo
-		incoming  []byte
-		hookPath  string
-		logwriter *syslog.Writer
-	)
-
-	logwriter, err = syslog.New(syslog.LOG_NOTICE, "docker-hooks")
-	if err == nil {
-		log.SetOutput(logwriter)
+func runHook(hookfile string, hookType string, hooksPath string, stdinBytes []byte) error {
+	cmd := exec.Cmd{
+		Path: hookfile,
+		Args: []string{hookType},
+		Env: []string{
+			"container=docker",
+			"DOCKER_HOOKS_PATH=", hooksPath,
+		},
+		Stdin: bytes.NewReader(stdinBytes),
 	}
-	log.Print("Executing dockerhook ", os.Args[0])
-
-	if hookPath, hooks, err = getHooks(); err != nil {
-		log.Fatalf("dockerhooks error getHooks Failed: %v", err)
-	}
-	if len(hooks) == 0 {
-		return
-	}
-
-	incoming, err = ioutil.ReadAll(os.Stdin)
-	if err != nil {
-		log.Fatalf("dockerhooks error ioutil.ReadAll Failed: %v", err)
-	}
-
-	switch os.Args[0] {
-	case "prestart":
-		if err := prestart(hooks, hookPath, incoming); err != nil {
-			log.Fatalf("dockerhooks prestart %s Failed: %v", hooks, err)
-		}
-	case "poststop":
-		if err := poststop(hooks, hookPath, incoming); err != nil {
-			log.Fatalf("dockerhooks prestart %s Failed: %v", hooks, err)
-		}
-	default:
-		log.Fatalf("ERROR: Invalid argument %v", os.Args[0])
-	}
+	return cmd.Run()
 }
