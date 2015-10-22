@@ -148,9 +148,11 @@ func (s *Server) LogAction(w http.ResponseWriter, r *http.Request) error {
 
 	switch action {
 	case "start":
-		inspect, err := s.daemon.ContainerInspect(c.ID, false)
-		if err == nil {
-			message = ", " + generateContainerConfigMsg(c, inspect)
+		if s.daemon != nil && c != nil {
+			inspect, err := s.daemon.ContainerInspect(c.ID, false)
+			if err == nil {
+				message = ", " + generateContainerConfigMsg(c, inspect)
+			}
 		}
 		fallthrough
 	default:
