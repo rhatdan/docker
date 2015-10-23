@@ -16,7 +16,7 @@ import (
 
 /* Prestart function will be called after container process is created but
    before it is started */
-func Prestart(state configs.HookState) error {
+func Prestart(state configs.HookState, configPath string) error {
 	hooks, hookDirPath, err := getHooks()
 	if err != nil {
 		return err
@@ -27,7 +27,7 @@ func Prestart(state configs.HookState) error {
 	}
 	for _, item := range hooks {
 		if item.Mode().IsRegular() {
-			if err := runHook(path.Join(hookDirPath, item.Name()), "prestart", b); err != nil {
+			if err := runHook(path.Join(hookDirPath, item.Name()), "prestart", configPath, b); err != nil {
 				return err
 			}
 		}
@@ -37,7 +37,7 @@ func Prestart(state configs.HookState) error {
 
 /* Poststop function will be called after container process has stopped but
    before it is removed */
-func Poststop(state configs.HookState) error {
+func Poststop(state configs.HookState, configPath string) error {
 	hooks, hookDirPath, err := getHooks()
 	if err != nil {
 		return err
@@ -50,7 +50,7 @@ func Poststop(state configs.HookState) error {
 		fn := hooks[i].Name()
 		for _, item := range hooks {
 			if item.Mode().IsRegular() && fn == item.Name() {
-				if err := runHook(path.Join(hookDirPath, item.Name()), "poststop", b); err != nil {
+				if err := runHook(path.Join(hookDirPath, item.Name()), "poststop", configPath, b); err != nil {
 					return err
 				}
 			}
@@ -71,10 +71,10 @@ func getHooks() ([]os.FileInfo, string, error) {
 	return hooks, hookDirPath, err
 }
 
-func runHook(hookfile string, hookType string, stdinBytes []byte) error {
+func runHook(hookFilePath string, hookType string, configPath string, stdinBytes []byte) error {
 	cmd := exec.Cmd{
-		Path: hookfile,
-		Args: []string{hookType, hookType},
+		Path: hookFilePath,
+		Args: []string{hookFilePath, hookType, configPath},
 		Env: []string{
 			"container=docker",
 		},

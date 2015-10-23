@@ -13,6 +13,8 @@ import (
 	"github.com/opencontainers/runc/libcontainer/apparmor"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/devices"
+
+	"github.com/Sirupsen/logrus"
 )
 
 // createContainer populates and configures the container type with the
@@ -133,9 +135,19 @@ func (d *Driver) createNetwork(container *configs.Config, c *execdriver.Command,
 		return nil
 	}
 
+	logrus.Infof("Config: %+v", c)
+
 	container.Hooks = &configs.Hooks{}
-	container.Hooks.Prestart = append(container.Hooks.Prestart, configs.NewFunctionHook(dockerhooks.Prestart))
-	container.Hooks.Poststop = append(container.Hooks.Poststop, configs.NewFunctionHook(dockerhooks.Poststop))
+	container.Hooks.Prestart = append(container.Hooks.Prestart,
+		configs.NewFunctionHook(func(s configs.HookState) error {
+			return dockerhooks.Prestart(s, c.ContainerJsonPath)
+		}),
+	)
+	container.Hooks.Poststop = append(container.Hooks.Poststop,
+		configs.NewFunctionHook(func(s configs.HookState) error {
+			return dockerhooks.Poststop(s, c.ContainerJsonPath)
+		}),
+	)
 
 	// only set up prestart hook if the namespace path is not set (this should be
 	// all cases *except* for --net=host shared networking)

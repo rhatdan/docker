@@ -301,6 +301,11 @@ func (container *Container) Start() (err error) {
 	mounts = append(mounts, container.ipcMounts()...)
 
 	container.command.Mounts = mounts
+	jsonPath, err := container.jsonPath()
+	if err != nil {
+		return err
+	}
+	container.command.ContainerJsonPath = jsonPath
 	return container.waitForStart()
 }
 
