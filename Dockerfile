@@ -41,13 +41,12 @@ RUN apt-get update && apt-get install -y \
 	gcc-mingw-w64 \
 	libapparmor-dev \
 	libcap-dev \
+       libaudit-dev \
 	libsqlite3-dev \
 	libsystemd-journal-dev \
 	mercurial \
 	parallel \
 	pkg-config \
-	python-mock \
-	python-pip \
 	python-websocket \
 	reprepro \
 	ruby1.9.1 \
@@ -57,7 +56,6 @@ RUN apt-get update && apt-get install -y \
 	libzfs-dev \
 	--no-install-recommends \
 # End dependencies cut
-	libaudit-dev \
 	automake \
 	bash-completion \
 	curl \
