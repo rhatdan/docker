@@ -45,8 +45,13 @@ var (
 	driverDeferredRemovalSupport = false
 	enableDeferredRemoval        = false
 	enableDeferredDeletion       = false
-	WarnOnLoopback               = true
-	LoopbackInUse                = false
+	// WarnOnLoopback true gives warning msg if using loopback
+	// with thin pool provisioning rather than the preferred
+	// method of passing the daemon a thin pool reserved outside of Docker.
+	// If false, no warning msg is printed.
+	WarnOnLoopback = true
+	// LoopbackInUse true if using loopback devices
+	LoopbackInUse = false
 )
 
 const deviceSetMetaFile string = "deviceset-metadata"
