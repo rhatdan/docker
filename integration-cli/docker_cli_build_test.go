@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -6223,43 +6224,6 @@ func (s *DockerSuite) TestBuildNoNamedVolume(c *check.C) {
 	_, err := buildImage("test", dockerFile, false)
 	c.Assert(err, check.NotNil, check.Commentf("image build should have failed"))
 }
-<<<<<<< HEAD
-||||||| parent of ac4b300... Add --add-registry and --block-registry options to docker daemon
-
-func (s *DockerSuite) TestBuildTagEvent(c *check.C) {
-	testRequires(c, DaemonIsLinux)
-	resp, rc, err := sockRequestRaw("GET", `/events?filters={"event":["tag"]}`, nil, "application/json")
-	c.Assert(err, check.IsNil)
-	defer rc.Close()
-	c.Assert(resp.StatusCode, check.Equals, http.StatusOK)
-
-	type event struct {
-		Status string `json:"status"`
-		ID     string `json:"id"`
-	}
-	ch := make(chan event)
-	go func() {
-		ev := event{}
-		if err := json.NewDecoder(rc).Decode(&ev); err == nil {
-			ch <- ev
-		}
-	}()
-
-	dockerFile := `FROM busybox
-	RUN echo events
-	`
-	_, err = buildImage("test", dockerFile, false)
-	c.Assert(err, check.IsNil)
-
-	select {
-	case ev := <-ch:
-		c.Assert(ev.Status, check.Equals, "tag")
-		c.Assert(ev.ID, check.Equals, "test:")
-	case <-time.After(time.Second):
-		c.Fatal("The 'tag' event not heard from the server")
-	}
-}
-=======
 
 func (s *DockerSuite) TestBuildTagEvent(c *check.C) {
 	testRequires(c, DaemonIsLinux)
@@ -6485,4 +6449,3 @@ func (s *DockerRegistrySuite) TestBuildWithPublicRegistryBlocked(c *check.C) {
 func (s *DockerRegistrySuite) TestBuildWithAllRegistriesBlocked(c *check.C) {
 	s.doTestBuildWithPublicRegistryBlocked(c, "testbuildwithallregistriesblocked", []string{"--block-registry=all"})
 }
->>>>>>> ac4b300... Add --add-registry and --block-registry options to docker daemon

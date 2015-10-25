@@ -1606,18 +1606,10 @@ func daemonTime(c *check.C) time.Time {
 
 func setupRegistryAt(c *check.C, url string) *testRegistryV2 {
 	testRequires(c, RegistryHosting)
-<<<<<<< HEAD
-	reg, err := newTestRegistryV2(c)
-	if err != nil {
-		c.Fatal(err)
-	}
-||||||| parent of ac4b300... Add --add-registry and --block-registry options to docker daemon
 	reg, err := newTestRegistryV2(c)
 	c.Assert(err, check.IsNil)
-=======
-	reg, err := newTestRegistryV2At(c, url)
+	reg, err = newTestRegistryV2At(c, url)
 	c.Assert(err, check.IsNil)
->>>>>>> ac4b300... Add --add-registry and --block-registry options to docker daemon
 
 	// Wait for registry to be ready to serve requests.
 	for i := 0; i != 5; i++ {
