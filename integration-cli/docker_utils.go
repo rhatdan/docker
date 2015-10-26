@@ -63,7 +63,7 @@ type clientConfig struct {
 }
 
 type localImageEntry struct {
-	name, tag, id string
+	name, tag, id, size string
 }
 
 // NewDaemon returns a Daemon instance to be used for testing.
@@ -431,7 +431,7 @@ func (d *Daemon) buildImageWithOut(name, dockerfile string, useCache bool) (stri
 
 // List images of given Docker daemon and return it in a map[repoName]=*LocaleImageEntry.
 func (d *Daemon) getImages(c *check.C, args ...string) map[string]*localImageEntry {
-	reImageEntry := regexp.MustCompile(`(?m)^([[:alnum:]/.:_-]+)\s+([[:alnum:]._-]+)\s+([a-fA-F0-9]+)\s+`)
+	reImageEntry := regexp.MustCompile(`(?m)^([[:alnum:]/.:_<>-]+)\s+([[:alnum:]._<>-]+)\s+([a-fA-F0-9]+)\s+\S+\s+(.+)`)
 	result := make(map[string]*localImageEntry)
 
 	out, err := d.Cmd("images", append([]string{"--no-trunc"}, args...)...)
@@ -444,7 +444,7 @@ func (d *Daemon) getImages(c *check.C, args ...string) map[string]*localImageEnt
 			if i < 1 && match[1] == "REPOSITORY" {
 				continue // skip header
 			}
-			result[match[1]] = &localImageEntry{match[1], match[2], match[3]}
+			result[match[1]] = &localImageEntry{match[1], match[2], match[3], match[4]}
 		}
 	}
 	return result
