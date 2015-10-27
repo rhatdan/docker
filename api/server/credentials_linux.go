@@ -69,7 +69,8 @@ func getLoginUid(ucred *syscall.Ucred, fd int) (int, error) {
 func getpwuid(loginUID int) (string, error) {
 	pw_struct, err := C.getpwuid(C.__uid_t(loginUID))
 	if err != nil {
-		logrus.Errorf("Failed to get pwuid struct: %v", err)
+		logrus.Errorf("Failed to get pwuid struct for UID %d: %v", loginUID, err)
+		return "", err
 	}
 	name := C.GoString(pw_struct.pw_name)
 	return name, nil
@@ -163,6 +164,9 @@ func (s *Server) LogAction(w http.ResponseWriter, r *http.Request) error {
 			break
 		}
 		message = fmt.Sprintf("LoginUID=%v, %s", loginuid, message)
+		if loginuid == -1 {
+			break
+		}
 
 		//Get username
 		username, err := getpwuid(loginuid)
