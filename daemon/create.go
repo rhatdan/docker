@@ -87,10 +87,10 @@ func (daemon *Daemon) create(params *ContainerCreateConfig) (retC *Container, re
 	if err := daemon.Register(container); err != nil {
 		return nil, err
 	}
-	if err := daemon.setHostConfig(container, params.HostConfig); err != nil {
+	if err := daemon.createRootfs(container, params.HostConfig); err != nil {
 		return nil, err
 	}
-	if err := daemon.createRootfs(container); err != nil {
+	if err := daemon.setHostConfig(container, params.HostConfig); err != nil {
 		return nil, err
 	}
 	defer func() {

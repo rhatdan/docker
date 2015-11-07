@@ -989,9 +989,16 @@ func (daemon *Daemon) diff(container *Container) (archive.Archive, error) {
 	return daemon.driver.Diff(container.ID, initID)
 }
 
-func (daemon *Daemon) createRootfs(container *Container) error {
+func (daemon *Daemon) createRootfs(container *Container, hostconfig *runconfig.HostConfig) error {
 	// Step 1: create the container directory.
 	// This doubles as a barrier to avoid race conditions.
+	container.Lock()
+	if err := parseSecurityOpt(container, hostconfig); err != nil {
+		container.Unlock()
+		return err
+	}
+	container.Unlock()
+
 	rootUID, rootGID, err := idtools.GetRootUIDGID(daemon.uidMaps, daemon.gidMaps)
 	if err != nil {
 		return err
