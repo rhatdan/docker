@@ -34,6 +34,7 @@ RUN	echo deb http://ppa.launchpad.net/zfs-native/stable/ubuntu trusty main > /et
 RUN apt-get update && apt-get install -y \
 	apparmor \
 	aufs-tools \
+	bash-completion \
 	btrfs-tools \
 	build-essential \
 	createrepo \
@@ -44,8 +45,6 @@ RUN apt-get update && apt-get install -y \
 	libcap-dev \
 	libsqlite3-dev \
 	libsystemd-journal-dev \
-	mercurial \
-	parallel \
 	pkg-config \
 	python-websocket \
 	reprepro \
@@ -57,7 +56,6 @@ RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 # End dependencies cut
 	automake \
-	bash-completion \
 	curl \
 	git \
 	iptables \

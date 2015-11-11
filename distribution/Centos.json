@@ -22,6 +22,7 @@
       "  php-devel \\",
       "  python-websocket-client \\",
       "  python-requests \\",
+      "  redhat-rpm-config \\",
       "  rpm-devel \\",
       "  ruby \\",
       "  ruby-devel \\",
