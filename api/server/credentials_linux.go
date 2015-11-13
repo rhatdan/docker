@@ -2,9 +2,6 @@
 
 package server
 
-// #include <stdlib.h>
-// #include "/usr/include/pwd.h"
-import "C"
 import (
 	"bytes"
 	"fmt"
@@ -12,6 +9,7 @@ import (
 	"log/syslog"
 	"net/http"
 	"net/url"
+	"os/user"
 	"path"
 	"reflect"
 	"strconv"
@@ -52,6 +50,7 @@ func getUcred(fd int) (*syscall.Ucred, error) {
 func getLoginUid(ucred *syscall.Ucred, fd int) (int, error) {
 	if _, err := syscall.Getpeername(fd); err != nil {
 		logrus.Errorf("Socket appears to have closed: %v", err)
+		return -1, err
 	}
 	loginuid, err := ioutil.ReadFile(fmt.Sprintf("/proc/%d/loginuid", ucred.Pid))
 	if err != nil {
@@ -61,18 +60,19 @@ func getLoginUid(ucred *syscall.Ucred, fd int) (int, error) {
 	loginuid_int, err := strconv.Atoi(string(loginuid))
 	if err != nil {
 		logrus.Errorf("Failed to convert loginuid to int: %v", err)
+		return -1, err
 	}
 	return loginuid_int, nil
 }
 
 //Given a loginUID, retrieves the current username
 func getpwuid(loginUID int) (string, error) {
-	pw_struct, err := C.getpwuid(C.__uid_t(loginUID))
+	pw_struct, err := user.LookupId(fmt.Sprintf("%u", loginUID))
 	if err != nil {
 		logrus.Errorf("Failed to get pwuid struct for UID %d: %v", loginUID, err)
 		return "", err
 	}
-	name := C.GoString(pw_struct.pw_name)
+	name := pw_struct.Username
 	return name, nil
 }
 
@@ -98,11 +98,13 @@ func (s *Server) parseRequest(r *http.Request) (string, *daemon.Container) {
 		containerID = path.Base(path.Dir(parsedurl.Path))
 	}
 
-	c, err := s.daemon.Get(containerID)
-	if err != nil {
-		return action, nil
+	if s.daemon != nil {
+		c, err := s.daemon.Get(containerID)
+		if err == nil {
+			return action, c
+		}
 	}
-	return action, c
+	return action, nil
 }
 
 //Traverses the config struct and grabs non-standard values for logging
@@ -147,7 +149,9 @@ func (s *Server) LogAction(w http.ResponseWriter, r *http.Request) error {
 
 	switch action {
 	case "start":
-		message = fmt.Sprintf("%s%v", message, generateContainerConfigMsg(c))
+		if s.daemon != nil && c != nil {
+			message = message + ", " + generateContainerConfigMsg(c)
+		}
 		fallthrough
 	default:
 		//Get user credentials
@@ -189,11 +193,12 @@ func (s *Server) LogAction(w http.ResponseWriter, r *http.Request) error {
 //Logs a message to the syslog
 func logSyslog(message string) {
 	logger, err := syslog.New(syslog.LOG_ALERT, "Docker")
-	defer logger.Close()
 	if err != nil {
 		fmt.Printf("Error logging to system log: %v", err)
+		return
 	}
 	logger.Info(message)
+	logger.Close()
 }
 
 //Logs an API event to the audit log
