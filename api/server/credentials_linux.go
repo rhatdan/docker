@@ -72,21 +72,21 @@ func getUcred(fd int) (*syscall.Ucred, error) {
 }
 
 //Gets the client's loginuid
-func getLoginUID(ucred *syscall.Ucred, fd int) (uint32, error) {
+func getLoginUID(ucred *syscall.Ucred, fd int) (uint64, error) {
 	if _, err := syscall.Getpeername(fd); err != nil {
 		logrus.Errorf("Socket appears to have closed: %v", err)
-		return -1, err
+		return 0, err
 	}
 	loginuid, err := ioutil.ReadFile(fmt.Sprintf("/proc/%d/loginuid", ucred.Pid))
 	if err != nil {
 		logrus.Errorf("Error reading loginuid: %v", err)
-		return -1, err
+		return 0, err
 	}
 	loginuidInt, err := strconv.ParseUint(string(loginuid), 10, 32)
 	if err != nil {
 		logrus.Errorf("Failed to convert loginuid to uint32: %v", err)
 	}
-	return uint32(loginuidInt), nil
+	return uint64(loginuidInt), nil
 }
 
 //Given a loginUID, retrieves the current username
@@ -213,15 +213,15 @@ func (s *Server) LogAction(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			break
 		}
-		message = fmt.Sprintf("LoginUID=%v, %s", uid, message)
-		loginuid = int(uid)
-		if loginuid == -1 {
-			//No login UID is set, so no point in looking up a name
+		if uid < 0 || uid > 0xffffffff {
+			//No valid login UID is set, so no point in looking up a name
 			break
 		}
+		message = fmt.Sprintf("LoginUID=%v, %s", uid, message)
+		loginuid = int(uid)
 
 		//Get username
-		username, err = getpwuid(uid)
+		username, err = getpwuid(uint32(loginuid))
 		if err != nil {
 			break
 		}
