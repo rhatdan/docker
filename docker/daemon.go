@@ -212,7 +212,6 @@ func (cli *DaemonCli) CmdDaemon(args ...string) error {
 		}
 		serverConfig.Addrs = append(serverConfig.Addrs, apiserver.Addr{Proto: protoAddrParts[0], Addr: protoAddrParts[1]})
 	}
-
 	if err := migrateKey(); err != nil {
 		logrus.Fatal(err)
 	}
