@@ -1018,13 +1018,14 @@ func (daemon *Daemon) changes(container *Container) ([]archive.Change, error) {
 
 // TagImage creates a tag in the repository reponame, pointing to the image named
 // imageName. If force is true, an existing tag with the same name may be
-// overwritten.
-func (daemon *Daemon) TagImage(newTag reference.Named, imageName string, force bool) error {
+// overwritten. If keepUnqualified is true, given newTag won't be fully qualified
+// before its addition to the store.
+func (daemon *Daemon) TagImage(newTag reference.Named, imageName string, force, keepUnqualified bool) error {
 	imageID, err := daemon.GetImageID(imageName)
 	if err != nil {
 		return err
 	}
-	newTag = registry.NormalizeLocalReference(newTag)
+	newTag = registry.NormalizeLocalReference(newTag, keepUnqualified)
 	if err := daemon.tagStore.AddTag(newTag, imageID, force); err != nil {
 		return err
 	}
@@ -1235,7 +1236,6 @@ func (daemon *Daemon) GetImageID(refOrID string) (image.ID, error) {
 
 	// Treat it as a possible tag or digest reference
 	if ref, err := reference.ParseNamed(refOrID); err == nil {
-		ref = registry.NormalizeLocalReference(ref)
 		if id, err := daemon.tagStore.Get(ref); err == nil {
 			return id, nil
 		}
