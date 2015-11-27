@@ -81,10 +81,44 @@ func newPuller(endpoint registry.APIEndpoint, repoInfo *registry.RepositoryInfo,
 	return nil, fmt.Errorf("unknown version %d for registry %s", endpoint.Version, endpoint.URL)
 }
 
-// Pull initiates a pull operation. image is the repository name to pull, and
-// tag may be either empty, or indicate a specific tag to pull.
+// Pull initiates a pull operation for given reference. If the reference is
+// fully qualified, image will be pulled from given registry. Otherwise
+// additional registries will be queried until the reference is found.
 func Pull(ref reference.Named, imagePullConfig *ImagePullConfig) error {
-	var sf = streamformatter.NewJSONStreamFormatter()
+	// Unless the index name is specified, iterate over all registries until
+	// the matching image is found.
+	if registry.IsReferenceFullyQualified(ref) {
+		return pullFromRegistry(ref, imagePullConfig)
+	}
+	if len(registry.RegistryList) == 0 {
+		return fmt.Errorf("No configured registry to pull from.")
+	}
+	err := registry.ValidateRepositoryName(ref)
+	if err != nil {
+		return err
+	}
+	for _, r := range registry.RegistryList {
+		// Prepend the index name to the image name.
+		fqr, _err := registry.FullyQualifyReferenceWith(r, ref)
+		if _err != nil {
+			logrus.Warnf("Failed to fully qualify %q name with %q registry: %v", ref.Name(), r, _err)
+			err = _err
+			continue
+		}
+		if err = pullFromRegistry(fqr, imagePullConfig); err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+// pullFromRegistry initiates a pull operation from particular registry. ref is
+// a fully qualified image reference.
+func pullFromRegistry(ref reference.Named, imagePullConfig *ImagePullConfig) error {
+	var (
+		sf  = streamformatter.NewJSONStreamFormatter()
+		out = imagePullConfig.OutStream
+	)
 
 	// Resolve the Repository name from fqn to RepositoryInfo
 	repoInfo, err := imagePullConfig.RegistryService.ResolveRepository(ref)
@@ -97,12 +131,14 @@ func Pull(ref reference.Named, imagePullConfig *ImagePullConfig) error {
 		return err
 	}
 
+	out.Write(sf.FormatStream(fmt.Sprintf("Trying to pull repository %s ...\n", repoInfo.CanonicalName)))
+
 	endpoints, err := imagePullConfig.RegistryService.LookupPullEndpoints(repoInfo.CanonicalName)
 	if err != nil {
 		return err
 	}
 
-	logName := registry.NormalizeLocalReference(ref)
+	logName := registry.NormalizeLocalReference(ref, false)
 
 	var (
 		// use a slice to append the error strings and return a joined string to caller
@@ -178,7 +214,7 @@ func validateRepoName(name string) error {
 	if name == "" {
 		return fmt.Errorf("Repository name can't be empty")
 	}
-	if name == "scratch" {
+	if strings.TrimPrefix(name, registry.IndexName+"/") == "scratch" {
 		return fmt.Errorf("'scratch' is a reserved name")
 	}
 	return nil
