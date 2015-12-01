@@ -212,10 +212,6 @@ func (cli *DaemonCli) CmdDaemon(args ...string) error {
 		}
 		serverConfig.Addrs = append(serverConfig.Addrs, apiserver.Addr{Proto: protoAddrParts[0], Addr: protoAddrParts[1]})
 	}
-	api, err := apiserver.New(serverConfig)
-	if err != nil {
-		logrus.Fatal(err)
-	}
 
 	if err := migrateKey(); err != nil {
 		logrus.Fatal(err)
@@ -231,6 +227,11 @@ func (cli *DaemonCli) CmdDaemon(args ...string) error {
 			}
 		}
 		logrus.Fatalf("Error starting daemon: %v", err)
+	}
+
+	api, err := apiserver.New(serverConfig, d)
+	if err != nil {
+		logrus.Fatal(err)
 	}
 
 	logrus.Info("Daemon has completed initialization")
