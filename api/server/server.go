@@ -39,6 +39,7 @@ type Config struct {
 // Server contains instance details for the server
 type Server struct {
 	cfg     *Config
+	daemon  *daemon.Daemon
 	servers []*HTTPServer
 	routers []router.Router
 }
@@ -51,9 +52,10 @@ type Addr struct {
 
 // New returns a new instance of the server based on the specified configuration.
 // It allocates resources which will be needed for ServeAPI(ports, unix-sockets).
-func New(cfg *Config) (*Server, error) {
+func New(cfg *Config, daemon *daemon.Daemon) (*Server, error) {
 	s := &Server{
-		cfg: cfg,
+		cfg:    cfg,
+		daemon: daemon,
 	}
 	for _, addr := range cfg.Addrs {
 		srv, err := s.newServer(addr.Proto, addr.Addr)
