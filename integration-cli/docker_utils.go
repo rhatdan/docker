@@ -695,14 +695,14 @@ func getAllContainers() (string, error) {
 func deleteAllContainers() error {
 	containers, err := getAllContainers()
 	if err != nil {
-		fmt.Println(containers)
 		fmt.Fprintf(os.Stderr, "deleteAllContainers: %v\n", err)
 		return err
 	}
-
-	if err = deleteContainer(containers); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to delete containers %s: %v\n", containers, err)
-		return err
+	if containers != "" {
+		if err = deleteContainer(containers); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to delete containers %s: %v\n", containers, err)
+			return err
+		}
 	}
 	return nil
 }
