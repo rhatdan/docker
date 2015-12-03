@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y \
 	createrepo \
 	dpkg-sig \
 	gcc-mingw-w64 \
+	iptables \
 	libapparmor-dev \
 	libaudit-dev \
 	libcap-dev \
@@ -65,13 +66,10 @@ RUN apt-get update && apt-get install -y \
 	automake \
 	git \
 	jq \
-	iptables \
 	mercurial \
 	parallel \
 	python-mock \
-	python-pip \
-	ln -snf /usr/bin/clang-3.8 /usr/local/bin/clang \
-	ln -snf /usr/bin/clang++-3.8 /usr/local/bin/clang++
+	python-pip 
 
 # Get lvm2 source for compiling statically
 RUN git clone -b v2_02_103 https://git.fedorahosted.org/git/lvm2.git /usr/local/lvm2
@@ -83,6 +81,8 @@ RUN cd /usr/local/lvm2 \
 	&& make device-mapper \
 	&& make install_device-mapper
 # see https://git.fedorahosted.org/cgit/lvm2.git/tree/INSTALL
+
+# Sqlite3 install manually
 
 # Install Go
 ENV GO_VERSION 1.5.1
@@ -170,7 +170,7 @@ RUN useradd --create-home --gid docker unprivilegeduser
 
 VOLUME /var/lib/docker
 WORKDIR /go/src/github.com/docker/docker
-#  Cut for buildtags distribution specific
+# Cut for buildtags distribution specific
 ENV DOCKER_BUILDTAGS apparmor selinux
 # End buildtags cut
 

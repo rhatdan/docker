@@ -2,10 +2,12 @@
     "distribution": "FROM centos",
     "dependencies":[
       "  RUN yum -y update && yum install -y \\",
+      "  audit-libs-devel \\",
       "  binutils \\",
       "  btrfs-progs-devel \\",
       "  btrfs-progs \\",
       "  bzip2 \\",
+      "  clang \\",
       "  gcc \\",
       "  gcc-c++ \\",
       "  glibc-static \\",
@@ -18,6 +20,7 @@
       "  libguestfs-tools \\",
       "  make \\",
       "  mingw64-gcc \\",
+      "  patch \\",
       "  php-devel \\",
       "  python-devel \\",
       "  python-websocket-client \\",
@@ -41,5 +44,4 @@
       "End dependencies cut",
       "Sqlite3 install manually",
       "Cut for buildtags distribution",
-      "End buildtags cut" ]
-}
+      "End buildtags cut" ]}
