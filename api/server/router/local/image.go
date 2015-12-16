@@ -232,12 +232,14 @@ func (s *router) postImagesPush(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 
+	force := httputils.BoolValue(r, "force")
+
 	output := ioutils.NewWriteFlusher(w)
 	defer output.Close()
 
 	w.Header().Set("Content-Type", "application/json")
 
-	if err := s.daemon.PushImage(ref, metaHeaders, authConfig, output); err != nil {
+	if err := s.daemon.PushImage(ref, metaHeaders, authConfig, force, output); err != nil {
 		if !output.Flushed() {
 			return err
 		}
@@ -300,12 +302,92 @@ func (s *router) deleteImages(ctx context.Context, w http.ResponseWriter, r *htt
 }
 
 func (s *router) getImagesByName(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	imageInspect, err := s.daemon.LookupImage(vars["name"])
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+
+	name := vars["name"]
+
+	if httputils.BoolValue(r, "remote") {
+		authEncoded := r.Header.Get("X-Registry-Auth")
+		authConfig := &types.AuthConfig{}
+		if authEncoded != "" {
+			authJSON := base64.NewDecoder(base64.URLEncoding, strings.NewReader(authEncoded))
+			if err := json.NewDecoder(authJSON).Decode(authConfig); err != nil {
+				// for a pull it is not an error if no auth was given
+				// to increase compatibility with the existing api it is defaulting to be empty
+				authConfig = &types.AuthConfig{}
+			}
+		}
+
+		ref, err := reference.ParseNamed(name)
+		if err != nil {
+			return err
+		}
+		metaHeaders := map[string][]string{}
+		for k, v := range r.Header {
+			if strings.HasPrefix(k, "X-Meta-") {
+				metaHeaders[k] = v
+			}
+		}
+		imageInspect, err := s.daemon.LookupRemote(ref, metaHeaders, authConfig)
+		if err != nil {
+			return err
+		}
+		return httputils.WriteJSON(w, http.StatusOK, imageInspect)
+	}
+
+	imageInspect, err := s.daemon.LookupImage(name)
 	if err != nil {
 		return err
 	}
 
 	return httputils.WriteJSON(w, http.StatusOK, imageInspect)
+}
+
+func (s *router) getImagesTags(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	name := vars["name"]
+	authEncoded := r.Header.Get("X-Registry-Auth")
+	authConfig := &types.AuthConfig{}
+	if authEncoded != "" {
+		authJSON := base64.NewDecoder(base64.URLEncoding, strings.NewReader(authEncoded))
+		if err := json.NewDecoder(authJSON).Decode(authConfig); err != nil {
+			// for a pull it is not an error if no auth was given
+			// to increase compatibility with the existing api it is defaulting to be empty
+			authConfig = &types.AuthConfig{}
+		}
+	}
+
+	var tagList *types.RepositoryTagList
+	reposName, err := reference.WithName(name)
+	if err != nil {
+		return nil
+	}
+
+	if !httputils.BoolValue(r, "remote") {
+		tagList, err = s.daemon.ListLocalTags(reposName)
+		if err != nil {
+			logrus.Warnf("failed to get local tags for %q: %v", name, err)
+		}
+	}
+
+	if tagList == nil || err != nil {
+		metaHeaders := map[string][]string{}
+		for k, v := range r.Header {
+			if strings.HasPrefix(k, "X-Meta-") {
+				metaHeaders[k] = v
+			}
+		}
+		tagList, err = s.daemon.ListRemoteTags(reposName, metaHeaders, authConfig)
+		if err != nil {
+			logrus.Warnf("failed to get remote tags for %q: %v", name, err)
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	return httputils.WriteJSON(w, http.StatusOK, tagList)
 }
 
 func (s *router) postBuild(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -480,7 +562,7 @@ func (s *router) postBuild(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	for _, rt := range repoAndTags {
-		if err := s.daemon.TagImage(rt, imgID); err != nil {
+		if err := s.daemon.TagImage(rt, imgID, true); err != nil {
 			return errf(err)
 		}
 	}
@@ -564,7 +646,7 @@ func (s *router) postImagesTag(ctx context.Context, w http.ResponseWriter, r *ht
 			return err
 		}
 	}
-	if err := s.daemon.TagImage(newTag, vars["name"]); err != nil {
+	if err := s.daemon.TagImage(newTag, vars["name"], true); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -594,9 +676,9 @@ func (s *router) getImagesSearch(ctx context.Context, w http.ResponseWriter, r *
 			headers[k] = v
 		}
 	}
-	query, err := s.daemon.SearchRegistryForImages(r.Form.Get("term"), config, headers)
+	results, err := s.daemon.SearchRegistryForImages(r.Form.Get("term"), config, headers, httputils.BoolValue(r, "noIndex"))
 	if err != nil {
 		return err
 	}
-	return httputils.WriteJSON(w, http.StatusOK, query.Results)
+	return httputils.WriteJSON(w, http.StatusOK, results)
 }

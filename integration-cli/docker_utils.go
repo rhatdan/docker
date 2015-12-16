@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -124,6 +125,10 @@ type clientConfig struct {
 	transport *http.Transport
 	scheme    string
 	addr      string
+}
+
+type localImageEntry struct {
+	name, tag, id, size string
 }
 
 // NewDaemon returns a Daemon instance to be used for testing.
@@ -474,6 +479,181 @@ func (d *Daemon) LogfileName() string {
 	return d.logFile.Name()
 }
 
+func (d *Daemon) buildImageWithOut(name, dockerfile string, useCache bool) (string, string, error) {
+	args := []string{"--host", d.sock(), "build", "-t", name}
+	if !useCache {
+		args = append(args, "--no-cache")
+	}
+	args = append(args, "-")
+	c := exec.Command(dockerBinary, args...)
+	c.Stdin = strings.NewReader(dockerfile)
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return "", string(out), fmt.Errorf("failed to build the image: %s", out)
+	}
+	id, err := d.inspectField(name, "Id")
+	if err != nil {
+		return "", string(out), err
+	}
+	return id, string(out), nil
+}
+
+// getImages lists images of given Docker daemon and returns it in a
+// map with keys in form <name>:<tag>.
+func (d *Daemon) getImages(c *check.C, args ...string) map[string]*localImageEntry {
+	reImageEntry := regexp.MustCompile(`(?m)^([[:alnum:]/.:_<>-]+)\s+([[:alnum:]._<>-]+)\s+((?:sha\d+:)?[a-fA-F0-9]+)\s+\S+\s+(.+)`)
+	result := make(map[string]*localImageEntry)
+
+	out, err := d.Cmd("images", append([]string{"--no-trunc"}, args...)...)
+	if err != nil {
+		c.Fatalf("failed to list images: %v", err)
+	}
+	matches := reImageEntry.FindAllStringSubmatch(out, -1)
+	if matches != nil {
+		for i, match := range matches {
+			if i < 1 && match[1] == "REPOSITORY" {
+				continue // skip header
+			}
+			key := match[1]
+			if match[2] != "" && match[2] != "<none>" {
+				key += ":" + match[2]
+			}
+			result[key] = &localImageEntry{match[1], match[2], match[3], match[4]}
+		}
+	}
+	return result
+}
+
+// getAndTestImageEntry lists  images of given Docker daemon and assert
+// expected values. Unless expectedImageCount is negative, assert the number of
+// images of Docker daemon. Unless repoName is empty, assert it exists and
+// return its matching localImageEntry. If the tag is missing, it won't be
+// checked. Unless expectedImageID is empty, assert that image ID of given
+// repoName matches this one.
+func (d *Daemon) getAndTestImageEntry(c *check.C, expectedImageCount int, repoName, expectedImageID string) *localImageEntry {
+	reRefTagged := regexp.MustCompile(`^(.*):([^:/]+)$`)
+	images := d.getImages(c)
+	if expectedImageCount >= 0 && len(images) != expectedImageCount {
+		switch expectedImageCount {
+		case 0:
+			c.Fatalf("expected empty local image database, got %d images", len(images))
+		case 1:
+			c.Fatalf("expected exactly 1 local image, got %d", len(images))
+		default:
+			c.Fatalf("expected exactly %d local images, got %d", expectedImageCount, len(images))
+		}
+	}
+
+	matchTag := reRefTagged.MatchString(repoName)
+
+	if repoName != "" {
+		img, found := images[repoName]
+		if !found {
+			keys := make([]string, 0, len(images))
+			for k := range images {
+				if !matchTag {
+					if strings.HasPrefix(k, repoName+":") {
+						found = true
+						img = images[k]
+						break
+					}
+				}
+				keys = append(keys, k)
+			}
+			if !found {
+				c.Fatalf("%s missing in list of images: %v", repoName, keys)
+			}
+		}
+
+		if expectedImageID != "" && img.id != expectedImageID {
+			c.Fatalf("image ID of %s does not match expected (%s != %s)", repoName, img.id, expectedImageID)
+		}
+
+		return img
+	}
+	return nil
+}
+
+func (d *Daemon) inspectField(name, field string) (string, error) {
+	format := fmt.Sprintf("{{.%s}}", field)
+	out, err := d.Cmd("inspect", "-f", format, name)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect %s: %s", name, out)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func (d *Daemon) sockConn(timeout time.Duration) (net.Conn, error) {
+	daemon := d.sock()
+	daemonURL, err := url.Parse(daemon)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse url %q: %v", daemon, err)
+	}
+
+	var c net.Conn
+	switch daemonURL.Scheme {
+	case "unix":
+		return net.DialTimeout(daemonURL.Scheme, daemonURL.Path, timeout)
+	case "tcp":
+		return net.DialTimeout(daemonURL.Scheme, daemonURL.Host, timeout)
+	default:
+		return c, fmt.Errorf("unknown scheme %v (%s)", daemonURL.Scheme, daemon)
+	}
+}
+
+func (d *Daemon) sockRequest(method, endpoint string, data interface{}) (int, []byte, error) {
+	jsonData := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(jsonData).Encode(data); err != nil {
+		return -1, nil, err
+	}
+
+	res, body, err := d.sockRequestRaw(method, endpoint, jsonData, "application/json")
+	if err != nil {
+		return -1, nil, err
+	}
+	b, err := readBody(body)
+	return res.StatusCode, b, err
+}
+
+func (d *Daemon) sockRequestRaw(method, endpoint string, data io.Reader, ct string) (*http.Response, io.ReadCloser, error) {
+	req, client, err := d.newRequestClient(method, endpoint, data, ct)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		client.Close()
+		return nil, nil, err
+	}
+	body := ioutils.NewReadCloserWrapper(resp.Body, func() error {
+		defer resp.Body.Close()
+		return client.Close()
+	})
+
+	return resp, body, nil
+}
+
+func (d *Daemon) newRequestClient(method, endpoint string, data io.Reader, ct string) (*http.Request, *httputil.ClientConn, error) {
+	c, err := d.sockConn(time.Duration(10 * time.Second))
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not dial docker daemon: %v", err)
+	}
+
+	client := httputil.NewClientConn(c, nil)
+
+	req, err := http.NewRequest(method, endpoint, data)
+	if err != nil {
+		client.Close()
+		return nil, nil, fmt.Errorf("could not create new request: %v", err)
+	}
+
+	if ct != "" {
+		req.Header.Set("Content-Type", ct)
+	}
+	return req, client, nil
+}
+
 func daemonHost() string {
 	daemonURLStr := "unix://" + opts.DefaultUnixSocket
 	if daemonHostVar := os.Getenv("DOCKER_HOST"); daemonHostVar != "" {
@@ -600,11 +780,16 @@ func readBody(b io.ReadCloser) ([]byte, error) {
 
 func deleteContainer(container string) error {
 	container = strings.TrimSpace(strings.Replace(container, "\n", " ", -1))
+	if container == "" {
+		return nil
+	}
 	rmArgs := strings.Split(fmt.Sprintf("rm -fv %v", container), " ")
-	exitCode, err := runCommand(exec.Command(dockerBinary, rmArgs...))
+	out, exitCode, err := runCommandWithOutput(exec.Command(dockerBinary, rmArgs...))
 	// set error manually if not set
 	if exitCode != 0 && err == nil {
-		err = fmt.Errorf("failed to remove container: `docker rm` exit is non-zero")
+		err = fmt.Errorf("failed to remove container: `docker rm` exit is non-zero: \n%s", out)
+	} else if err != nil {
+		err = fmt.Errorf("failed to remove container: %v\n%s", err, out)
 	}
 
 	return err
@@ -624,11 +809,13 @@ func deleteAllContainers() error {
 	containers, err := getAllContainers()
 	if err != nil {
 		fmt.Println(containers)
+		fmt.Fprintf(os.Stderr, "deleteAllContainers: %v\n", err)
 		return err
 	}
 
 	if containers != "" {
 		if err = deleteContainer(containers); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to delete containers %s: %v\n", containers, err)
 			return err
 		}
 	}
@@ -682,10 +869,13 @@ func deleteAllVolumes() error {
 		status, b, err := sockRequest("DELETE", "/volumes/"+v.Name, nil)
 		if err != nil {
 			errors = append(errors, err.Error())
+			fmt.Fprintf(os.Stderr, "deleteAllVolumes: %s\n", err.Error())
 			continue
 		}
 		if status != http.StatusNoContent {
-			errors = append(errors, fmt.Sprintf("error deleting volume %s: %s", v.Name, string(b)))
+			errMsg := fmt.Sprintf("error deleting volume %s: %s", v.Name, string(b))
+			fmt.Fprintf(os.Stderr, "%s\n", errMsg)
+			errors = append(errors, errMsg)
 		}
 	}
 	if len(errors) > 0 {
@@ -709,7 +899,7 @@ func getAllVolumes() ([]*types.Volume, error) {
 var protectedImages = map[string]struct{}{}
 
 func deleteAllImages() error {
-	out, err := exec.Command(dockerBinary, "images").CombinedOutput()
+	out, err := exec.Command(dockerBinary, "images", "--digests").CombinedOutput()
 	if err != nil {
 		return err
 	}
@@ -720,20 +910,29 @@ func deleteAllImages() error {
 			continue
 		}
 		fields := strings.Fields(l)
-		imgTag := fields[0] + ":" + fields[1]
-		if _, ok := protectedImages[imgTag]; !ok {
+		imgRef := fields[0] + ":" + fields[1]
+		if fields[1] == "<none>" {
+			if fields[2] != "<none>" {
+				imgRef = fields[0] + "@" + fields[2]
+			} else {
+				imgRef = fields[0]
+			}
+		}
+		if _, ok := protectedImages[imgRef]; !ok {
 			if fields[0] == "<none>" {
-				imgs = append(imgs, fields[2])
+				imgs = append(imgs, fields[3])
 				continue
 			}
-			imgs = append(imgs, imgTag)
+			imgs = append(imgs, imgRef)
 		}
 	}
 	if len(imgs) == 0 {
 		return nil
 	}
 	args := append([]string{"rmi", "-f"}, imgs...)
-	if err := exec.Command(dockerBinary, args...).Run(); err != nil {
+	rmiCmd := exec.Command(dockerBinary, args...)
+	if out, _, err := runCommandWithOutput(rmiCmd); err != nil {
+		fmt.Fprintf(os.Stderr, "removing unprotected images (%s): failed with: %v\n%s", strings.Join(imgs, ", "), err, out)
 		return err
 	}
 	return nil
@@ -798,6 +997,7 @@ func deleteImages(images ...string) error {
 	exitCode, err := runCommand(rmiCmd)
 	// set error manually if not set
 	if exitCode != 0 && err == nil {
+		fmt.Fprintf(os.Stderr, "deleteImages: failed to remove images: %v\n", err)
 		err = fmt.Errorf("failed to remove image: `docker rmi` exit is non-zero")
 	}
 	return err
@@ -1513,9 +1713,9 @@ func daemonTime(c *check.C) time.Time {
 	return dt
 }
 
-func setupRegistry(c *check.C) *testRegistryV2 {
+func setupRegistryAt(c *check.C, url string) *testRegistryV2 {
 	testRequires(c, RegistryHosting)
-	reg, err := newTestRegistryV2(c)
+	reg, err := newTestRegistryV2At(c, url)
 	c.Assert(err, check.IsNil)
 
 	// Wait for registry to be ready to serve requests.
@@ -1528,6 +1728,10 @@ func setupRegistry(c *check.C) *testRegistryV2 {
 
 	c.Assert(err, check.IsNil, check.Commentf("Timeout waiting for test registry to become available"))
 	return reg
+}
+
+func setupRegistry(c *check.C) *testRegistryV2 {
+	return setupRegistryAt(c, privateRegistryURL)
 }
 
 func setupNotary(c *check.C) *testNotary {

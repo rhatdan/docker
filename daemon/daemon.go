@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -131,6 +132,12 @@ func (c *contStore) List() []*container.Container {
 	return *containers
 }
 
+type byTagName []*types.RepositoryTag
+
+func (r byTagName) Len() int           { return len(r) }
+func (r byTagName) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
+func (r byTagName) Less(i, j int) bool { return r[i].Tag < r[j].Tag }
+
 // Daemon holds information about the Docker daemon.
 type Daemon struct {
 	ID                        string
@@ -160,6 +167,7 @@ type Daemon struct {
 	gidMaps                   []idtools.IDMap
 	layerStore                layer.Store
 	imageStore                image.Store
+	confirmDefPush            bool
 }
 
 // GetContainer looks for a container using the provided information, which could be
@@ -861,6 +869,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 	d.root = config.Root
 	d.uidMaps = uidMaps
 	d.gidMaps = gidMaps
+	d.confirmDefPush = config.ConfirmDefPush
 
 	if err := d.cleanupMounts(); err != nil {
 		return nil, err
@@ -1038,12 +1047,12 @@ func (daemon *Daemon) changes(container *container.Container) ([]archive.Change,
 
 // TagImage creates a tag in the repository reponame, pointing to the image named
 // imageName.
-func (daemon *Daemon) TagImage(newTag reference.Named, imageName string) error {
+func (daemon *Daemon) TagImage(newTag reference.Named, imageName string, keepUnqualified bool) error {
 	imageID, err := daemon.GetImageID(imageName)
 	if err != nil {
 		return err
 	}
-	newTag = registry.NormalizeLocalReference(newTag)
+	newTag = registry.NormalizeLocalReference(newTag, keepUnqualified)
 	if err := daemon.tagStore.AddTag(newTag, imageID, true); err != nil {
 		return err
 	}
@@ -1111,7 +1120,7 @@ func (daemon *Daemon) ExportImage(names []string, outStream io.Writer) error {
 }
 
 // PushImage initiates a push operation on the repository named localName.
-func (daemon *Daemon) PushImage(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error {
+func (daemon *Daemon) PushImage(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig, force bool, outStream io.Writer) error {
 	// Include a buffer so that slow client connections don't affect
 	// transfer performance.
 	progressChan := make(chan progress.Progress, 100)
@@ -1137,6 +1146,8 @@ func (daemon *Daemon) PushImage(ref reference.Named, metaHeaders map[string][]st
 		TagStore:        daemon.tagStore,
 		TrustKey:        daemon.trustKey,
 		UploadManager:   daemon.uploadManager,
+		ConfirmDefPush:  daemon.confirmDefPush,
+		Force:           force,
 	}
 
 	err := distribution.Push(ctx, ref, imagePushConfig)
@@ -1186,28 +1197,42 @@ func (daemon *Daemon) LookupImage(name string) (*types.ImageInspect, error) {
 	}
 
 	imageInspect := &types.ImageInspect{
-		ID:              img.ID().String(),
-		RepoTags:        repoTags,
-		RepoDigests:     repoDigests,
-		Parent:          img.Parent.String(),
-		Comment:         img.Comment,
-		Created:         img.Created.Format(time.RFC3339Nano),
-		Container:       img.Container,
-		ContainerConfig: &img.ContainerConfig,
-		DockerVersion:   img.DockerVersion,
-		Author:          img.Author,
-		Config:          img.Config,
-		Architecture:    img.Architecture,
-		Os:              img.OS,
-		Size:            size,
-		VirtualSize:     size, // TODO: field unused, deprecate
+		ImageInspectBase: types.ImageInspectBase{
+			ID:              img.ID().String(),
+			RepoTags:        repoTags,
+			RepoDigests:     repoDigests,
+			Parent:          img.Parent.String(),
+			Comment:         img.Comment,
+			Created:         img.Created.Format(time.RFC3339Nano),
+			Container:       img.Container,
+			ContainerConfig: &img.ContainerConfig,
+			DockerVersion:   img.DockerVersion,
+			Author:          img.Author,
+			Config:          img.Config,
+			Architecture:    img.Architecture,
+			Os:              img.OS,
+			Size:            size,
+		},
+		VirtualSize: size, // TODO: field unused, deprecate
+		GraphDriver: types.GraphDriverData{
+			Name: daemon.driver.String(),
+			Data: layerMetadata,
+		},
 	}
 
-	imageInspect.GraphDriver.Name = daemon.driver.String()
-
-	imageInspect.GraphDriver.Data = layerMetadata
-
 	return imageInspect, nil
+}
+
+// LookupRemote looks up an image in remote repository.
+func (daemon *Daemon) LookupRemote(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig) (*types.RemoteImageInspect, error) {
+	inspectConfig := &distribution.InspectConfig{
+		MetaHeaders:     metaHeaders,
+		AuthConfig:      authConfig,
+		RegistryService: daemon.RegistryService,
+		MetadataStore:   daemon.distributionMetadataStore,
+	}
+
+	return distribution.Inspect(ref, inspectConfig)
 }
 
 // LoadImage uploads a set of images into the repository. This is the
@@ -1301,7 +1326,6 @@ func (daemon *Daemon) GetImageID(refOrID string) (image.ID, error) {
 
 	// Treat it as a possible tag or digest reference
 	if ref, err := reference.ParseNamed(refOrID); err == nil {
-		ref = registry.NormalizeLocalReference(ref)
 		if id, err := daemon.tagStore.Get(ref); err == nil {
 			return id, nil
 		}
@@ -1331,6 +1355,48 @@ func (daemon *Daemon) GetImage(refOrID string) (*image.Image, error) {
 		return nil, err
 	}
 	return daemon.imageStore.Get(imgID)
+}
+
+// ListLocalTags returns a tag list for given local repository.
+func (daemon *Daemon) ListLocalTags(reposName reference.Named) (*types.RepositoryTagList, error) {
+	var tagList *types.RepositoryTagList
+
+	if err := registry.ValidateRepositoryName(reposName); err != nil {
+		return nil, err
+	}
+
+	associations := daemon.tagStore.ReferencesByName(reposName)
+	if len(associations) == 0 {
+		return nil, ErrImageDoesNotExist{reposName.String()}
+	}
+
+	tagList = &types.RepositoryTagList{
+		Name:    associations[0].Ref.Name(),
+		TagList: make([]*types.RepositoryTag, 0, len(associations)),
+	}
+
+	for _, assoc := range associations {
+		if tagged, isTagged := assoc.Ref.(reference.Tagged); isTagged {
+			tagList.TagList = append(tagList.TagList, &types.RepositoryTag{
+				Tag:     tagged.Tag(),
+				ImageID: assoc.ImageID.String(),
+			})
+		}
+	}
+
+	sort.Sort(byTagName(tagList.TagList))
+	return tagList, nil
+}
+
+// ListRemoteTags fetches a tag list from remote repository.
+func (daemon *Daemon) ListRemoteTags(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig) (*types.RepositoryTagList, error) {
+	config := &distribution.ListRemoteTagsConfig{
+		MetaHeaders:     metaHeaders,
+		AuthConfig:      authConfig,
+		RegistryService: daemon.RegistryService,
+	}
+
+	return distribution.ListRemoteTags(ref, config)
 }
 
 // GraphDriver returns the currently used driver for processing
@@ -1508,8 +1574,9 @@ func (daemon *Daemon) AuthenticateToRegistry(authConfig *types.AuthConfig) (stri
 // term. authConfig is used to login.
 func (daemon *Daemon) SearchRegistryForImages(term string,
 	authConfig *types.AuthConfig,
-	headers map[string][]string) (*registry.SearchResults, error) {
-	return daemon.RegistryService.Search(term, authConfig, headers)
+	headers map[string][]string,
+	noIndex bool) ([]registry.SearchResultExt, error) {
+	return daemon.RegistryService.Search(term, authConfig, headers, noIndex)
 }
 
 // IsShuttingDown tells whether the daemon is shutting down or not

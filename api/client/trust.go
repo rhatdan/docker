@@ -384,7 +384,7 @@ func targetStream(in io.Writer) (io.WriteCloser, <-chan []target) {
 func (cli *DockerCli) trustedPush(repoInfo *registry.RepositoryInfo, tag string, authConfig types.AuthConfig, requestPrivilege lib.RequestPrivilegeFunc) error {
 	streamOut, targetChan := targetStream(cli.out)
 
-	reqError := cli.imagePushPrivileged(authConfig, repoInfo.LocalName.Name(), tag, streamOut, requestPrivilege)
+	reqError := cli.imagePushPrivileged(authConfig, repoInfo.LocalName.Name(), tag, true, streamOut, requestPrivilege)
 
 	// Close stream channel to finish target parsing
 	if err := streamOut.Close(); err != nil {
