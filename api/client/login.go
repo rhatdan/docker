@@ -1,9 +1,7 @@
 package client
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -142,14 +140,4 @@ func (cli *DockerCli) configureAuth(flUser, flPassword, flEmail, serverAddress s
 	authconfig.ServerAddress = serverAddress
 	cli.configFile.AuthConfigs[serverAddress] = authconfig
 	return authconfig, nil
-}
-
-func readInput(in io.Reader, out io.Writer) string {
-	reader := bufio.NewReader(in)
-	line, _, err := reader.ReadLine()
-	if err != nil {
-		fmt.Fprintln(out, err.Error())
-		os.Exit(1)
-	}
-	return string(line)
 }
