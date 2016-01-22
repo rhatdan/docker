@@ -40,7 +40,7 @@ func (cli *DockerCli) CmdLogin(args ...string) error {
 	// used. This is essential in cross-platforms environment, where for
 	// example a Linux client might be interacting with a Windows daemon, hence
 	// the default registry URL might be Windows specific.
-	serverAddress := registry.IndexServer
+	serverAddress := registry.IndexServerAddress()
 	if info, err := cli.client.Info(); err != nil {
 		fmt.Fprintf(cli.out, "Warning: failed to get default registry endpoint from daemon (%v). Using system default: %s\n", err, serverAddress)
 	} else {
