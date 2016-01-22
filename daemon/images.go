@@ -3,17 +3,20 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"sort"
 	"time"
 
 	"github.com/pkg/errors"
 
-	"github.com/docker/distribution/reference"
+	distreference "github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
+	"github.com/docker/docker/reference"
+	"github.com/docker/docker/registry"
 )
 
 var acceptedImageFilterTags = map[string]bool{
@@ -35,6 +38,53 @@ func (r byCreated) Less(i, j int) bool { return r[i].Created < r[j].Created }
 // Map returns a map of all images in the ImageStore
 func (daemon *Daemon) Map() map[image.ID]*image.Image {
 	return daemon.imageStore.Map()
+}
+
+func matchReference(filter string, ref reference.Named) bool {
+	if filter == "" {
+		return true
+	}
+
+	var filterTagged bool
+	filterRef, err := reference.ParseNamed(filter)
+	if err == nil { // parse error means wildcard repo
+		if _, ok := filterRef.(reference.NamedTagged); ok {
+			filterTagged = true
+		}
+	}
+
+	refBelongsToDefaultRegistry := false
+	indexName, remoteNameStr := distreference.SplitHostname(ref)
+	for _, reg := range registry.DefaultRegistries {
+		if indexName == reg || indexName == "" {
+			refBelongsToDefaultRegistry = true
+			break
+		}
+	}
+
+	// If the repository belongs to default registry, match against fully
+	// qualified and unqualified name.
+	references := []reference.Named{ref}
+	if reference.IsReferenceFullyQualified(ref) && refBelongsToDefaultRegistry {
+		newRef, err := reference.SubstituteReferenceName(ref, remoteNameStr)
+		if err == nil {
+			references = append(references, newRef)
+		}
+	}
+
+	for _, ref := range references {
+		if filterTagged {
+			// filter by tag, require full ref match
+			if ref.String() == filter {
+				return true
+			}
+		} else if matched, err := path.Match(filter, ref.Name()); matched && err == nil {
+			// name only match, FIXME: docs say exact
+			return true
+		}
+	}
+
+	return false
 }
 
 // Images returns a filtered list of images. filterArgs is a JSON-encoded set
@@ -132,16 +182,21 @@ func (daemon *Daemon) Images(imageFilters filters.Args, all bool, withExtraAttrs
 
 		for _, ref := range daemon.referenceStore.References(id.Digest()) {
 			if imageFilters.Include("reference") {
-				var found bool
-				var matchErr error
+				//var found bool
+				//var matchErr error
+				//for _, pattern := range imageFilters.Get("reference") {
+				//found, matchErr = distreference.Match(pattern, ref)
+				//if matchErr != nil {
+				//return nil, matchErr
+				//}
+				//}
+				//if !found {
+				//continue
+				//}
 				for _, pattern := range imageFilters.Get("reference") {
-					found, matchErr = reference.Match(pattern, ref)
-					if matchErr != nil {
-						return nil, matchErr
+					if !matchReference(pattern, ref) {
+						continue
 					}
-				}
-				if !found {
-					continue
 				}
 			}
 			if _, ok := ref.(reference.Canonical); ok {

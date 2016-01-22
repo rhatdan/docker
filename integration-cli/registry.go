@@ -19,6 +19,7 @@ const (
 
 type testRegistryV2 struct {
 	cmd      *exec.Cmd
+	url      string
 	dir      string
 	auth     string
 	username string
@@ -26,7 +27,7 @@ type testRegistryV2 struct {
 	email    string
 }
 
-func newTestRegistryV2(c *check.C, schema1 bool, auth, tokenURL string) (*testRegistryV2, error) {
+func newTestRegistryV2At(c *check.C, url string, schema1 bool, auth, tokenURL string) (*testRegistryV2, error) {
 	tmp, err := ioutil.TempDir("", "registry-test-")
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ http:
 	}
 	defer config.Close()
 
-	if _, err := fmt.Fprintf(config, template, tmp, privateRegistryURL, authTemplate); err != nil {
+	if _, err := fmt.Fprintf(config, template, tmp, url, authTemplate); err != nil {
 		os.RemoveAll(tmp)
 		return nil, err
 	}
@@ -97,6 +98,7 @@ http:
 	}
 	return &testRegistryV2{
 		cmd:      cmd,
+		url:      url,
 		dir:      tmp,
 		auth:     auth,
 		username: username,
@@ -107,7 +109,7 @@ http:
 
 func (t *testRegistryV2) Ping() error {
 	// We always ping through HTTP for our test registry.
-	resp, err := http.Get(fmt.Sprintf("http://%s/v2/", privateRegistryURL))
+	resp, err := http.Get(fmt.Sprintf("http://%s/v2/", t.url))
 	if err != nil {
 		return err
 	}

@@ -104,7 +104,9 @@ type CommonConfig struct {
 
 	// LiveRestoreEnabled determines whether we should keep containers
 	// alive upon daemon shutdown/start
-	LiveRestoreEnabled bool `json:"live-restore,omitempty"`
+	LiveRestoreEnabled   bool     `json:"live-restore,omitempty"`
+	BlockedRegistries    []string `json:"block-registry,omitempty"`
+	AdditionalRegistries []string `json:"add-registry,omitempty"`
 
 	// ClusterStore is the storage backend used for the cluster information. It is used by both
 	// multihost networking (to store networks and endpoints information) and by the node discovery
@@ -197,6 +199,9 @@ func (config *Config) InstallCommonFlags(flags *pflag.FlagSet) {
 
 	config.MaxConcurrentDownloads = &maxConcurrentDownloads
 	config.MaxConcurrentUploads = &maxConcurrentUploads
+
+	flags.Var(opts.NewListOptsRef(&config.BlockedRegistries, registry.ValidateIndexName), "block-registry", "Don't contact given registry")
+	flags.Var(opts.NewListOptsRef(&config.AdditionalRegistries, registry.ValidateIndexName), "add-registry", "Registry to query before a public one")
 }
 
 // IsValueSet returns true if a configuration value

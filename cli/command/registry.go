@@ -19,6 +19,27 @@ import (
 	"github.com/docker/docker/registry"
 )
 
+// GetEncodedAuth TODO
+func GetEncodedAuth(cli *DockerCli, ref reference.Named) (string, error) {
+	repoInfo, err := registry.ParseRepositoryInfo(ref)
+	if err != nil {
+		return "", err
+	}
+	auths := make(map[string]types.AuthConfig)
+	if reference.IsReferenceFullyQualified(ref) {
+		authConfig := ResolveAuthConfig(context.Background(), cli, repoInfo.Index)
+		authConfigKey := registry.GetAuthConfigKey(repoInfo.Index)
+		auths[authConfigKey] = authConfig
+	} else {
+		auths, _ = cli.CredentialsStore().GetAll()
+	}
+	encoded, err := EncodeAuthToBase64(auths)
+	if err != nil {
+		return "", err
+	}
+	return encoded, nil
+}
+
 // ElectAuthServer returns the default registry to use (by asking the daemon)
 func ElectAuthServer(ctx context.Context, cli *DockerCli) string {
 	// The daemon `/info` endpoint informs us of the default registry being
@@ -35,8 +56,8 @@ func ElectAuthServer(ctx context.Context, cli *DockerCli) string {
 }
 
 // EncodeAuthToBase64 serializes the auth configuration as JSON base64 payload
-func EncodeAuthToBase64(authConfig types.AuthConfig) (string, error) {
-	buf, err := json.Marshal(authConfig)
+func EncodeAuthToBase64(authConfigs map[string]types.AuthConfig) (string, error) {
+	buf, err := json.Marshal(authConfigs)
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +66,7 @@ func EncodeAuthToBase64(authConfig types.AuthConfig) (string, error) {
 
 // RegistryAuthenticationPrivilegedFunc returns a RequestPrivilegeFunc from the specified registry index info
 // for the given command.
-func RegistryAuthenticationPrivilegedFunc(cli *DockerCli, index *registrytypes.IndexInfo, cmdName string) types.RequestPrivilegeFunc {
+func RegistryAuthenticationPrivilegedFunc(cli *DockerCli, index *registrytypes.IndexInfo, cmdName string, singleAuth bool) types.RequestPrivilegeFunc {
 	return func() (string, error) {
 		fmt.Fprintf(cli.Out(), "\nPlease login prior to %s:\n", cmdName)
 		indexServer := registry.GetAuthConfigKey(index)
@@ -54,7 +75,13 @@ func RegistryAuthenticationPrivilegedFunc(cli *DockerCli, index *registrytypes.I
 		if err != nil {
 			return "", err
 		}
-		return EncodeAuthToBase64(authConfig)
+		auths := make(map[string]types.AuthConfig)
+		if singleAuth {
+			auths[indexServer] = authConfig
+		} else {
+			auths = cli.configFile.AuthConfigs
+		}
+		return EncodeAuthToBase64(auths)
 	}
 }
 
@@ -161,11 +188,11 @@ func promptWithDefault(out io.Writer, prompt string, configDefault string) {
 // RetrieveAuthTokenFromImage retrieves an encoded auth token given a complete image
 func RetrieveAuthTokenFromImage(ctx context.Context, cli *DockerCli, image string) (string, error) {
 	// Retrieve encoded auth token from the image reference
-	authConfig, err := resolveAuthConfigFromImage(ctx, cli, image)
+	auths, err := resolveAuthConfigFromImage(ctx, cli, image)
 	if err != nil {
 		return "", err
 	}
-	encodedAuth, err := EncodeAuthToBase64(authConfig)
+	encodedAuth, err := EncodeAuthToBase64(auths)
 	if err != nil {
 		return "", err
 	}
@@ -173,14 +200,18 @@ func RetrieveAuthTokenFromImage(ctx context.Context, cli *DockerCli, image strin
 }
 
 // resolveAuthConfigFromImage retrieves that AuthConfig using the image string
-func resolveAuthConfigFromImage(ctx context.Context, cli *DockerCli, image string) (types.AuthConfig, error) {
+func resolveAuthConfigFromImage(ctx context.Context, cli *DockerCli, image string) (map[string]types.AuthConfig, error) {
+	auths := make(map[string]types.AuthConfig)
 	registryRef, err := reference.ParseNamed(image)
 	if err != nil {
-		return types.AuthConfig{}, err
+		return auths, err
 	}
 	repoInfo, err := registry.ParseRepositoryInfo(registryRef)
 	if err != nil {
-		return types.AuthConfig{}, err
+		return auths, err
 	}
-	return ResolveAuthConfig(ctx, cli, repoInfo.Index), nil
+	authConfig := ResolveAuthConfig(ctx, cli, repoInfo.Index)
+	authConfigKey := registry.GetAuthConfigKey(repoInfo.Index)
+	auths[authConfigKey] = authConfig
+	return auths, nil
 }
