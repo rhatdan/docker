@@ -42,7 +42,7 @@ type v2Pusher struct {
 	config            *ImagePushConfig
 	repo              distribution.Repository
 
-	// pushState is state built by the Download functions.
+	// pushState is state built by the Upload functions.
 	pushState pushState
 }
 
@@ -221,6 +221,7 @@ type v2PushDescriptor struct {
 	repoInfo          reference.Named
 	repo              distribution.Repository
 	pushState         *pushState
+	remoteDescriptor  distribution.Descriptor
 }
 
 func (pd *v2PushDescriptor) Key() string {
@@ -235,16 +236,16 @@ func (pd *v2PushDescriptor) DiffID() layer.DiffID {
 	return pd.layer.DiffID()
 }
 
-func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.Output) error {
+func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.Output) (distribution.Descriptor, error) {
 	diffID := pd.DiffID()
 
 	pd.pushState.Lock()
-	if _, ok := pd.pushState.remoteLayers[diffID]; ok {
+	if descriptor, ok := pd.pushState.remoteLayers[diffID]; ok {
 		// it is already known that the push is not needed and
 		// therefore doing a stat is unnecessary
 		pd.pushState.Unlock()
 		progress.Update(progressOutput, pd.ID(), "Layer already exists")
-		return nil
+		return descriptor, nil
 	}
 	pd.pushState.Unlock()
 
@@ -254,14 +255,14 @@ func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.
 		descriptor, exists, err := layerAlreadyExists(ctx, v2Metadata, pd.repoInfo, pd.repo, pd.pushState)
 		if err != nil {
 			progress.Update(progressOutput, pd.ID(), "Image push failed")
-			return retryOnError(err)
+			return distribution.Descriptor{}, retryOnError(err)
 		}
 		if exists {
 			progress.Update(progressOutput, pd.ID(), "Layer already exists")
 			pd.pushState.Lock()
 			pd.pushState.remoteLayers[diffID] = descriptor
 			pd.pushState.Unlock()
-			return nil
+			return descriptor, nil
 		}
 	}
 
@@ -291,7 +292,7 @@ func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.
 	if mountFrom.SourceRepository != "" {
 		namedRef, err := reference.WithName(mountFrom.SourceRepository)
 		if err != nil {
-			return err
+			return distribution.Descriptor{}, err
 		}
 
 		// TODO (brianbland): We need to construct a reference where the Name is
@@ -299,12 +300,12 @@ func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.
 		// richer reference package
 		remoteRef, err := distreference.WithName(namedRef.RemoteName())
 		if err != nil {
-			return err
+			return distribution.Descriptor{}, err
 		}
 
 		canonicalRef, err := distreference.WithDigest(remoteRef, mountFrom.Digest)
 		if err != nil {
-			return err
+			return distribution.Descriptor{}, err
 		}
 
 		createOpts = append(createOpts, client.WithMountFrom(canonicalRef))
@@ -325,10 +326,10 @@ func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.
 
 		// Cache mapping from this layer's DiffID to the blobsum
 		if err := pd.v2MetadataService.Add(diffID, metadata.V2Metadata{Digest: mountFrom.Digest, SourceRepository: pd.repoInfo.FullName()}); err != nil {
-			return xfer.DoNotRetry{Err: err}
+			return distribution.Descriptor{}, xfer.DoNotRetry{Err: err}
 		}
 
-		return nil
+		return err.Descriptor, nil
 	}
 	if mountFrom.SourceRepository != "" {
 		// unable to mount layer from this repository, so this source mapping is no longer valid
@@ -337,13 +338,13 @@ func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.
 	}
 
 	if err != nil {
-		return retryOnError(err)
+		return distribution.Descriptor{}, retryOnError(err)
 	}
 	defer layerUpload.Close()
 
 	arch, err := pd.layer.TarStream()
 	if err != nil {
-		return xfer.DoNotRetry{Err: err}
+		return distribution.Descriptor{}, xfer.DoNotRetry{Err: err}
 	}
 
 	// don't care if this fails; best effort
@@ -362,12 +363,12 @@ func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.
 	nn, err := layerUpload.ReadFrom(tee)
 	compressedReader.Close()
 	if err != nil {
-		return retryOnError(err)
+		return distribution.Descriptor{}, retryOnError(err)
 	}
 
 	pushDigest := digester.Digest()
 	if _, err := layerUpload.Commit(ctx, distribution.Descriptor{Digest: pushDigest}); err != nil {
-		return retryOnError(err)
+		return distribution.Descriptor{}, retryOnError(err)
 	}
 
 	logrus.Debugf("uploaded layer %s (%s), %d bytes", diffID, pushDigest, nn)
@@ -375,7 +376,7 @@ func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.
 
 	// Cache mapping from this layer's DiffID to the blobsum
 	if err := pd.v2MetadataService.Add(diffID, metadata.V2Metadata{Digest: pushDigest, SourceRepository: pd.repoInfo.FullName()}); err != nil {
-		return xfer.DoNotRetry{Err: err}
+		return distribution.Descriptor{}, xfer.DoNotRetry{Err: err}
 	}
 
 	pd.pushState.Lock()
@@ -384,23 +385,24 @@ func (pd *v2PushDescriptor) Upload(ctx context.Context, progressOutput progress.
 	// speaks the v2 protocol.
 	pd.pushState.confirmedV2 = true
 
-	pd.pushState.remoteLayers[diffID] = distribution.Descriptor{
+	descriptor := distribution.Descriptor{
 		Digest:    pushDigest,
 		MediaType: schema2.MediaTypeLayer,
 		Size:      nn,
 	}
+	pd.pushState.remoteLayers[diffID] = descriptor
 
 	pd.pushState.Unlock()
 
-	return nil
+	return descriptor, nil
+}
+
+func (pd *v2PushDescriptor) SetRemoteDescriptor(descriptor distribution.Descriptor) {
+	pd.remoteDescriptor = descriptor
 }
 
 func (pd *v2PushDescriptor) Descriptor() distribution.Descriptor {
-	// Not necessary to lock pushStatus because this is always
-	// called after all the mutation in pushStatus.
-	// By the time this function is called, every layer will have
-	// an entry in remoteLayers.
-	return pd.pushState.remoteLayers[pd.DiffID()]
+	return pd.remoteDescriptor
 }
 
 // layerAlreadyExists checks if the registry already know about any of the
