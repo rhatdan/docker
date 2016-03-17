@@ -1634,5 +1634,30 @@ var defaultSeccompProfile = &configs.Seccomp{
 			Action: configs.Allow,
 			Args:   []*configs.Arg{},
 		},
+		{
+			Name:   "mount",
+			Action: configs.Allow,
+			Args:   []*configs.Arg{},
+		},
+		{
+			Name:   "umount2",
+			Action: configs.Allow,
+			Args:   []*configs.Arg{},
+		},
+		{
+			Name:   "reboot",
+			Action: configs.Allow,
+			Args:   []*configs.Arg{},
+		},
+		{
+			Name:   "name_to_handle_at",
+			Action: configs.Allow,
+			Args:   []*configs.Arg{},
+		},
+		{
+			Name:   "unshare",
+			Action: configs.Allow,
+			Args:   []*configs.Arg{},
+		},
 	},
 }
