@@ -174,6 +174,9 @@ drain:
 }
 
 func (s *journald) followJournal(logWatcher *logger.LogWatcher, config logger.ReadConfig, j *C.sd_journal, pfd [2]C.int, cursor string) {
+	s.readers.mu.Lock()
+	s.readers.readers[logWatcher] = logWatcher
+	s.readers.mu.Unlock()
 	go func() {
 		// Keep copying journal data out until we're notified to stop.
 		for C.wait_for_data_or_close(j, pfd[0]) == 1 {
@@ -187,9 +190,6 @@ func (s *journald) followJournal(logWatcher *logger.LogWatcher, config logger.Re
 		C.sd_journal_close(j)
 		close(logWatcher.Msg)
 	}()
-	s.readers.mu.Lock()
-	s.readers.readers[logWatcher] = logWatcher
-	s.readers.mu.Unlock()
 	// Wait until we're told to stop.
 	select {
 	case <-logWatcher.WatchClose():
