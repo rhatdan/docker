@@ -100,6 +100,7 @@ storage driver and a node that is part of a 2-node swarm:
     Operating System: Ubuntu 16.04.1 LTS
     OSType: linux
     Architecture: x86_64
+    Number of Hooks: 2
     CPUs: 2
     Total Memory: 1.937 GiB
     Name: ubuntu
