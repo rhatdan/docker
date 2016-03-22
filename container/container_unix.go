@@ -403,3 +403,34 @@ func cleanResourcePath(path string) string {
 func (container *Container) canMountFS() bool {
 	return true
 }
+
+// SecretMount returns the Secret Mount point
+func (container *Container) SecretMount() (*Mount, error) {
+	secretsPath, err := container.GetRootResourcePath("secrets")
+	if err != nil {
+		return nil, fmt.Errorf("GetSecretsPath failed: %v", err)
+	}
+
+	if err := os.RemoveAll(secretsPath); err != nil {
+		return nil, fmt.Errorf("RemoveSecretsPath failed: %v", err)
+	}
+
+	if err := os.MkdirAll(secretsPath, 0700); err != nil {
+		return nil, fmt.Errorf("MakeDirSecretsPath failed: %v", err)
+	}
+
+	data, err := getHostSecretData()
+	if err != nil {
+		return nil, fmt.Errorf("GetHostSecretData failed: %v", err)
+	}
+	for _, s := range data {
+		s.SaveTo(secretsPath)
+	}
+
+	label.Relabel(secretsPath, container.MountLabel, false)
+
+	m := &Mount{}
+	m.Source = secretsPath
+	m.Destination = "/run/secrets"
+	return m, nil
+}
