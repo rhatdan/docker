@@ -39,6 +39,7 @@ type buildOptions struct {
 	tags           opts.ListOpts
 	labels         opts.ListOpts
 	buildArgs      opts.ListOpts
+	buildVolumes   opts.ListOpts
 	ulimits        *runconfigopts.UlimitOpt
 	memory         string
 	memorySwap     string
@@ -66,10 +67,11 @@ type buildOptions struct {
 func NewBuildCommand(dockerCli *command.DockerCli) *cobra.Command {
 	ulimits := make(map[string]*units.Ulimit)
 	options := buildOptions{
-		tags:      opts.NewListOpts(validateTag),
-		buildArgs: opts.NewListOpts(runconfigopts.ValidateArg),
-		ulimits:   runconfigopts.NewUlimitOpt(&ulimits),
-		labels:    opts.NewListOpts(runconfigopts.ValidateEnv),
+		tags:         opts.NewListOpts(validateTag),
+		buildArgs:    opts.NewListOpts(runconfigopts.ValidateArg),
+		buildVolumes: opts.NewListOpts(nil),
+		ulimits:      runconfigopts.NewUlimitOpt(&ulimits),
+		labels:       opts.NewListOpts(runconfigopts.ValidateEnv),
 	}
 
 	cmd := &cobra.Command{
@@ -108,6 +110,7 @@ func NewBuildCommand(dockerCli *command.DockerCli) *cobra.Command {
 	flags.BoolVar(&options.compress, "compress", false, "Compress the build context using gzip")
 	flags.StringSliceVar(&options.securityOpt, "security-opt", []string{}, "Security options")
 	flags.StringVar(&options.networkMode, "network", "default", "Connect a container to a network")
+	flags.VarP(&options.buildVolumes, "volume", "v", "Set build-time bind mounts")
 
 	command.AddTrustedFlags(flags, true)
 
@@ -281,6 +284,21 @@ func runBuild(dockerCli *command.DockerCli, options buildOptions) error {
 	}
 
 	authConfig, _ := dockerCli.CredentialsStore().GetAll()
+	var binds []string
+	// add any bind targets to the list of container volumes
+	for bind := range options.buildVolumes.GetMap() {
+		if arr := runconfigopts.VolumeSplitN(bind, 2); len(arr) > 1 {
+			// after creating the bind mount we want to delete it from the flBuildVolumes values because
+			// we do not want bind mounts being committed to image configs
+			binds = append(binds, bind)
+			options.buildVolumes.Delete(bind)
+		}
+	}
+
+	if len(options.buildVolumes.GetMap()) > 0 {
+		return fmt.Errorf("Volumes aren't supported in docker build. Please use only bind mounts.")
+	}
+
 	buildOptions := types.ImageBuildOptions{
 		Memory:         memory,
 		MemorySwap:     memorySwap,
@@ -307,6 +325,7 @@ func runBuild(dockerCli *command.DockerCli, options buildOptions) error {
 		SecurityOpt:    options.securityOpt,
 		NetworkMode:    options.networkMode,
 		Squash:         options.squash,
+		Binds:          binds,
 	}
 
 	response, err := dockerCli.Client().ImageBuild(ctx, body, buildOptions)
