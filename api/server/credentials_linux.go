@@ -92,7 +92,8 @@ func getLoginUID(ucred *syscall.Ucred, fd int) (int64, error) {
 
 //Given a loginUID, retrieves the current username
 func getpwuid(loginUID uint32) (string, error) {
-	pwd, err := user.LookupId(string(loginUID))
+	uid := strconv.FormatUint(uint64(loginUID), 10)
+	pwd, err := user.LookupId(uid)
 	if err != nil {
 		logrus.Errorf("Failed to get pwuid struct: %v", err)
 		return "", err
