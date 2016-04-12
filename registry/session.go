@@ -164,9 +164,8 @@ func (tr *authTransport) CancelRequest(req *http.Request) {
 // NewSession creates a new session
 // TODO(tiborvass): remove authConfig param once registry client v2 is vendored
 func NewSession(client *http.Client, authConfig *types.AuthConfig, endpoint *Endpoint) (r *Session, err error) {
-
-	if endpoint != nil && isEndpointURLBlocked(endpoint.URL.Host) {
-		return nil, fmt.Errorf("Index %q is blocked.", endpoint.URL.Host)
+	if endpoint != nil && isEndpointURLBlocked(endpoint.URL.String()) {
+		return nil, fmt.Errorf("Index %q is blocked.", endpoint.URL.String())
 	}
 
 	r = &Session{
@@ -314,10 +313,6 @@ func (r *Session) GetRemoteImageLayer(imgID, registry string, imgSize int64) (io
 }
 
 func isEndpointURLBlocked(endpoint string) bool {
-	// prepend something which is url.Parse(able)
-	if !strings.HasPrefix(endpoint, "https://") {
-		endpoint = "https://" + endpoint
-	}
 	if parsedURL, err := url.Parse(endpoint); err == nil {
 		if !IsIndexBlocked(parsedURL.Host) {
 			return false
