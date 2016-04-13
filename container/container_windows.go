@@ -54,7 +54,7 @@ func (container *Container) UpdateContainer(hostConfig *container.HostConfig) er
 }
 
 // SecretMount returns the Secret Mount point
-func (container *Container) SecretMount() (*execdriver.Mount, error) {
+func (container *Container) SecretMount(rootUID, rootGID int) (*execdriver.Mount, error) {
 	return nil, nil
 }
 
