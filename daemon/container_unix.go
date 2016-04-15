@@ -358,6 +358,7 @@ func populateCommand(c *Container, env []string) error {
 		LxcConfig:          lxcConfig,
 		AppArmorProfile:    c.AppArmorProfile,
 		CgroupParent:       c.hostConfig.CgroupParent,
+		Sysctls:            c.hostConfig.Sysctls,
 	}
 
 	return nil

@@ -55,6 +55,7 @@ func Parse(cmd *flag.FlagSet, args []string) (*Config, *HostConfig, *flag.FlagSe
 		flDevices = opts.NewListOpts(opts.ValidateDevice)
 
 		flUlimits = opts.NewUlimitOpt(nil)
+		flSysctls = opts.NewMapOpts(nil, opts.ValidateSysctl)
 
 		flPublish     = opts.NewListOpts(nil)
 		flExpose      = opts.NewListOpts(nil)
@@ -129,6 +130,7 @@ func Parse(cmd *flag.FlagSet, args []string) (*Config, *HostConfig, *flag.FlagSe
 	cmd.Var(&flGroupAdd, []string{"-group-add"}, "Add additional groups to join")
 	cmd.Var(&flSecurityOpt, []string{"-security-opt"}, "Security Options")
 	cmd.Var(flUlimits, []string{"-ulimit"}, "Ulimit options")
+	cmd.Var(flSysctls, []string{"-sysctl"}, "Sysctl options")
 	cmd.Var(&flLoggingOpts, []string{"-log-opt"}, "Log driver options")
 
 	cmd.Require(flag.Min, 1)
@@ -395,6 +397,7 @@ func Parse(cmd *flag.FlagSet, args []string) (*Config, *HostConfig, *flag.FlagSe
 		SecurityOpt:    flSecurityOpt.GetAll(),
 		ReadonlyRootfs: *flReadonlyRootfs,
 		Ulimits:        flUlimits.GetList(),
+		Sysctls:        flSysctls.GetAll(),
 		LogConfig:      LogConfig{Type: *flLoggingDriver, Config: loggingOpts},
 		CgroupParent:   *flCgroupParent,
 		VolumeDriver:   *flVolumeDriver,

@@ -264,6 +264,21 @@ This value should always larger than **-m**, so you should always use this with 
 **--stop-signal**=SIGTERM
   Signal to stop a container. Default is SIGTERM.
 
+**--sysctl**=SYSCTL
+  Configure namespaced kernel parameters at runtime
+
+  IPC Namespace - current sysctls allowed:
+
+  kernel.msgmax, kernel.msgmnb, kernel.msgmni, kernel.sem, kernel.shmall, kernel.shmmax, kernel.shmmni, kernel.shm_rmid_forced
+  Sysctls beginning with fs.mqueue.*
+
+  Note: if you use --ipc=host using these sysctls will not be allowed.
+
+  Network Namespace - current sysctls allowed:
+      Sysctls beginning with net.*
+
+  Note: if you use --net=host using these sysctls will not be allowed.
+
 **-t**, **--tty**=*true*|*false*
    Allocate a pseudo-TTY. The default is *false*.
 

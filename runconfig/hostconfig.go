@@ -250,6 +250,7 @@ type HostConfig struct {
 	SecurityOpt       []string              // List of string values to customize labels for MLS systems, such as SELinux.
 	ReadonlyRootfs    bool                  // Is the container root filesystem in read-only
 	Ulimits           []*ulimit.Ulimit      // List of ulimits to be set in the container
+	Sysctls           map[string]string     // List of sysctls to be set in the container
 	LogConfig         LogConfig             // Configuration of the logs for this container
 	CgroupParent      string                // Parent cgroup.
 	ConsoleSize       [2]int                // Initial console size on Windows

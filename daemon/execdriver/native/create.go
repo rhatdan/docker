@@ -66,6 +66,7 @@ func (d *Driver) createContainer(c *execdriver.Command, hooks execdriver.Hooks) 
 			return nil, err
 		}
 	}
+	container.Sysctl = c.Sysctls
 	// add CAP_ prefix to all caps for new libcontainer update to match
 	// the spec format.
 	for i, s := range container.Capabilities {
