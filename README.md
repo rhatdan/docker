@@ -2,6 +2,105 @@
 Red Hat is carrying a series of experimental patches that we feel are required
 for our customers or for our support engineering.
 
+#### BACKPORT:-Fix-compilation-errors-with-btrfs-progs-4.5.patch
+
+https://github.com/docker/docker/pull/21723
+
+#### BACKPORT:-Inherit-StopSignal-from-Dockerfile.patch
+
+https://github.com/docker/docker/pull/20290
+
+#### devmapper:-Add-a-new-option-dm.min_free_space.patch
+
+https://github.com/docker/docker/pull/20786
+
+#### Backport fixes around journald logging
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1314463
+
+#### BACKPORT:-Set-Delegate=yes-for-cgroups-transient-units.patch
+
+https://github.com/opencontainers/runc/pull/648
+
+#### BACKPORT:-Move-prestart-hooks-after-container-mounts.patch
+
+https://github.com/opencontainers/runc/pull/568
+
+#### BACKPORT:-daemon_unix:-set-golang-runtime-max-threads.patch
+
+https://github.com/docker/docker/pull/18362
+
+#### BACKPORT:-Ensure-that-we-join-all-the-cgroups.patch
+
+https://github.com/opencontainers/runc/pull/491
+
+#### BACKPORT:-Mount-volumes-rprivate-for-archival-and-other-use-cases.patch
+
+https://github.com/docker/docker/pull/22009
+
+#### BACKPORT:-Make-overlay-home-dir-Private-Mount.patch
+
+https://github.com/docker/docker/pull/22069
+
+#### Ignore-invalid-host-header-between-go1.6-and-old-docker-clients.patch
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1324150
+https://github.com/docker/docker/pull/22000
+https://github.com/docker/docker/issues/20865
+https://github.com/docker/docker/pull/21423
+
+#### The-following-syscalls-should-not-be-blocked-by-seccomp.patch
+
+Capabilities block these syscalls.
+
+mount, umount2, unshare, reboot and name\_to\_handle\_at are all needed to
+run systemd as pid1 in a container, they work fine with sys\_admin disabled
+and have functionality in the kernel that is available to a non privileged
+process.  There is no easy way to discover which syscalls are blocked, so
+we end up more likely with the user doing a --privileged.
+
+With UserNamespace we want to allow users to potentially setup unshare additional
+namespaces.
+
+man reboot
+...
+Behavior inside PID namespaces
+Since Linux 3.4, when reboot() is called from a PID namespace (see
+		pid_namespaces(7)) other than the initial PID namespace, the effect
+		of the call is to send a signal to the namespace "init" process.
+		LINUX_REBOOT_CMD_RESTART and LINUX_REBOOT_CMD_RESTART2 cause a SIGHUP
+		signal to be sent.  LINUX_REBOOT_CMD_POWER_OFF and
+		LINUX_REBOOT_CMD_HALT cause a SIGINT signal to be sent.
+
+https://github.com/docker/docker/pull/21287
+
+#### Add-dockerhooks-exec-custom-hooks-for-prestart/poststop-containers.patch
+
+With the addition of runc/hooks support we want to add a feature
+to allow third parties to run helper programs before a docker container
+gets started and just after the container finishes.
+
+For example we want to add a RegisterMachine hook.
+
+For systems that support systemd/RegisterMachine, this hook would register
+a machine to the machinectl.  machinectl could then list docker containers
+along with other virtulization environments like kvm, and systemd-nspawn
+containers. Overtime we would want to implement other machinectl features
+to get docker containers better integrated into the system and machinectl.
+
+Another example of a dockerhook might be for people wanting to do better logging
+of starting and stopping of containers.  For example have a log agent that
+records when a container starts and stops and then sends a message to a
+monitoring station.
+
+Dockerhooks reads directory in either /usr/lib/docker/hooks.d or
+/usr/libexec/docker/hooks.d to search for hooks, if the directory exists
+docker will execute the executables in this directory via runc/libcontainer i
+using PreStart and PostStop.  It will also send the config.json file as the
+second paramater.
+
+https://github.com/docker/docker/pull/17021
+
 #### Return-rpm-version-of-packages-in-docker-version.patch
 
 Red Hat Support wants to know the version of the rpm package that docker
@@ -11,26 +110,6 @@ was not interested in this patch. This patch only affects the `docker info`
 command.
 
 https://github.com/docker/docker/pull/14591
-
-#### Change-the-default-mount-mode-of-containers-from-Pri.patch
-
-Red Hat wants the default mount propagation to be Slave instead of Private.
-This allows volume (bind) mounts, to be altered on the host and the new
-mounts show up inside of the container.  We use this functionality for several
-use cases.  Kubernetes uses it to be able to add mount points on the host.  We
-want to allow Automount to work from the host inside of the container.  We also
-want to eventually allow mounting from inside of a container to alter the mount
-points on the host.  We have gotten several patches accepted into the docker
-to support these use cases, and we hope to have all use cases supported by
-docker-1.10.
-
-https://github.com/docker/libcontainer/pull/623
-
-Two related pull requests:
-
-https://github.com/docker/docker/pull/16773
-
-https://github.com/docker/docker/pull/17034
 
 #### rebase-distribution-specific-build.patch
 
@@ -70,14 +149,6 @@ content.
 https://github.com/docker/docker/pull/11991
 https://github.com/docker/docker/pull/10411
 
-#### Confirm-a-push-to-public-Docker-registry.patch
-
-Red Hat content is not supposed to be shared with other customers. For example
-RHE7 and RHEL6 base images are not supposed to be shared with a public registry.
-Pushing content to the docker registry breaks the subscription agreement with
-Red Hat. The patch helps prevent customers from accidentally pushing,
-`docker push`, RHEL content to docker.io
-
 #### Improved-searching-experience.patch
 
 Red Hat wants to allow users to search multiple registries as described above.
@@ -111,39 +182,6 @@ out. Each bind mounts' mode will be read-only and it will preserve any SELinux
 label which was defined via the cli (:[z,Z]). Defining a read-write mode (:rw)
 will just print a warning in the build output and the actual mode will be
 changed to read-only.
-
-https://github.com/docker/docker/issues/14080
-https://github.com/docker/docker/issues/10199
-https://github.com/docker/docker/issues/1191
-https://github.com/docker/docker/issues/18603
-
-#### Add-dockerhooks-exec-custom-hooks-for-prestart-posts.patch
-
-With the addition of runc/hooks support we want to add a feature
-to allow third parties to run helper programs before a docker container
-gets started and just after the container finishes.
-
-For example we want to add a RegisterMachine hook.
-
-For systems that support systemd/RegisterMachine, this hook would register
-a machine to the machinectl.  machinectl could then list docker containers
-along with other virtulization environments like kvm, and systemd-nspawn
-containers. Overtime we would want to implement other machinectl features
-to get docker containers better integrated into the system and machinectl.
-
-Another example of a dockerhook might be for people wanting to do better logging
-of starting and stopping of containers.  For example have a log agent that
-records when a container starts and stops and then sends a message to a
-monitoring station.
-
-Dockerhooks reads directory in either /usr/libexec/oci/hooks.d to search for hooks,
-if the directory exists docker will execute the executables in this directory via
-runc/libcontainer using PreStart and PostStop.  It will also send the config.json
-file as the second paramater. These hooks allow us to use oci-systemd-hook and
-oci-register-machine hooks, which register the docker container with the host, and
-allow you to run systemd as pid1 inside of a container without requiring --privileged.
-
-https://github.com/docker/docker/pull/17021
 
 Docker: the container engine [![Release](https://img.shields.io/github/release/docker/docker.svg)](https://github.com/docker/docker/releases/latest)
 ============================
@@ -363,7 +401,7 @@ We are always open to suggestions on process improvements, and are always lookin
     <td>Internet&nbsp;Relay&nbsp;Chat&nbsp;(IRC)</td>
     <td>
       <p>
-        IRC a direct line to our most knowledgeable Docker users; we have
+        IRC is a direct line to our most knowledgeable Docker users; we have
         both the  <code>#docker</code> and <code>#docker-dev</code> group on
         <strong>irc.freenode.net</strong>.
         IRC is a rich chat protocol but it can overwhelm new users. You can search
@@ -381,6 +419,8 @@ We are always open to suggestions on process improvements, and are always lookin
       The <a href="https://groups.google.com/forum/#!forum/docker-dev" target="_blank">docker-dev</a>
       group is for contributors and other people contributing to the Docker
       project.
+      You can join them without an google account by sending an email to e.g. "docker-user+subscribe@googlegroups.com".
+      After receiving the join-request message, you can simply reply to that to confirm the subscribtion.
     </td>
   </tr>
   <tr>
