@@ -38,6 +38,10 @@ func isValidTargetsStructure(t Targets, roleName string) error {
 			role: roleName, msg: fmt.Sprintf("expected type %s, not %s", expectedType, t.Type)}
 	}
 
+	if t.Version < 1 {
+		return ErrInvalidMetadata{role: roleName, msg: "version cannot be less than one"}
+	}
+
 	for _, roleObj := range t.Delegations.Roles {
 		if !IsDelegation(roleObj.Name) || path.Dir(roleObj.Name) != roleName {
 			return ErrInvalidMetadata{
@@ -162,7 +166,7 @@ func (t *SignedTargets) ToSigned() (*Signed, error) {
 	copy(sigs, t.Signatures)
 	return &Signed{
 		Signatures: sigs,
-		Signed:     signed,
+		Signed:     &signed,
 	}, nil
 }
 
@@ -179,7 +183,7 @@ func (t *SignedTargets) MarshalJSON() ([]byte, error) {
 // a role name (so it can validate the SignedTargets object)
 func TargetsFromSigned(s *Signed, roleName string) (*SignedTargets, error) {
 	t := Targets{}
-	if err := defaultSerializer.Unmarshal(s.Signed, &t); err != nil {
+	if err := defaultSerializer.Unmarshal(*s.Signed, &t); err != nil {
 		return nil, err
 	}
 	if err := isValidTargetsStructure(t, roleName); err != nil {

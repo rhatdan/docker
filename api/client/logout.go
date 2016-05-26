@@ -3,6 +3,8 @@ package client
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	Cli "github.com/docker/docker/cli"
 	flag "github.com/docker/docker/pkg/mflag"
 )
@@ -22,18 +24,19 @@ func (cli *DockerCli) CmdLogout(args ...string) error {
 	if len(cmd.Args()) > 0 {
 		serverAddress = cmd.Arg(0)
 	} else {
-		serverAddress = cli.electAuthServer()
+		serverAddress = cli.electAuthServer(context.Background())
 	}
 
+	// check if we're logged in based on the records in the config file
+	// which means it couldn't have user/pass cause they may be in the creds store
 	if _, ok := cli.configFile.AuthConfigs[serverAddress]; !ok {
 		fmt.Fprintf(cli.out, "Not logged in to %s\n", serverAddress)
 		return nil
 	}
 
 	fmt.Fprintf(cli.out, "Remove login credentials for %s\n", serverAddress)
-	delete(cli.configFile.AuthConfigs, serverAddress)
-	if err := cli.configFile.Save(); err != nil {
-		return fmt.Errorf("Failed to save docker config: %v", err)
+	if err := eraseCredentials(cli.configFile, serverAddress); err != nil {
+		fmt.Fprintf(cli.out, "WARNING: could not erase credentials: %v\n", err)
 	}
 
 	return nil

@@ -2,55 +2,91 @@ package registry
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"golang.org/x/net/context"
+
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/reference"
 	"github.com/docker/engine-api/types"
 	registrytypes "github.com/docker/engine-api/types/registry"
 )
 
-// Service is a registry service. It tracks configuration data such as a list
-// of mirrors.
-type Service struct {
-	Config *registrytypes.ServiceConfig
+// Service is the interface defining what a registry service should implement.
+type Service interface {
+	Auth(ctx context.Context, authConfig *types.AuthConfig, userAgent string) (status, token string, err error)
+	LookupPullEndpoints(hostname string) (endpoints []APIEndpoint, err error)
+	LookupPushEndpoints(hostname string) (endpoints []APIEndpoint, err error)
+	ResolveRepository(name reference.Named) (*RepositoryInfo, error)
+	ResolveIndex(name string) (*registrytypes.IndexInfo, error)
+	Search(ctx context.Context, term string, authConfig *types.AuthConfig, userAgent string, headers map[string][]string) (*registrytypes.SearchResults, error)
+	ServiceConfig() *registrytypes.ServiceConfig
+	TLSConfig(hostname string) (*tls.Config, error)
 }
 
-// NewService returns a new instance of Service ready to be
+// DefaultService is a registry service. It tracks configuration data such as a list
+// of mirrors.
+type DefaultService struct {
+	config *serviceConfig
+}
+
+// NewService returns a new instance of DefaultService ready to be
 // installed into an engine.
-func NewService(options *Options) *Service {
-	return &Service{
-		Config: NewServiceConfig(options),
+func NewService(options ServiceOptions) *DefaultService {
+	return &DefaultService{
+		config: newServiceConfig(options),
 	}
+}
+
+// ServiceConfig returns the public registry service configuration.
+func (s *DefaultService) ServiceConfig() *registrytypes.ServiceConfig {
+	return &s.config.ServiceConfig
 }
 
 // Auth contacts the public registry with the provided credentials,
 // and returns OK if authentication was successful.
 // It can be used to verify the validity of a client's credentials.
-func (s *Service) Auth(authConfig *types.AuthConfig, userAgent string) (string, error) {
-	addr := authConfig.ServerAddress
-	if addr == "" {
-		// Use the official registry address if not specified.
-		addr = IndexServer
+func (s *DefaultService) Auth(ctx context.Context, authConfig *types.AuthConfig, userAgent string) (status, token string, err error) {
+	// TODO Use ctx when searching for repositories
+	serverAddress := authConfig.ServerAddress
+	if serverAddress == "" {
+		serverAddress = IndexServer
 	}
-	index, err := s.ResolveIndex(addr)
+	if !strings.HasPrefix(serverAddress, "https://") && !strings.HasPrefix(serverAddress, "http://") {
+		serverAddress = "https://" + serverAddress
+	}
+	u, err := url.Parse(serverAddress)
 	if err != nil {
-		return "", err
+		return "", "", fmt.Errorf("unable to parse server address: %v", err)
 	}
 
-	endpointVersion := APIVersion(APIVersionUnknown)
-	if V2Only {
-		// Override the endpoint to only attempt a v2 ping
-		endpointVersion = APIVersion2
+	endpoints, err := s.LookupPushEndpoints(u.Host)
+	if err != nil {
+		return "", "", err
 	}
 
-	endpoint, err := NewEndpoint(index, userAgent, nil, endpointVersion)
-	if err != nil {
-		return "", err
+	for _, endpoint := range endpoints {
+		login := loginV2
+		if endpoint.Version == APIVersion1 {
+			login = loginV1
+		}
+
+		status, token, err = login(authConfig, endpoint, userAgent)
+		if err == nil {
+			return
+		}
+		if fErr, ok := err.(fallbackError); ok {
+			err = fErr.err
+			logrus.Infof("Error logging in to %s endpoint, trying next endpoint: %v", endpoint.Version, err)
+			continue
+		}
+		return "", "", err
 	}
-	authConfig.ServerAddress = endpoint.String()
-	return Login(authConfig, endpoint)
+
+	return "", "", err
 }
 
 // splitReposSearchTerm breaks a search term into an index name and remote name
@@ -72,20 +108,21 @@ func splitReposSearchTerm(reposName string) (string, string) {
 
 // Search queries the public registry for images matching the specified
 // search terms, and returns the results.
-func (s *Service) Search(term string, authConfig *types.AuthConfig, userAgent string, headers map[string][]string) (*registrytypes.SearchResults, error) {
-	if err := validateNoSchema(term); err != nil {
+func (s *DefaultService) Search(ctx context.Context, term string, authConfig *types.AuthConfig, userAgent string, headers map[string][]string) (*registrytypes.SearchResults, error) {
+	// TODO Use ctx when searching for repositories
+	if err := validateNoScheme(term); err != nil {
 		return nil, err
 	}
 
 	indexName, remoteName := splitReposSearchTerm(term)
 
-	index, err := newIndexInfo(s.Config, indexName)
+	index, err := newIndexInfo(s.config, indexName)
 	if err != nil {
 		return nil, err
 	}
 
 	// *TODO: Search multiple indexes.
-	endpoint, err := NewEndpoint(index, userAgent, http.Header(headers), APIVersionUnknown)
+	endpoint, err := NewV1Endpoint(index, userAgent, http.Header(headers))
 	if err != nil {
 		return nil, err
 	}
@@ -109,13 +146,13 @@ func (s *Service) Search(term string, authConfig *types.AuthConfig, userAgent st
 
 // ResolveRepository splits a repository name into its components
 // and configuration of the associated registry.
-func (s *Service) ResolveRepository(name reference.Named) (*RepositoryInfo, error) {
-	return newRepositoryInfo(s.Config, name)
+func (s *DefaultService) ResolveRepository(name reference.Named) (*RepositoryInfo, error) {
+	return newRepositoryInfo(s.config, name)
 }
 
 // ResolveIndex takes indexName and returns index info
-func (s *Service) ResolveIndex(name string) (*registrytypes.IndexInfo, error) {
-	return newIndexInfo(s.Config, name)
+func (s *DefaultService) ResolveIndex(name string) (*registrytypes.IndexInfo, error) {
+	return newIndexInfo(s.config, name)
 }
 
 // APIEndpoint represents a remote API endpoint
@@ -129,31 +166,31 @@ type APIEndpoint struct {
 }
 
 // ToV1Endpoint returns a V1 API endpoint based on the APIEndpoint
-func (e APIEndpoint) ToV1Endpoint(userAgent string, metaHeaders http.Header) (*Endpoint, error) {
-	return newEndpoint(*e.URL, e.TLSConfig, userAgent, metaHeaders)
+func (e APIEndpoint) ToV1Endpoint(userAgent string, metaHeaders http.Header) (*V1Endpoint, error) {
+	return newV1Endpoint(*e.URL, e.TLSConfig, userAgent, metaHeaders)
 }
 
 // TLSConfig constructs a client TLS configuration based on server defaults
-func (s *Service) TLSConfig(hostname string) (*tls.Config, error) {
-	return newTLSConfig(hostname, isSecureIndex(s.Config, hostname))
+func (s *DefaultService) TLSConfig(hostname string) (*tls.Config, error) {
+	return newTLSConfig(hostname, isSecureIndex(s.config, hostname))
 }
 
-func (s *Service) tlsConfigForMirror(mirrorURL *url.URL) (*tls.Config, error) {
+func (s *DefaultService) tlsConfigForMirror(mirrorURL *url.URL) (*tls.Config, error) {
 	return s.TLSConfig(mirrorURL.Host)
 }
 
-// LookupPullEndpoints creates an list of endpoints to try to pull from, in order of preference.
+// LookupPullEndpoints creates a list of endpoints to try to pull from, in order of preference.
 // It gives preference to v2 endpoints over v1, mirrors over the actual
 // registry, and HTTPS over plain HTTP.
-func (s *Service) LookupPullEndpoints(repoName reference.Named) (endpoints []APIEndpoint, err error) {
-	return s.lookupEndpoints(repoName)
+func (s *DefaultService) LookupPullEndpoints(hostname string) (endpoints []APIEndpoint, err error) {
+	return s.lookupEndpoints(hostname)
 }
 
-// LookupPushEndpoints creates an list of endpoints to try to push to, in order of preference.
+// LookupPushEndpoints creates a list of endpoints to try to push to, in order of preference.
 // It gives preference to v2 endpoints over v1, and HTTPS over plain HTTP.
 // Mirrors are not included.
-func (s *Service) LookupPushEndpoints(repoName reference.Named) (endpoints []APIEndpoint, err error) {
-	allEndpoints, err := s.lookupEndpoints(repoName)
+func (s *DefaultService) LookupPushEndpoints(hostname string) (endpoints []APIEndpoint, err error) {
+	allEndpoints, err := s.lookupEndpoints(hostname)
 	if err == nil {
 		for _, endpoint := range allEndpoints {
 			if !endpoint.Mirror {
@@ -164,17 +201,17 @@ func (s *Service) LookupPushEndpoints(repoName reference.Named) (endpoints []API
 	return endpoints, err
 }
 
-func (s *Service) lookupEndpoints(repoName reference.Named) (endpoints []APIEndpoint, err error) {
-	endpoints, err = s.lookupV2Endpoints(repoName)
+func (s *DefaultService) lookupEndpoints(hostname string) (endpoints []APIEndpoint, err error) {
+	endpoints, err = s.lookupV2Endpoints(hostname)
 	if err != nil {
 		return nil, err
 	}
 
-	if V2Only {
+	if s.config.V2Only {
 		return endpoints, nil
 	}
 
-	legacyEndpoints, err := s.lookupV1Endpoints(repoName)
+	legacyEndpoints, err := s.lookupV1Endpoints(hostname)
 	if err != nil {
 		return nil, err
 	}

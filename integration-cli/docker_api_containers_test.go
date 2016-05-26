@@ -908,7 +908,7 @@ func (s *DockerSuite) TestStartWithTooLowMemoryLimit(c *check.C) {
 }
 
 func (s *DockerSuite) TestContainerApiRename(c *check.C) {
-	// TODO Windows: Enable for TP5. Fails on TP4.
+	// TODO Windows: Debug why this sometimes fails on TP5. For now, leave disabled
 	testRequires(c, DaemonIsLinux)
 	out, _ := dockerCmd(c, "run", "--name", "TestContainerApiRename", "-d", "busybox", "sh")
 
@@ -1231,7 +1231,7 @@ func (s *DockerSuite) TestContainerApiPostContainerStop(c *check.C) {
 	c.Assert(err, checker.IsNil)
 	// 204 No Content is expected, not 200
 	c.Assert(statusCode, checker.Equals, http.StatusNoContent)
-	c.Assert(waitInspect(containerID, "{{ .State.Running  }}", "false", 5*time.Second), checker.IsNil)
+	c.Assert(waitInspect(containerID, "{{ .State.Running  }}", "false", 60*time.Second), checker.IsNil)
 }
 
 // #14170
@@ -1419,7 +1419,7 @@ func (s *DockerSuite) TestPostContainersCreateWithWrongCpusetValues(c *check.C) 
 	status, body, err := sockRequest("POST", "/containers/create?name="+name, c1)
 	c.Assert(err, checker.IsNil)
 	c.Assert(status, checker.Equals, http.StatusInternalServerError)
-	expected := "Invalid value 1-42,, for cpuset cpus.\n"
+	expected := "Invalid value 1-42,, for cpuset cpus\n"
 	c.Assert(string(body), checker.Equals, expected)
 
 	c2 := struct {
@@ -1430,7 +1430,7 @@ func (s *DockerSuite) TestPostContainersCreateWithWrongCpusetValues(c *check.C) 
 	status, body, err = sockRequest("POST", "/containers/create?name="+name, c2)
 	c.Assert(err, checker.IsNil)
 	c.Assert(status, checker.Equals, http.StatusInternalServerError)
-	expected = "Invalid value 42-3,1-- for cpuset mems.\n"
+	expected = "Invalid value 42-3,1-- for cpuset mems\n"
 	c.Assert(string(body), checker.Equals, expected)
 }
 
@@ -1462,7 +1462,7 @@ func (s *DockerSuite) TestPostContainersCreateShmSizeNegative(c *check.C) {
 	status, body, err := sockRequest("POST", "/containers/create", config)
 	c.Assert(err, check.IsNil)
 	c.Assert(status, check.Equals, http.StatusInternalServerError)
-	c.Assert(string(body), checker.Contains, "SHM size must be greater then 0")
+	c.Assert(string(body), checker.Contains, "SHM size must be greater than 0")
 }
 
 func (s *DockerSuite) TestPostContainersCreateShmSizeHostConfigOmitted(c *check.C) {
@@ -1598,7 +1598,7 @@ func (s *DockerSuite) TestPostContainersCreateWithOomScoreAdjInvalidRange(c *che
 	status, b, err := sockRequest("POST", "/containers/create?name="+name, config)
 	c.Assert(err, check.IsNil)
 	c.Assert(status, check.Equals, http.StatusInternalServerError)
-	expected := "Invalid value 1001, range for oom score adj is [-1000, 1000]."
+	expected := "Invalid value 1001, range for oom score adj is [-1000, 1000]"
 	if !strings.Contains(string(b), expected) {
 		c.Fatalf("Expected output to contain %q, got %q", expected, string(b))
 	}
@@ -1611,8 +1611,16 @@ func (s *DockerSuite) TestPostContainersCreateWithOomScoreAdjInvalidRange(c *che
 	status, b, err = sockRequest("POST", "/containers/create?name="+name, config)
 	c.Assert(err, check.IsNil)
 	c.Assert(status, check.Equals, http.StatusInternalServerError)
-	expected = "Invalid value -1001, range for oom score adj is [-1000, 1000]."
+	expected = "Invalid value -1001, range for oom score adj is [-1000, 1000]"
 	if !strings.Contains(string(b), expected) {
 		c.Fatalf("Expected output to contain %q, got %q", expected, string(b))
 	}
+}
+
+// test case for #22210 where an emtpy container name caused panic.
+func (s *DockerSuite) TestContainerApiDeleteWithEmptyName(c *check.C) {
+	status, out, err := sockRequest("DELETE", "/containers/", nil)
+	c.Assert(err, checker.IsNil)
+	c.Assert(status, checker.Equals, http.StatusBadRequest)
+	c.Assert(string(out), checker.Contains, "No container name or ID supplied")
 }

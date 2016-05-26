@@ -1,6 +1,6 @@
 <!--[metadata]>
 +++
-aliases = ["/engine/articles/dockerfile_best-practices/"]
+aliases = ["/engine/articles/dockerfile_best-practices/", "/docker-cloud/getting-started/intermediate/optimize-dockerfiles/", "/docker-cloud/tutorials/optimize-dockerfiles/"]
 title = "Best practices for writing Dockerfiles"
 description = "Hints, tips and guidelines for writing clean, reliable Dockerfiles"
 keywords = ["Examples, Usage, base image, docker, documentation, dockerfile, best practices, hub,  official repo"]
@@ -130,9 +130,9 @@ various instructions available for use in a `Dockerfile`.
 [Dockerfile reference for the FROM instruction](../../reference/builder.md#from)
 
 Whenever possible, use current Official Repositories as the basis for your
-image. We recommend the [Debian image](https://registry.hub.docker.com/_/debian/)
-since it’s very tightly controlled and kept extremely minimal (currently under
-100 mb), while still being a full distribution.
+image. We recommend the [Debian image](https://hub.docker.com/_/debian/)
+since it’s very tightly controlled and kept minimal (currently under 150 mb),
+while still being a full distribution.
 
 ### RUN
 
@@ -365,7 +365,7 @@ The `ENTRYPOINT` instruction can also be used in combination with a helper
 script, allowing it to function in a similar way to the command above, even
 when starting the tool may require more than one step.
 
-For example, the [Postgres Official Image](https://registry.hub.docker.com/_/postgres/)
+For example, the [Postgres Official Image](https://hub.docker.com/_/postgres/)
 uses the following script as its `ENTRYPOINT`:
 
 ```bash
@@ -481,10 +481,10 @@ allowing the `Dockerfile` author to make a choice.
 
 These Official Repositories have exemplary `Dockerfile`s:
 
-* [Go](https://registry.hub.docker.com/_/golang/)
-* [Perl](https://registry.hub.docker.com/_/perl/)
-* [Hy](https://registry.hub.docker.com/_/hylang/)
-* [Rails](https://registry.hub.docker.com/_/rails)
+* [Go](https://hub.docker.com/_/golang/)
+* [Perl](https://hub.docker.com/_/perl/)
+* [Hy](https://hub.docker.com/_/hylang/)
+* [Rails](https://hub.docker.com/_/rails)
 
 ## Additional resources:
 

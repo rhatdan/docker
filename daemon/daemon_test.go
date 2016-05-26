@@ -118,10 +118,14 @@ func TestGetContainer(t *testing.T) {
 }
 
 func initDaemonWithVolumeStore(tmp string) (*Daemon, error) {
+	var err error
 	daemon := &Daemon{
 		repository: tmp,
 		root:       tmp,
-		volumes:    store.New(),
+	}
+	daemon.volumes, err = store.New(tmp)
+	if err != nil {
+		return nil, err
 	}
 
 	volumesDriver, err := local.New(tmp, 0, 0)
@@ -316,7 +320,7 @@ func TestDaemonReloadLabels(t *testing.T) {
 	}
 
 	valuesSets := make(map[string]interface{})
-	valuesSets["label"] = "foo:baz"
+	valuesSets["labels"] = "foo:baz"
 	newConfig := &Config{
 		CommonConfig: CommonConfig{
 			Labels:    []string{"foo:baz"},
@@ -341,7 +345,7 @@ func TestDaemonReloadNotAffectOthers(t *testing.T) {
 	}
 
 	valuesSets := make(map[string]interface{})
-	valuesSets["label"] = "foo:baz"
+	valuesSets["labels"] = "foo:baz"
 	newConfig := &Config{
 		CommonConfig: CommonConfig{
 			Labels:    []string{"foo:baz"},
@@ -377,6 +381,12 @@ func TestDaemonDiscoveryReload(t *testing.T) {
 		&discovery.Entry{Host: "127.0.0.1", Port: "3333"},
 	}
 
+	select {
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout waiting for discovery")
+	case <-daemon.discoveryWatcher.ReadyCh():
+	}
+
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 	ch, errCh := daemon.discoveryWatcher.Watch(stopCh)
@@ -410,6 +420,13 @@ func TestDaemonDiscoveryReload(t *testing.T) {
 	if err := daemon.Reload(newConfig); err != nil {
 		t.Fatal(err)
 	}
+
+	select {
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout waiting for discovery")
+	case <-daemon.discoveryWatcher.ReadyCh():
+	}
+
 	ch, errCh = daemon.discoveryWatcher.Watch(stopCh)
 
 	select {
@@ -446,6 +463,13 @@ func TestDaemonDiscoveryReloadFromEmptyDiscovery(t *testing.T) {
 	if err := daemon.Reload(newConfig); err != nil {
 		t.Fatal(err)
 	}
+
+	select {
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout waiting for discovery")
+	case <-daemon.discoveryWatcher.ReadyCh():
+	}
+
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 	ch, errCh := daemon.discoveryWatcher.Watch(stopCh)
@@ -483,6 +507,12 @@ func TestDaemonDiscoveryReloadOnlyClusterAdvertise(t *testing.T) {
 
 	if err := daemon.Reload(newConfig); err != nil {
 		t.Fatal(err)
+	}
+
+	select {
+	case <-daemon.discoveryWatcher.ReadyCh():
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timeout waiting for discovery")
 	}
 	stopCh := make(chan struct{})
 	defer close(stopCh)

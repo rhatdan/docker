@@ -60,11 +60,10 @@ Requires: device-mapper >= 1.02.90-2
 %global with_selinux 1
 %endif
 
-%if 0%{?_experimental}
-# yubico-piv-tool conditional
-%if 0%{?fedora} >= 20 || 0%{?centos} >= 7 || 0%{?rhel} >= 7
-Requires: yubico-piv-tool >= 1.1.0
-%endif
+# DWZ problem with multiple golang binary, see bug
+# https://bugzilla.redhat.com/show_bug.cgi?id=995136#c12
+%if 0%{?fedora} >= 20 || 0%{?rhel} >= 7 || 0%{?oraclelinux} >= 7
+%global _dwz_low_mem_die_limit 0
 %endif
 
 # start if with_selinux
@@ -119,12 +118,22 @@ export DOCKER_GITCOMMIT=%{_gitcommit}
 # ./man/md2man-all.sh runs outside the build container (if at all), since we don't have go-md2man here
 
 %check
-./bundles/%{_origversion}/dynbinary/docker -v
+./bundles/%{_origversion}/dynbinary-client/docker -v
+./bundles/%{_origversion}/dynbinary-daemon/dockerd -v
 
 %install
 # install binary
 install -d $RPM_BUILD_ROOT/%{_bindir}
-install -p -m 755 bundles/%{_origversion}/dynbinary/docker-%{_origversion} $RPM_BUILD_ROOT/%{_bindir}/docker
+install -p -m 755 bundles/%{_origversion}/dynbinary-client/docker-%{_origversion} $RPM_BUILD_ROOT/%{_bindir}/docker
+install -p -m 755 bundles/%{_origversion}/dynbinary-daemon/dockerd-%{_origversion} $RPM_BUILD_ROOT/%{_bindir}/dockerd
+
+# install containerd
+install -p -m 755 /usr/local/bin/containerd $RPM_BUILD_ROOT/%{_bindir}/docker-containerd
+install -p -m 755 /usr/local/bin/containerd-shim $RPM_BUILD_ROOT/%{_bindir}/docker-containerd-shim
+install -p -m 755 /usr/local/bin/ctr $RPM_BUILD_ROOT/%{_bindir}/docker-containerd-ctr
+
+# install runc
+install -p -m 755 /usr/local/sbin/runc $RPM_BUILD_ROOT/%{_bindir}/docker-runc
 
 # install udev rules
 install -d $RPM_BUILD_ROOT/%{_sysconfdir}/udev/rules.d
@@ -173,6 +182,11 @@ install -p -m 644 contrib/syntax/nano/Dockerfile.nanorc $RPM_BUILD_ROOT/usr/shar
 %files
 %doc AUTHORS CHANGELOG.md CONTRIBUTING.md LICENSE MAINTAINERS NOTICE README.md
 /%{_bindir}/docker
+/%{_bindir}/dockerd
+/%{_bindir}/docker-containerd
+/%{_bindir}/docker-containerd-shim
+/%{_bindir}/docker-containerd-ctr
+/%{_bindir}/docker-runc
 /%{_sysconfdir}/udev/rules.d/80-docker.rules
 %if 0%{?is_systemd}
 /%{_unitdir}/docker.service

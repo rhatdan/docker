@@ -39,7 +39,8 @@ the user and primary group at the destination. For example, files copied to a
 container are created with `UID:GID` of the root user. Files copied to the local
 machine are created with the `UID:GID` of the user which invoked the `docker cp`
 command.  If you specify the `-L` option, `docker cp` follows any symbolic link
-in the `SRC_PATH`.
+in the `SRC_PATH`.  `docker cp` does *not* create parent directories for
+`DEST_PATH` if they do not exist.
 
 Assuming a path separator of `/`, a first argument of `SRC_PATH` and second
 argument of `DEST_PATH`, the behavior is as follows:
@@ -80,7 +81,17 @@ you must be explicit with a relative or absolute path, for example:
     `/path/to/file:name.txt` or `./file:name.txt`
 
 It is not possible to copy certain system files such as resources under
-`/proc`, `/sys`, `/dev`, and mounts created by the user in the container.
+`/proc`, `/sys`, `/dev`, [tmpfs](run.md#mount-tmpfs-tmpfs), and mounts created by
+the user in the container. However, you can still copy such files by manually
+running `tar` in `docker exec`. For example (consider `SRC_PATH` and `DEST_PATH`
+are directories):
+
+    $ docker exec foo tar Ccf $(dirname SRC_PATH) - $(basename SRC_PATH) | tar Cxf DEST_PATH -
+
+or
+
+    $ tar Ccf $(dirname SRC_PATH) - $(basename SRC_PATH) | docker exec -i foo tar Cxf DEST_PATH -
+
 
 Using `-` as the `SRC_PATH` streams the contents of `STDIN` as a tar archive.
 The command extracts the content of the tar to the `DEST_PATH` in container's

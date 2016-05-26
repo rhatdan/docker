@@ -5,9 +5,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/Sirupsen/logrus"
 	"net"
 	"net/http"
+
+	"github.com/Sirupsen/logrus"
 )
 
 // ResponseModifier allows authorization plugins to read and modify the content of the http.response
@@ -25,10 +26,10 @@ type ResponseModifier interface {
 	// StatusCode returns the current status code
 	StatusCode() int
 
-	// OverrideBody replace the body of the HTTP reply
+	// OverrideBody replaces the body of the HTTP reply
 	OverrideBody(b []byte)
 
-	// OverrideHeader replace the headers of the HTTP reply
+	// OverrideHeader replaces the headers of the HTTP reply
 	OverrideHeader(b []byte) error
 
 	// OverrideStatusCode replaces the status code of the HTTP reply
@@ -51,10 +52,6 @@ func NewResponseModifier(rw http.ResponseWriter) ResponseModifier {
 type responseModifier struct {
 	// The original response writer
 	rw http.ResponseWriter
-
-	r *http.Request
-
-	status int
 	// body holds the response body
 	body []byte
 	// header holds the response header
@@ -92,21 +89,22 @@ func (rm *responseModifier) Header() http.Header {
 	return rm.header
 }
 
-// Header returns the internal http header
+// StatusCode returns the http status code
 func (rm *responseModifier) StatusCode() int {
 	return rm.statusCode
 }
 
-// Override replace the body of the HTTP reply
+// OverrideBody replaces the body of the HTTP response
 func (rm *responseModifier) OverrideBody(b []byte) {
 	rm.body = b
 }
 
+// OverrideStatusCode replaces the status code of the HTTP response
 func (rm *responseModifier) OverrideStatusCode(statusCode int) {
 	rm.statusCode = statusCode
 }
 
-// Override replace the headers of the HTTP reply
+// OverrideHeader replaces the headers of the HTTP response
 func (rm *responseModifier) OverrideHeader(b []byte) error {
 	header := http.Header{}
 	if err := json.Unmarshal(b, &header); err != nil {

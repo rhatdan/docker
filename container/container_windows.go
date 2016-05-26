@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/docker/docker/daemon/execdriver"
+	"github.com/docker/docker/utils"
 	"github.com/docker/docker/volume"
-	"github.com/docker/engine-api/types/container"
+	containertypes "github.com/docker/engine-api/types/container"
 )
 
 // Container holds fields specific to the Windows implementation. See
@@ -17,13 +17,24 @@ import (
 type Container struct {
 	CommonContainer
 
+	HostnamePath   string
+	HostsPath      string
+	ResolvConfPath string
 	// Fields below here are platform specific.
+}
+
+// ExitStatus provides exit reasons for a container.
+type ExitStatus struct {
+	// The exit code with which the container exited.
+	ExitCode int
 }
 
 // CreateDaemonEnvironment creates a new environment variable slice for this container.
 func (container *Container) CreateDaemonEnvironment(linkedEnv []string) []string {
-	// On Windows, nothing to link. Just return the container environment.
-	return container.Config.Env
+	// because the env on the container can override certain default values
+	// we need to replace the 'env' keys where they match and append anything
+	// else.
+	return utils.ReplaceOrAppendEnvValues(linkedEnv, container.Config.Env)
 }
 
 // UnmountIpcMounts unmount Ipc related mounts.
@@ -32,7 +43,7 @@ func (container *Container) UnmountIpcMounts(unmount func(pth string) error) {
 }
 
 // IpcMounts returns the list of Ipc related mounts.
-func (container *Container) IpcMounts() []execdriver.Mount {
+func (container *Container) IpcMounts() []Mount {
 	return nil
 }
 
@@ -42,12 +53,12 @@ func (container *Container) UnmountVolumes(forceSyscall bool, volumeEventLog fun
 }
 
 // TmpfsMounts returns the list of tmpfs mounts
-func (container *Container) TmpfsMounts() []execdriver.Mount {
+func (container *Container) TmpfsMounts() []Mount {
 	return nil
 }
 
 // UpdateContainer updates configuration of a container
-func (container *Container) UpdateContainer(hostConfig *container.HostConfig) error {
+func (container *Container) UpdateContainer(hostConfig *containertypes.HostConfig) error {
 	container.Lock()
 	defer container.Unlock()
 	resources := hostConfig.Resources
@@ -82,4 +93,16 @@ func cleanResourcePath(path string) string {
 		}
 	}
 	return filepath.Join(string(os.PathSeparator), path)
+}
+
+// BuildHostnameFile writes the container's hostname file.
+func (container *Container) BuildHostnameFile() error {
+	return nil
+}
+
+// canMountFS determines if the file system for the container
+// can be mounted locally. In the case of Windows, this is not possible
+// for Hyper-V containers during WORKDIR execution for example.
+func (container *Container) canMountFS() bool {
+	return !containertypes.Isolation.IsHyperV(container.HostConfig.Isolation)
 }

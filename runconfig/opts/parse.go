@@ -41,6 +41,7 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		flDevices           = opts.NewListOpts(ValidateDevice)
 
 		flUlimits = NewUlimitOpt(nil)
+		flSysctls = opts.NewMapOpts(nil, opts.ValidateSysctl)
 
 		flPublish           = opts.NewListOpts(nil)
 		flExpose            = opts.NewListOpts(nil)
@@ -54,11 +55,13 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		flCapDrop           = opts.NewListOpts(nil)
 		flGroupAdd          = opts.NewListOpts(nil)
 		flSecurityOpt       = opts.NewListOpts(nil)
+		flStorageOpt        = opts.NewListOpts(nil)
 		flLabelsFile        = opts.NewListOpts(nil)
 		flLoggingOpts       = opts.NewListOpts(nil)
 		flPrivileged        = cmd.Bool([]string{"-privileged"}, false, "Give extended privileges to this container")
 		flPidMode           = cmd.String([]string{"-pid"}, "", "PID namespace to use")
 		flUTSMode           = cmd.String([]string{"-uts"}, "", "UTS namespace to use")
+		flUsernsMode        = cmd.String([]string{"-userns"}, "", "User namespace to use")
 		flPublishAll        = cmd.Bool([]string{"P", "-publish-all"}, false, "Publish all exposed ports to random ports")
 		flStdin             = cmd.Bool([]string{"i", "-interactive"}, false, "Keep STDIN open even if not attached")
 		flTty               = cmd.Bool([]string{"t", "-tty"}, false, "Allocate a pseudo-TTY")
@@ -74,17 +77,21 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		flUser              = cmd.String([]string{"u", "-user"}, "", "Username or UID (format: <name|uid>[:<group|gid>])")
 		flWorkingDir        = cmd.String([]string{"w", "-workdir"}, "", "Working directory inside the container")
 		flCPUShares         = cmd.Int64([]string{"#c", "-cpu-shares"}, 0, "CPU shares (relative weight)")
+		flCPUPercent        = cmd.Int64([]string{"-cpu-percent"}, 0, "CPU percent (Windows only)")
 		flCPUPeriod         = cmd.Int64([]string{"-cpu-period"}, 0, "Limit CPU CFS (Completely Fair Scheduler) period")
 		flCPUQuota          = cmd.Int64([]string{"-cpu-quota"}, 0, "Limit CPU CFS (Completely Fair Scheduler) quota")
 		flCpusetCpus        = cmd.String([]string{"-cpuset-cpus"}, "", "CPUs in which to allow execution (0-3, 0,1)")
 		flCpusetMems        = cmd.String([]string{"-cpuset-mems"}, "", "MEMs in which to allow execution (0-3, 0,1)")
 		flBlkioWeight       = cmd.Uint16([]string{"-blkio-weight"}, 0, "Block IO (relative weight), between 10 and 1000")
+		flIOMaxBandwidth    = cmd.String([]string{"-io-maxbandwidth"}, "", "Maximum IO bandwidth limit for the system drive (Windows only)")
+		flIOMaxIOps         = cmd.Uint64([]string{"-io-maxiops"}, 0, "Maximum IOps limit for the system drive (Windows only)")
 		flSwappiness        = cmd.Int64([]string{"-memory-swappiness"}, -1, "Tune container memory swappiness (0 to 100)")
 		flNetMode           = cmd.String([]string{"-net"}, "default", "Connect a container to a network")
 		flMacAddress        = cmd.String([]string{"-mac-address"}, "", "Container MAC address (e.g. 92:d0:c6:0a:29:33)")
 		flIPv4Address       = cmd.String([]string{"-ip"}, "", "Container IPv4 address (e.g. 172.30.100.104)")
 		flIPv6Address       = cmd.String([]string{"-ip6"}, "", "Container IPv6 address (e.g. 2001:db8::33)")
 		flIpcMode           = cmd.String([]string{"-ipc"}, "", "IPC namespace to use")
+		flPidsLimit         = cmd.Int64([]string{"-pids-limit"}, 0, "Tune container pids limit (set -1 for unlimited)")
 		flRestartPolicy     = cmd.String([]string{"-restart"}, "no", "Restart policy to apply when a container exits")
 		flReadonlyRootfs    = cmd.Bool([]string{"-read-only"}, false, "Mount the container's root filesystem as read only")
 		flLoggingDriver     = cmd.String([]string{"-log-driver"}, "", "Logging driver for container")
@@ -121,7 +128,9 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 	cmd.Var(&flCapDrop, []string{"-cap-drop"}, "Drop Linux capabilities")
 	cmd.Var(&flGroupAdd, []string{"-group-add"}, "Add additional groups to join")
 	cmd.Var(&flSecurityOpt, []string{"-security-opt"}, "Security Options")
+	cmd.Var(&flStorageOpt, []string{"-storage-opt"}, "Set storage driver options per container")
 	cmd.Var(flUlimits, []string{"-ulimit"}, "Ulimit options")
+	cmd.Var(flSysctls, []string{"-sysctl"}, "Sysctl options")
 	cmd.Var(&flLoggingOpts, []string{"-log-opt"}, "Log driver options")
 
 	cmd.Require(flag.Min, 1)
@@ -145,7 +154,7 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 	if *flStdin {
 		attachStdin = true
 	}
-	// If -a is not set attach to the output stdio
+	// If -a is not set, attach to stdout and stderr
 	if flAttach.Len() == 0 {
 		attachStdout = true
 		attachStderr = true
@@ -202,6 +211,18 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		}
 	}
 
+	// TODO FIXME units.RAMInBytes should have a uint64 version
+	var maxIOBandwidth int64
+	if *flIOMaxBandwidth != "" {
+		maxIOBandwidth, err = units.RAMInBytes(*flIOMaxBandwidth)
+		if err != nil {
+			return nil, nil, nil, cmd, err
+		}
+		if maxIOBandwidth < 0 {
+			return nil, nil, nil, cmd, fmt.Errorf("invalid value: %s. Maximum IO Bandwidth must be positive", *flIOMaxBandwidth)
+		}
+	}
+
 	var binds []string
 	// add any bind targets to the list of container volumes
 	for bind := range flVolumes.GetMap() {
@@ -237,16 +258,6 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 	}
 	if *flEntrypoint != "" {
 		entrypoint = strslice.StrSlice{*flEntrypoint}
-	}
-
-	var (
-		domainname string
-		hostname   = *flHostname
-		parts      = strings.SplitN(hostname, ".", 2)
-	)
-	if len(parts) > 1 {
-		hostname = parts[0]
-		domainname = parts[1]
 	}
 
 	ports, portBindings, err := nat.ParsePortSpecs(flPublish.GetAll())
@@ -315,6 +326,11 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		return nil, nil, nil, cmd, fmt.Errorf("--uts: invalid UTS mode")
 	}
 
+	usernsMode := container.UsernsMode(*flUsernsMode)
+	if !usernsMode.Valid() {
+		return nil, nil, nil, cmd, fmt.Errorf("--userns: invalid USER mode")
+	}
+
 	restartPolicy, err := ParseRestartPolicy(*flRestartPolicy)
 	if err != nil {
 		return nil, nil, nil, cmd, err
@@ -330,6 +346,11 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		return nil, nil, nil, cmd, err
 	}
 
+	storageOpts, err := parseStorageOpts(flStorageOpt.GetAll())
+	if err != nil {
+		return nil, nil, nil, cmd, err
+	}
+
 	resources := container.Resources{
 		CgroupParent:         *flCgroupParent,
 		Memory:               flMemory,
@@ -338,24 +359,27 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		MemorySwappiness:     flSwappiness,
 		KernelMemory:         KernelMemory,
 		OomKillDisable:       flOomKillDisable,
+		CPUPercent:           *flCPUPercent,
 		CPUShares:            *flCPUShares,
 		CPUPeriod:            *flCPUPeriod,
 		CpusetCpus:           *flCpusetCpus,
 		CpusetMems:           *flCpusetMems,
 		CPUQuota:             *flCPUQuota,
+		PidsLimit:            *flPidsLimit,
 		BlkioWeight:          *flBlkioWeight,
 		BlkioWeightDevice:    flBlkioWeightDevice.GetList(),
 		BlkioDeviceReadBps:   flDeviceReadBps.GetList(),
 		BlkioDeviceWriteBps:  flDeviceWriteBps.GetList(),
 		BlkioDeviceReadIOps:  flDeviceReadIOps.GetList(),
 		BlkioDeviceWriteIOps: flDeviceWriteIOps.GetList(),
+		IOMaximumIOps:        *flIOMaxIOps,
+		IOMaximumBandwidth:   uint64(maxIOBandwidth),
 		Ulimits:              flUlimits.GetList(),
 		Devices:              deviceMappings,
 	}
 
 	config := &container.Config{
-		Hostname:     hostname,
-		Domainname:   domainname,
+		Hostname:     *flHostname,
 		ExposedPorts: ports,
 		User:         *flUser,
 		Tty:          *flTty,
@@ -402,11 +426,13 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		IpcMode:        ipcMode,
 		PidMode:        pidMode,
 		UTSMode:        utsMode,
+		UsernsMode:     usernsMode,
 		CapAdd:         strslice.StrSlice(flCapAdd.GetAll()),
 		CapDrop:        strslice.StrSlice(flCapDrop.GetAll()),
 		GroupAdd:       flGroupAdd.GetAll(),
 		RestartPolicy:  restartPolicy,
 		SecurityOpt:    securityOpts,
+		StorageOpt:     storageOpts,
 		ReadonlyRootfs: *flReadonlyRootfs,
 		LogConfig:      container.LogConfig{Type: *flLoggingDriver, Config: loggingOpts},
 		VolumeDriver:   *flVolumeDriver,
@@ -414,6 +440,7 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		ShmSize:        shmSize,
 		Resources:      resources,
 		Tmpfs:          tmpfs,
+		Sysctls:        flSysctls.GetAll(),
 	}
 
 	// When allocating stdin in attached mode, close stdin at client disconnect
@@ -457,7 +484,8 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 	return config, hostConfig, networkingConfig, cmd, nil
 }
 
-// reads a file of line terminated key=value pairs and override that with override parameter
+// reads a file of line terminated key=value pairs, and overrides any keys
+// present in the file with additional pairs specified in the override parameter
 func readKVStrings(files []string, override []string) ([]string, error) {
 	envVariables := []string{}
 	for _, ef := range files {
@@ -499,9 +527,13 @@ func parseLoggingOpts(loggingDriver string, loggingOpts []string) (map[string]st
 // takes a local seccomp daemon, reads the file contents for sending to the daemon
 func parseSecurityOpts(securityOpts []string) ([]string, error) {
 	for key, opt := range securityOpts {
-		con := strings.SplitN(opt, ":", 2)
-		if len(con) == 1 {
-			return securityOpts, fmt.Errorf("invalid --security-opt: %q", opt)
+		con := strings.SplitN(opt, "=", 2)
+		if len(con) == 1 && con[0] != "no-new-privileges" {
+			if strings.Index(opt, ":") != -1 {
+				con = strings.SplitN(opt, ":", 2)
+			} else {
+				return securityOpts, fmt.Errorf("Invalid --security-opt: %q", opt)
+			}
 		}
 		if con[0] == "seccomp" && con[1] != "unconfined" {
 			f, err := ioutil.ReadFile(con[1])
@@ -512,11 +544,25 @@ func parseSecurityOpts(securityOpts []string) ([]string, error) {
 			if err := json.Compact(b, f); err != nil {
 				return securityOpts, fmt.Errorf("compacting json for seccomp profile (%s) failed: %v", con[1], err)
 			}
-			securityOpts[key] = fmt.Sprintf("seccomp:%s", b.Bytes())
+			securityOpts[key] = fmt.Sprintf("seccomp=%s", b.Bytes())
 		}
 	}
 
 	return securityOpts, nil
+}
+
+// parses storage options per container into a map
+func parseStorageOpts(storageOpts []string) (map[string]string, error) {
+	m := make(map[string]string)
+	for _, option := range storageOpts {
+		if strings.Contains(option, "=") {
+			opt := strings.SplitN(option, "=", 2)
+			m[opt[0]] = opt[1]
+		} else {
+			return nil, fmt.Errorf("Invalid storage option.")
+		}
+	}
+	return m, nil
 }
 
 // ParseRestartPolicy returns the parsed policy or an error indicating what is incorrect
@@ -606,7 +652,7 @@ func ParseLink(val string) (string, string, error) {
 	if len(arr) == 1 {
 		return val, val, nil
 	}
-	// This is kept because we can actually get an HostConfig with links
+	// This is kept because we can actually get a HostConfig with links
 	// from an already created container and the format is not `foo:bar`
 	// but `/foo:/c1/bar`
 	if strings.HasPrefix(arr[0], "/") {
@@ -693,8 +739,12 @@ func validatePath(val string, validator func(string) bool) (string, error) {
 }
 
 // volumeSplitN splits raw into a maximum of n parts, separated by a separator colon.
-// A separator colon is the last `:` character in the regex `[/:\\]?[a-zA-Z]:` (note `\\` is `\` escaped).
-// This allows to correctly split strings such as `C:\foo:D:\:rw`.
+// A separator colon is the last `:` character in the regex `[:\\]?[a-zA-Z]:` (note `\\` is `\` escaped).
+// In Windows driver letter appears in two situations:
+// a. `^[a-zA-Z]:` (A colon followed  by `^[a-zA-Z]:` is OK as colon is the separator in volume option)
+// b. A string in the format like `\\?\C:\Windows\...` (UNC).
+// Therefore, a driver letter can only follow either a `:` or `\\`
+// This allows to correctly split strings such as `C:\foo:D:\:rw` or `/tmp/q:/foo`.
 func volumeSplitN(raw string, n int) []string {
 	var array []string
 	if len(raw) == 0 || raw[0] == ':' {
@@ -719,7 +769,8 @@ func volumeSplitN(raw string, n int) []string {
 		if (potentialDriveLetter >= 'A' && potentialDriveLetter <= 'Z') || (potentialDriveLetter >= 'a' && potentialDriveLetter <= 'z') {
 			if right > 1 {
 				beforePotentialDriveLetter := raw[right-2]
-				if beforePotentialDriveLetter != ':' && beforePotentialDriveLetter != '/' && beforePotentialDriveLetter != '\\' {
+				// Only `:` or `\\` are checked (`/` could fall into the case of `/tmp/q:/foo`)
+				if beforePotentialDriveLetter != ':' && beforePotentialDriveLetter != '\\' {
 					// e.g. `C:` is not preceded by any delimiter, therefore it was not a drive letter but a path ending with `C:`.
 					array = append(array, raw[left:right])
 					left = right + 1

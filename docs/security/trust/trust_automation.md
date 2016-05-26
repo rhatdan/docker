@@ -10,7 +10,7 @@ parent= "smn_content_trust"
 
 # Automation with content trust
 
-Your automation systems that pull or build images can also work with trust. Any automation environment must set `DOCKER_TRUST_ENABLED` either manually or in in a scripted fashion before processing images.
+Your automation systems that pull or build images can also work with trust. Any automation environment must set `DOCKER_TRUST_ENABLED` either manually or in a scripted fashion before processing images.
 
 ## Bypass requests for passphrases
 
@@ -43,7 +43,7 @@ Signing and pushing trust metadata
 
 ## Building with content trust
 
-You can also build with content trust. Before running the `docker build` command, you should set the environment variable `DOCKER_CONTENT_TRUST` either manually or in in a scripted fashion. Consider the simple Dockerfile below.
+You can also build with content trust. Before running the `docker build` command, you should set the environment variable `DOCKER_CONTENT_TRUST` either manually or in a scripted fashion. Consider the simple Dockerfile below.
 
 ```Dockerfile
 FROM docker/trusttest:latest
@@ -73,7 +73,8 @@ unable to process Dockerfile: No trust data for notrust
 
 ## Related information
 
-* [Content trust in Docker](content_trust.md) 
+* [Content trust in Docker](content_trust.md)
 * [Manage keys for content trust](trust_key_mng.md)
+* [Delegations for content trust](trust_delegation.md)
 * [Play in a content trust sandbox](trust_sandbox.md)
 

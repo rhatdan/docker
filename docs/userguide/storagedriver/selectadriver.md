@@ -40,10 +40,10 @@ driver names:
 |AUFS          |`aufs`               |
 |Btrfs         |`btrfs`              |
 |Device Mapper |`devicemapper`       |
-|VFS*          |`vfs`                |
+|VFS           |`vfs`                |
 |ZFS           |`zfs`                |
 
-To find out which storage driver is set on the daemon , you use the
+To find out which storage driver is set on the daemon, you use the
 `docker info` command:
 
     $ docker info
@@ -71,28 +71,28 @@ For example, the `btrfs` storage driver on a Btrfs backing filesystem. The
 following table lists each storage driver and whether it must match the host's
 backing file system:
 
-|Storage driver |Must match backing filesystem |Incompatible with   |
-|---------------|------------------------------|--------------------|
-|`overlay`      |No                            |`btrfs` `aufs` `zfs`|
-|`aufs`         |No                            |`btrfs` `aufs`      |
-|`btrfs`        |Yes                           |   N/A              |
-|`devicemapper` |No                            |   N/A              |
-|`vfs`          |No                            |   N/A              |
-|`zfs`          |Yes                           |   N/A              |
+|Storage driver |Commonly used on |Disabled on                   |
+|---------------|-----------------|------------------------------|
+|`overlay`      |`ext4` `xfs`     |`btrfs` `aufs` `overlay` `zfs`|
+|`aufs`         |`ext4` `xfs`     |`btrfs` `aufs`                |
+|`btrfs`        |`btrfs` _only_   |   N/A                        |
+|`devicemapper` |`direct-lvm`     |   N/A                        |
+|`vfs`          |debugging only   |   N/A                        |
+|`zfs`          |`zfs` _only_     |   N/A                        |
 
 
 > **Note**
-> Incompatible with means some storage drivers can not run over certain backing
+> "Disabled on" means some storage drivers can not run over certain backing
 > filesystem.
 
 You can set the storage driver by passing the `--storage-driver=<name>` option
-to the `docker daemon` command line, or by setting the option on the
+to the `dockerd` command line, or by setting the option on the
 `DOCKER_OPTS` line in the `/etc/default/docker` file.
 
 The following command shows how to start the Docker daemon with the
-`devicemapper` storage driver using the `docker daemon` command:
+`devicemapper` storage driver using the `dockerd` command:
 
-    $ docker daemon --storage-driver=devicemapper &
+    $ dockerd --storage-driver=devicemapper &
 
     $ docker info
     Containers: 0
@@ -109,6 +109,7 @@ The following command shows how to start the Docker daemon with the
      Metadata Space Used: 1.479 MB
      Metadata Space Total: 2.147 GB
      Metadata Space Available: 2.146 GB
+     Thin Pool Minimum Free Space: 10.74 GB
      Udev Sync Supported: true
      Deferred Removal Enabled: false
      Data loop file: /var/lib/docker/devicemapper/devicemapper/data

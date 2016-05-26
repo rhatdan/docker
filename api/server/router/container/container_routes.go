@@ -15,11 +15,10 @@ import (
 	"github.com/docker/docker/api/types/backend"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/signal"
-	"github.com/docker/docker/pkg/term"
-	"github.com/docker/docker/runconfig"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/filters"
+	"github.com/docker/engine-api/types/versions"
 	"golang.org/x/net/context"
 	"golang.org/x/net/websocket"
 )
@@ -67,19 +66,13 @@ func (s *containerRouter) getContainersStats(ctx context.Context, w http.Respons
 		w.Header().Set("Content-Type", "application/json")
 	}
 
-	var closeNotifier <-chan bool
-	if notifier, ok := w.(http.CloseNotifier); ok {
-		closeNotifier = notifier.CloseNotify()
-	}
-
 	config := &backend.ContainerStatsConfig{
 		Stream:    stream,
 		OutStream: w,
-		Stop:      closeNotifier,
 		Version:   string(httputils.VersionFromContext(ctx)),
 	}
 
-	return s.backend.ContainerStats(vars["name"], config)
+	return s.backend.ContainerStats(ctx, vars["name"], config)
 }
 
 func (s *containerRouter) getContainersLogs(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -97,11 +90,6 @@ func (s *containerRouter) getContainersLogs(ctx context.Context, w http.Response
 		return fmt.Errorf("Bad parameters: you must choose at least one stream")
 	}
 
-	var closeNotifier <-chan bool
-	if notifier, ok := w.(http.CloseNotifier); ok {
-		closeNotifier = notifier.CloseNotify()
-	}
-
 	containerName := vars["name"]
 	logsConfig := &backend.ContainerLogsConfig{
 		ContainerLogsOptions: types.ContainerLogsOptions{
@@ -111,13 +99,13 @@ func (s *containerRouter) getContainersLogs(ctx context.Context, w http.Response
 			Tail:       r.Form.Get("tail"),
 			ShowStdout: stdout,
 			ShowStderr: stderr,
+			Details:    httputils.BoolValue(r, "details"),
 		},
 		OutStream: w,
-		Stop:      closeNotifier,
 	}
 
 	chStarted := make(chan struct{})
-	if err := s.backend.ContainerLogs(containerName, logsConfig, chStarted); err != nil {
+	if err := s.backend.ContainerLogs(ctx, containerName, logsConfig, chStarted); err != nil {
 		select {
 		case <-chStarted:
 			// The client may be expecting all of the data we're sending to
@@ -149,7 +137,7 @@ func (s *containerRouter) postContainersStart(ctx context.Context, w http.Respon
 			return err
 		}
 
-		c, err := runconfig.DecodeHostConfig(r.Body)
+		c, err := s.decoder.DecodeHostConfig(r.Body)
 		if err != nil {
 			return err
 		}
@@ -209,7 +197,7 @@ func (s *containerRouter) postContainersKill(ctx context.Context, w http.Respons
 		// Return error if the container is not running and the api is >= 1.20
 		// to keep backwards compatibility.
 		version := httputils.VersionFromContext(ctx)
-		if version.GreaterThanOrEqualTo("1.20") || !isStopped {
+		if versions.GreaterThanOrEqualTo(version, "1.20") || !isStopped {
 			return fmt.Errorf("Cannot kill container %s: %v", name, err)
 		}
 	}
@@ -350,12 +338,12 @@ func (s *containerRouter) postContainersCreate(ctx context.Context, w http.Respo
 
 	name := r.Form.Get("name")
 
-	config, hostConfig, networkingConfig, err := runconfig.DecodeContainerConfig(r.Body)
+	config, hostConfig, networkingConfig, err := s.decoder.DecodeConfig(r.Body)
 	if err != nil {
 		return err
 	}
 	version := httputils.VersionFromContext(ctx)
-	adjustCPUShares := version.LessThan("1.19")
+	adjustCPUShares := versions.LessThan(version, "1.19")
 
 	ccr, err := s.backend.ContainerCreate(types.ContainerCreateConfig{
 		Name:             name,
@@ -421,15 +409,7 @@ func (s *containerRouter) postContainersAttach(ctx context.Context, w http.Respo
 	containerName := vars["name"]
 
 	_, upgrade := r.Header["Upgrade"]
-
-	keys := []byte{}
 	detachKeys := r.FormValue("detachKeys")
-	if detachKeys != "" {
-		keys, err = term.ToBytes(detachKeys)
-		if err != nil {
-			logrus.Warnf("Invalid escape keys provided (%s) using default : ctrl-p ctrl-q", detachKeys)
-		}
-	}
 
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
@@ -465,11 +445,24 @@ func (s *containerRouter) postContainersAttach(ctx context.Context, w http.Respo
 		UseStderr:  httputils.BoolValue(r, "stderr"),
 		Logs:       httputils.BoolValue(r, "logs"),
 		Stream:     httputils.BoolValue(r, "stream"),
-		DetachKeys: keys,
+		DetachKeys: detachKeys,
 		MuxStreams: true,
 	}
 
-	return s.backend.ContainerAttach(containerName, attachConfig)
+	if err = s.backend.ContainerAttach(containerName, attachConfig); err != nil {
+		logrus.Errorf("Handler for %s %s returned error: %v", r.Method, r.URL.Path, err)
+		// Remember to close stream if error happens
+		conn, _, errHijack := hijacker.Hijack()
+		if errHijack == nil {
+			statusCode := httputils.GetHTTPErrorStatusCode(err)
+			statusText := http.StatusText(statusCode)
+			fmt.Fprintf(conn, "HTTP/1.1 %d %s\r\nContent-Type: application/vnd.docker.raw-stream\r\n\r\n%s\r\n", statusCode, statusText, err.Error())
+			httputils.CloseStreams(conn)
+		} else {
+			logrus.Errorf("Error Hijacking: %v", err)
+		}
+	}
+	return nil
 }
 
 func (s *containerRouter) wsContainersAttach(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -478,15 +471,8 @@ func (s *containerRouter) wsContainersAttach(ctx context.Context, w http.Respons
 	}
 	containerName := vars["name"]
 
-	var keys []byte
 	var err error
 	detachKeys := r.FormValue("detachKeys")
-	if detachKeys != "" {
-		keys, err = term.ToBytes(detachKeys)
-		if err != nil {
-			logrus.Warnf("Invalid escape keys provided (%s) using default : ctrl-p ctrl-q", detachKeys)
-		}
-	}
 
 	done := make(chan struct{})
 	started := make(chan struct{})
@@ -512,7 +498,7 @@ func (s *containerRouter) wsContainersAttach(ctx context.Context, w http.Respons
 		GetStreams: setupStreams,
 		Logs:       httputils.BoolValue(r, "logs"),
 		Stream:     httputils.BoolValue(r, "stream"),
-		DetachKeys: keys,
+		DetachKeys: detachKeys,
 		UseStdin:   true,
 		UseStdout:  true,
 		UseStderr:  true,

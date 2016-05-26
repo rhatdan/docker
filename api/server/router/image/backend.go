@@ -3,10 +3,10 @@ package image
 import (
 	"io"
 
-	"github.com/docker/docker/reference"
+	"github.com/docker/docker/api/types/backend"
 	"github.com/docker/engine-api/types"
-	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/registry"
+	"golang.org/x/net/context"
 )
 
 // Backend is all the methods that need to be implemented
@@ -19,7 +19,7 @@ type Backend interface {
 }
 
 type containerBackend interface {
-	Commit(name string, config *types.ContainerCommitConfig) (imageID string, err error)
+	Commit(name string, config *backend.ContainerCommitConfig) (imageID string, err error)
 }
 
 type imageBackend interface {
@@ -27,17 +27,17 @@ type imageBackend interface {
 	ImageHistory(imageName string) ([]*types.ImageHistory, error)
 	Images(filterArgs string, filter string, all bool) ([]*types.Image, error)
 	LookupImage(name string) (*types.ImageInspect, error)
-	TagImage(newTag reference.Named, imageName string) error
+	TagImage(imageName, repository, tag string) error
 }
 
 type importExportBackend interface {
 	LoadImage(inTar io.ReadCloser, outStream io.Writer, quiet bool) error
-	ImportImage(src string, newRef reference.Named, msg string, inConfig io.ReadCloser, outStream io.Writer, config *container.Config) error
+	ImportImage(src string, repository, tag string, msg string, inConfig io.ReadCloser, outStream io.Writer, changes []string) error
 	ExportImage(names []string, outStream io.Writer) error
 }
 
 type registryBackend interface {
-	PullImage(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error
-	PushImage(ref reference.Named, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error
-	SearchRegistryForImages(term string, authConfig *types.AuthConfig, metaHeaders map[string][]string) (*registry.SearchResults, error)
+	PullImage(ctx context.Context, image, tag string, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error
+	PushImage(ctx context.Context, image, tag string, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error
+	SearchRegistryForImages(ctx context.Context, filtersArgs string, term string, authConfig *types.AuthConfig, metaHeaders map[string][]string) (*registry.SearchResults, error)
 }

@@ -5,8 +5,8 @@ dockerargs = --privileged -v $(shell pwd):/go/src/github.com/docker/libnetwork -
 container_env = -e "INSIDECONTAINER=-incontainer=true"
 docker = docker run --rm -it ${dockerargs} $$EXTRA_ARGS ${container_env} ${build_image}
 ciargs = -e CIRCLECI -e "COVERALLS_TOKEN=$$COVERALLS_TOKEN" -e "INSIDECONTAINER=-incontainer=true"
-cidocker = docker run ${dockerargs} ${ciargs} ${container_env} ${build_image}
-CROSS_PLATFORMS = linux/amd64 linux/386 linux/arm windows/amd64 windows/386
+cidocker = docker run ${dockerargs} ${ciargs} $$EXTRA_ARGS ${container_env} ${build_image}
+CROSS_PLATFORMS = linux/amd64 linux/386 linux/arm windows/amd64
 
 all: ${build_image}.created build check integration-tests clean
 
@@ -23,7 +23,7 @@ build: ${build_image}.created
 
 build-local:
 	@mkdir -p "bin"
-	$(shell which godep) go build -o "bin/dnet" ./cmd/dnet
+	$(shell which godep) go build -tags experimental -o "bin/dnet" ./cmd/dnet
 
 clean:
 	@if [ -d bin ]; then \
@@ -102,4 +102,4 @@ circle-ci-check: ${build_image}.created
 circle-ci-build: ${build_image}.created
 	@${cidocker} make build-local
 
-circle-ci: circle-ci-check circle-ci-build integration-tests
+circle-ci: circle-ci-check circle-ci-cross circle-ci-build integration-tests

@@ -2,12 +2,11 @@ package data
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
-	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/go/canonical/json"
+	"github.com/docker/notary"
 )
 
 // SignedSnapshot is a fully unpacked snapshot.json
@@ -19,30 +18,41 @@ type SignedSnapshot struct {
 
 // Snapshot is the Signed component of a snapshot.json
 type Snapshot struct {
-	Type    string    `json:"_type"`
-	Version int       `json:"version"`
-	Expires time.Time `json:"expires"`
-	Meta    Files     `json:"meta"`
+	SignedCommon
+	Meta Files `json:"meta"`
 }
 
-// isValidSnapshotStructure returns an error, or nil, depending on whether the content of the
+// IsValidSnapshotStructure returns an error, or nil, depending on whether the content of the
 // struct is valid for snapshot metadata.  This does not check signatures or expiry, just that
 // the metadata content is valid.
-func isValidSnapshotStructure(s Snapshot) error {
+func IsValidSnapshotStructure(s Snapshot) error {
 	expectedType := TUFTypes[CanonicalSnapshotRole]
 	if s.Type != expectedType {
 		return ErrInvalidMetadata{
 			role: CanonicalSnapshotRole, msg: fmt.Sprintf("expected type %s, not %s", expectedType, s.Type)}
 	}
 
+	if s.Version < 1 {
+		return ErrInvalidMetadata{
+			role: CanonicalSnapshotRole, msg: "version cannot be less than one"}
+	}
+
 	for _, role := range []string{CanonicalRootRole, CanonicalTargetsRole} {
 		// Meta is a map of FileMeta, so if the role isn't in the map it returns
 		// an empty FileMeta, which has an empty map, and you can check on keys
 		// from an empty map.
-		if checksum, ok := s.Meta[role].Hashes["sha256"]; !ok || len(checksum) != sha256.Size {
+		//
+		// For now sha256 is required and sha512 is not.
+		if _, ok := s.Meta[role].Hashes[notary.SHA256]; !ok {
 			return ErrInvalidMetadata{
 				role: CanonicalSnapshotRole,
-				msg:  fmt.Sprintf("missing or invalid %s sha256 checksum information", role),
+				msg:  fmt.Sprintf("missing %s sha256 checksum information", role),
+			}
+		}
+		if err := CheckValidHashStructures(s.Meta[role].Hashes); err != nil {
+			return ErrInvalidMetadata{
+				role: CanonicalSnapshotRole,
+				msg:  fmt.Sprintf("invalid %s checksum information, %v", role, err),
 			}
 		}
 	}
@@ -63,30 +73,28 @@ func NewSnapshot(root *Signed, targets *Signed) (*SignedSnapshot, error) {
 		logrus.Debug("Error Marshalling Root")
 		return nil, err
 	}
-	rootMeta, err := NewFileMeta(bytes.NewReader(rootJSON), "sha256")
+	rootMeta, err := NewFileMeta(bytes.NewReader(rootJSON), NotaryDefaultHashes...)
 	if err != nil {
 		return nil, err
 	}
-	targetsMeta, err := NewFileMeta(bytes.NewReader(targetsJSON), "sha256")
+	targetsMeta, err := NewFileMeta(bytes.NewReader(targetsJSON), NotaryDefaultHashes...)
 	if err != nil {
 		return nil, err
 	}
 	return &SignedSnapshot{
 		Signatures: make([]Signature, 0),
 		Signed: Snapshot{
-			Type:    TUFTypes["snapshot"],
-			Version: 0,
-			Expires: DefaultExpires("snapshot"),
+			SignedCommon: SignedCommon{
+				Type:    TUFTypes[CanonicalSnapshotRole],
+				Version: 0,
+				Expires: DefaultExpires(CanonicalSnapshotRole),
+			},
 			Meta: Files{
 				CanonicalRootRole:    rootMeta,
 				CanonicalTargetsRole: targetsMeta,
 			},
 		},
 	}, nil
-}
-
-func (sp *SignedSnapshot) hashForRole(role string) []byte {
-	return sp.Signed.Meta[role].Hashes["sha256"]
 }
 
 // ToSigned partially serializes a SignedSnapshot for further signing
@@ -104,7 +112,7 @@ func (sp *SignedSnapshot) ToSigned() (*Signed, error) {
 	copy(sigs, sp.Signatures)
 	return &Signed{
 		Signatures: sigs,
-		Signed:     signed,
+		Signed:     &signed,
 	}, nil
 }
 
@@ -118,7 +126,9 @@ func (sp *SignedSnapshot) AddMeta(role string, meta FileMeta) {
 // not found
 func (sp *SignedSnapshot) GetMeta(role string) (*FileMeta, error) {
 	if meta, ok := sp.Signed.Meta[role]; ok {
-		return &meta, nil
+		if _, ok := meta.Hashes["sha256"]; ok {
+			return &meta, nil
+		}
 	}
 	return nil, ErrMissingMeta{Role: role}
 }
@@ -144,10 +154,10 @@ func (sp *SignedSnapshot) MarshalJSON() ([]byte, error) {
 // SnapshotFromSigned fully unpacks a Signed object into a SignedSnapshot
 func SnapshotFromSigned(s *Signed) (*SignedSnapshot, error) {
 	sp := Snapshot{}
-	if err := defaultSerializer.Unmarshal(s.Signed, &sp); err != nil {
+	if err := defaultSerializer.Unmarshal(*s.Signed, &sp); err != nil {
 		return nil, err
 	}
-	if err := isValidSnapshotStructure(sp); err != nil {
+	if err := IsValidSnapshotStructure(sp); err != nil {
 		return nil, err
 	}
 	sigs := make([]Signature, len(s.Signatures))

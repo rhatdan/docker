@@ -33,7 +33,7 @@ func (daemon *Daemon) createContainerPlatformSpecificSettings(container *contain
 
 		// Create the volume in the volume driver. If it doesn't exist,
 		// a new one will be created.
-		v, err := daemon.volumes.CreateWithRef(mp.Name, volumeDriver, container.ID, nil)
+		v, err := daemon.volumes.CreateWithRef(mp.Name, volumeDriver, container.ID, nil, nil)
 		if err != nil {
 			return err
 		}
@@ -46,7 +46,7 @@ func (daemon *Daemon) createContainerPlatformSpecificSettings(container *contain
 		// is deferred for now. A case where this would be useful is when
 		// a dockerfile includes a VOLUME statement, but something is created
 		// in that directory during the dockerfile processing. What this means
-		// on Windows for TP4 is that in that scenario, the contents will not
+		// on Windows for TP5 is that in that scenario, the contents will not
 		// copied, but that's (somewhat) OK as HCS will bomb out soon after
 		// at it doesn't support mapped directories which have contents in the
 		// destination path anyway.

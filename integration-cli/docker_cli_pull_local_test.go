@@ -279,6 +279,31 @@ func (s *DockerSchema1RegistrySuite) TestPullIDStability(c *check.C) {
 	testPullIDStability(c)
 }
 
+// #21213
+func testPullNoLayers(c *check.C) {
+	repoName := fmt.Sprintf("%v/dockercli/scratch", privateRegistryURL)
+
+	_, err := buildImage(repoName, `
+	FROM scratch
+	ENV foo bar`,
+		true)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	dockerCmd(c, "push", repoName)
+	dockerCmd(c, "rmi", repoName)
+	dockerCmd(c, "pull", repoName)
+}
+
+func (s *DockerRegistrySuite) TestPullNoLayers(c *check.C) {
+	testPullNoLayers(c)
+}
+
+func (s *DockerSchema1RegistrySuite) TestPullNoLayers(c *check.C) {
+	testPullNoLayers(c)
+}
+
 func (s *DockerRegistrySuite) TestPullManifestList(c *check.C) {
 	testRequires(c, NotArm)
 	pushDigest, err := setupImage(c)
@@ -362,7 +387,7 @@ func (s *DockerRegistrySuite) TestPullManifestList(c *check.C) {
 	dockerCmd(c, "rmi", repoName)
 }
 
-func (s *DockerRegistryAuthSuite) TestPullWithExternalAuth(c *check.C) {
+func (s *DockerRegistryAuthHtpasswdSuite) TestPullWithExternalAuth(c *check.C) {
 	osPath := os.Getenv("PATH")
 	defer os.Setenv("PATH", osPath)
 
@@ -385,7 +410,7 @@ func (s *DockerRegistryAuthSuite) TestPullWithExternalAuth(c *check.C) {
 	err = ioutil.WriteFile(configPath, []byte(externalAuthConfig), 0644)
 	c.Assert(err, checker.IsNil)
 
-	dockerCmd(c, "--config", tmp, "login", "-u", s.reg.username, "-p", s.reg.password, "-e", s.reg.email, privateRegistryURL)
+	dockerCmd(c, "--config", tmp, "login", "-u", s.reg.username, "-p", s.reg.password, privateRegistryURL)
 
 	b, err := ioutil.ReadFile(configPath)
 	c.Assert(err, checker.IsNil)
@@ -395,4 +420,27 @@ func (s *DockerRegistryAuthSuite) TestPullWithExternalAuth(c *check.C) {
 	dockerCmd(c, "--config", tmp, "push", repoName)
 
 	dockerCmd(c, "--config", tmp, "pull", repoName)
+}
+
+// TestRunImplicitPullWithNoTag should pull implicitly only the default tag (latest)
+func (s *DockerRegistrySuite) TestRunImplicitPullWithNoTag(c *check.C) {
+	testRequires(c, DaemonIsLinux)
+	repo := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoTag1 := fmt.Sprintf("%v:latest", repo)
+	repoTag2 := fmt.Sprintf("%v:t1", repo)
+	// tag the image and upload it to the private registry
+	dockerCmd(c, "tag", "busybox", repoTag1)
+	dockerCmd(c, "tag", "busybox", repoTag2)
+	dockerCmd(c, "push", repo)
+	dockerCmd(c, "rmi", repoTag1)
+	dockerCmd(c, "rmi", repoTag2)
+
+	out, _, err := dockerCmdWithError("run", repo)
+	c.Assert(err, check.IsNil)
+	c.Assert(out, checker.Contains, fmt.Sprintf("Unable to find image '%s:latest' locally", repo))
+
+	// There should be only one line for repo, the one with repo:latest
+	outImageCmd, _, err := dockerCmdWithError("images", repo)
+	splitOutImageCmd := strings.Split(strings.TrimSpace(outImageCmd), "\n")
+	c.Assert(splitOutImageCmd, checker.HasLen, 2)
 }

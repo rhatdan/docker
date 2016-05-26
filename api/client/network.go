@@ -7,6 +7,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"golang.org/x/net/context"
+
 	Cli "github.com/docker/docker/cli"
 	"github.com/docker/docker/opts"
 	flag "github.com/docker/docker/pkg/mflag"
@@ -42,6 +44,7 @@ func (cli *DockerCli) CmdNetworkCreate(args ...string) error {
 	flIpamGateway := opts.NewListOpts(nil)
 	flIpamAux := opts.NewMapOpts(nil, nil)
 	flIpamOpt := opts.NewMapOpts(nil, nil)
+	flLabels := opts.NewListOpts(nil)
 
 	cmd.Var(&flIpamSubnet, []string{"-subnet"}, "subnet in CIDR format that represents a network segment")
 	cmd.Var(&flIpamIPRange, []string{"-ip-range"}, "allocate container ip from a sub-range")
@@ -49,6 +52,7 @@ func (cli *DockerCli) CmdNetworkCreate(args ...string) error {
 	cmd.Var(flIpamAux, []string{"-aux-address"}, "auxiliary ipv4 or ipv6 addresses used by Network driver")
 	cmd.Var(flOpts, []string{"o", "-opt"}, "set driver specific options")
 	cmd.Var(flIpamOpt, []string{"-ipam-opt"}, "set IPAM driver specific options")
+	cmd.Var(&flLabels, []string{"-label"}, "set metadata on a network")
 
 	flInternal := cmd.Bool([]string{"-internal"}, false, "restricts external access to the network")
 	flIPv6 := cmd.Bool([]string{"-ipv6"}, false, "enable IPv6 networking")
@@ -73,16 +77,16 @@ func (cli *DockerCli) CmdNetworkCreate(args ...string) error {
 
 	// Construct network create request body
 	nc := types.NetworkCreate{
-		Name:           cmd.Arg(0),
 		Driver:         driver,
 		IPAM:           network.IPAM{Driver: *flIpamDriver, Config: ipamCfg, Options: flIpamOpt.GetAll()},
 		Options:        flOpts.GetAll(),
 		CheckDuplicate: true,
 		Internal:       *flInternal,
 		EnableIPv6:     *flIPv6,
+		Labels:         runconfigopts.ConvertKVStringsToMap(flLabels.GetAll()),
 	}
 
-	resp, err := cli.client.NetworkCreate(nc)
+	resp, err := cli.client.NetworkCreate(context.Background(), cmd.Arg(0), nc)
 	if err != nil {
 		return err
 	}
@@ -100,9 +104,11 @@ func (cli *DockerCli) CmdNetworkRm(args ...string) error {
 		return err
 	}
 
+	ctx := context.Background()
+
 	status := 0
 	for _, net := range cmd.Args() {
-		if err := cli.client.NetworkRemove(net); err != nil {
+		if err := cli.client.NetworkRemove(ctx, net); err != nil {
 			fmt.Fprintf(cli.err, "%s\n", err)
 			status = 1
 			continue
@@ -137,7 +143,7 @@ func (cli *DockerCli) CmdNetworkConnect(args ...string) error {
 		Links:   flLinks.GetAll(),
 		Aliases: flAliases.GetAll(),
 	}
-	return cli.client.NetworkConnect(cmd.Arg(0), cmd.Arg(1), epConfig)
+	return cli.client.NetworkConnect(context.Background(), cmd.Arg(0), cmd.Arg(1), epConfig)
 }
 
 // CmdNetworkDisconnect disconnects a container from a network
@@ -151,7 +157,7 @@ func (cli *DockerCli) CmdNetworkDisconnect(args ...string) error {
 		return err
 	}
 
-	return cli.client.NetworkDisconnect(cmd.Arg(0), cmd.Arg(1), *force)
+	return cli.client.NetworkDisconnect(context.Background(), cmd.Arg(0), cmd.Arg(1), *force)
 }
 
 // CmdNetworkLs lists all the networks managed by docker daemon
@@ -184,7 +190,7 @@ func (cli *DockerCli) CmdNetworkLs(args ...string) error {
 		Filters: netFilterArgs,
 	}
 
-	networkResources, err := cli.client.NetworkList(options)
+	networkResources, err := cli.client.NetworkList(context.Background(), options)
 	if err != nil {
 		return err
 	}
@@ -235,8 +241,10 @@ func (cli *DockerCli) CmdNetworkInspect(args ...string) error {
 		return err
 	}
 
+	ctx := context.Background()
+
 	inspectSearcher := func(name string) (interface{}, []byte, error) {
-		i, err := cli.client.NetworkInspect(name)
+		i, err := cli.client.NetworkInspect(ctx, name)
 		return i, nil, err
 	}
 
@@ -367,19 +375,19 @@ func subnetMatches(subnet, data string) (bool, error) {
 }
 
 func networkUsage() string {
-	networkCommands := map[string]string{
-		"create":     "Create a network",
-		"connect":    "Connect container to a network",
-		"disconnect": "Disconnect container from a network",
-		"inspect":    "Display detailed network information",
-		"ls":         "List all networks",
-		"rm":         "Remove a network",
+	networkCommands := [][]string{
+		{"create", "Create a network"},
+		{"connect", "Connect container to a network"},
+		{"disconnect", "Disconnect container from a network"},
+		{"inspect", "Display detailed network information"},
+		{"ls", "List all networks"},
+		{"rm", "Remove a network"},
 	}
 
 	help := "Commands:\n"
 
-	for cmd, description := range networkCommands {
-		help += fmt.Sprintf("  %-25.25s%s\n", cmd, description)
+	for _, cmd := range networkCommands {
+		help += fmt.Sprintf("  %-25.25s%s\n", cmd[0], cmd[1])
 	}
 
 	help += fmt.Sprintf("\nRun 'docker network COMMAND --help' for more information on a command.")

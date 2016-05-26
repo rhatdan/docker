@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
 	"golang.org/x/net/context"
 
+	"github.com/Sirupsen/logrus"
 	Cli "github.com/docker/docker/cli"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/events"
@@ -31,6 +33,8 @@ func (cli *DockerCli) CmdStats(args ...string) error {
 	showAll := len(names) == 0
 	closeChan := make(chan error)
 
+	ctx := context.Background()
+
 	// monitorContainerEvents watches for container creation and removal (only
 	// used when calling `docker stats` without arguments).
 	monitorContainerEvents := func(started chan<- struct{}, c chan events.Message) {
@@ -39,7 +43,7 @@ func (cli *DockerCli) CmdStats(args ...string) error {
 		options := types.EventsOptions{
 			Filters: f,
 		}
-		resBody, err := cli.client.Events(context.Background(), options)
+		resBody, err := cli.client.Events(ctx, options)
 		// Whether we successfully subscribed to events or not, we can now
 		// unblock the main goroutine.
 		close(started)
@@ -59,6 +63,9 @@ func (cli *DockerCli) CmdStats(args ...string) error {
 		})
 	}
 
+	// waitFirst is a WaitGroup to wait first stat data's reach for each container
+	waitFirst := &sync.WaitGroup{}
+
 	cStats := stats{}
 	// getContainerList simulates creation event for all previously existing
 	// containers (only used when calling `docker stats` without arguments).
@@ -66,14 +73,16 @@ func (cli *DockerCli) CmdStats(args ...string) error {
 		options := types.ContainerListOptions{
 			All: *all,
 		}
-		cs, err := cli.client.ContainerList(options)
+		cs, err := cli.client.ContainerList(ctx, options)
 		if err != nil {
 			closeChan <- err
 		}
 		for _, container := range cs {
 			s := &containerStats{Name: container.ID[:12]}
-			cStats.add(s)
-			go s.Collect(cli.client, !*noStream)
+			if cStats.add(s) {
+				waitFirst.Add(1)
+				go s.Collect(ctx, cli.client, !*noStream, waitFirst)
+			}
 		}
 	}
 
@@ -87,15 +96,19 @@ func (cli *DockerCli) CmdStats(args ...string) error {
 		eh.Handle("create", func(e events.Message) {
 			if *all {
 				s := &containerStats{Name: e.ID[:12]}
-				cStats.add(s)
-				go s.Collect(cli.client, !*noStream)
+				if cStats.add(s) {
+					waitFirst.Add(1)
+					go s.Collect(ctx, cli.client, !*noStream, waitFirst)
+				}
 			}
 		})
 
 		eh.Handle("start", func(e events.Message) {
 			s := &containerStats{Name: e.ID[:12]}
-			cStats.add(s)
-			go s.Collect(cli.client, !*noStream)
+			if cStats.add(s) {
+				waitFirst.Add(1)
+				go s.Collect(ctx, cli.client, !*noStream, waitFirst)
+			}
 		})
 
 		eh.Handle("die", func(e events.Message) {
@@ -112,14 +125,16 @@ func (cli *DockerCli) CmdStats(args ...string) error {
 
 		// Start a short-lived goroutine to retrieve the initial list of
 		// containers.
-		go getContainerList()
+		getContainerList()
 	} else {
 		// Artificially send creation events for the containers we were asked to
 		// monitor (same code path than we use when monitoring all containers).
 		for _, name := range names {
 			s := &containerStats{Name: name}
-			cStats.add(s)
-			go s.Collect(cli.client, !*noStream)
+			if cStats.add(s) {
+				waitFirst.Add(1)
+				go s.Collect(ctx, cli.client, !*noStream, waitFirst)
+			}
 		}
 
 		// We don't expect any asynchronous errors: closeChan can be closed.
@@ -143,30 +158,25 @@ func (cli *DockerCli) CmdStats(args ...string) error {
 		}
 	}
 
+	// before print to screen, make sure each container get at least one valid stat data
+	waitFirst.Wait()
+
 	w := tabwriter.NewWriter(cli.out, 20, 1, 3, ' ', 0)
 	printHeader := func() {
 		if !*noStream {
 			fmt.Fprint(cli.out, "\033[2J")
 			fmt.Fprint(cli.out, "\033[H")
 		}
-		io.WriteString(w, "CONTAINER\tCPU %\tMEM USAGE / LIMIT\tMEM %\tNET I/O\tBLOCK I/O\n")
+		io.WriteString(w, "CONTAINER\tCPU %\tMEM USAGE / LIMIT\tMEM %\tNET I/O\tBLOCK I/O\tPIDS\n")
 	}
 
 	for range time.Tick(500 * time.Millisecond) {
 		printHeader()
-		toRemove := []int{}
 		cStats.mu.Lock()
-		for i, s := range cStats.cs {
+		for _, s := range cStats.cs {
 			if err := s.Display(w); err != nil && !*noStream {
-				toRemove = append(toRemove, i)
+				logrus.Debugf("stats: got error for %s: %v", s.Name, err)
 			}
-		}
-		for j := len(toRemove) - 1; j >= 0; j-- {
-			i := toRemove[j]
-			cStats.cs = append(cStats.cs[:i], cStats.cs[i+1:]...)
-		}
-		if len(cStats.cs) == 0 && !showAll {
-			return nil
 		}
 		cStats.mu.Unlock()
 		w.Flush()

@@ -213,7 +213,7 @@ func (c *controller) sandboxCleanup() {
 			var ep *endpoint
 			if err != nil {
 				logrus.Errorf("getNetworkFromStore for nid %s failed while trying to build sandbox for cleanup: %v", eps.Nid, err)
-				n = &network{id: eps.Nid, ctrlr: c, drvOnce: &sync.Once{}}
+				n = &network{id: eps.Nid, ctrlr: c, drvOnce: &sync.Once{}, persist: true}
 				ep = &endpoint{id: eps.Eid, network: n, sandboxID: sbs.ID}
 			} else {
 				ep, err = n.getEndpointFromStore(eps.Eid)
@@ -226,6 +226,7 @@ func (c *controller) sandboxCleanup() {
 			heap.Push(&sb.endpoints, ep)
 		}
 
+		logrus.Infof("Removing stale sandbox %s (%s)", sb.id, sb.containerID)
 		if err := sb.delete(true); err != nil {
 			logrus.Errorf("failed to delete sandbox %s while trying to cleanup: %v", sb.id, err)
 		}

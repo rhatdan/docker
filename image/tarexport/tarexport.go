@@ -18,19 +18,28 @@ type manifestItem struct {
 	Config   string
 	RepoTags []string
 	Layers   []string
+	Parent   image.ID `json:",omitempty"`
 }
 
 type tarexporter struct {
-	is image.Store
-	ls layer.Store
-	rs reference.Store
+	is             image.Store
+	ls             layer.Store
+	rs             reference.Store
+	loggerImgEvent LogImageEvent
+}
+
+// LogImageEvent defines interface for event generation related to image tar(load and save) operations
+type LogImageEvent interface {
+	//LogImageEvent generates an event related to an image operation
+	LogImageEvent(imageID, refName, action string)
 }
 
 // NewTarExporter returns new ImageExporter for tar packages
-func NewTarExporter(is image.Store, ls layer.Store, rs reference.Store) image.Exporter {
+func NewTarExporter(is image.Store, ls layer.Store, rs reference.Store, loggerImgEvent LogImageEvent) image.Exporter {
 	return &tarexporter{
-		is: is,
-		ls: ls,
-		rs: rs,
+		is:             is,
+		ls:             ls,
+		rs:             rs,
+		loggerImgEvent: loggerImgEvent,
 	}
 }

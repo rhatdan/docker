@@ -8,9 +8,9 @@ import (
 	"os"
 	"path"
 	"strings"
-	"text/template"
 
 	"github.com/docker/docker/pkg/aaparser"
+	"github.com/docker/docker/utils/templates"
 )
 
 var (
@@ -24,8 +24,6 @@ var (
 type profileData struct {
 	// Name is profile name.
 	Name string
-	// ExecPath is the path to the docker binary.
-	ExecPath string
 	// Imports defines the apparmor functions to import, before defining the profile.
 	Imports []string
 	// InnerImports defines the apparmor functions to import in the profile.
@@ -36,18 +34,27 @@ type profileData struct {
 
 // generateDefault creates an apparmor profile from ProfileData.
 func (p *profileData) generateDefault(out io.Writer) error {
-	compiled, err := template.New("apparmor_profile").Parse(baseTemplate)
+	compiled, err := templates.NewParse("apparmor_profile", baseTemplate)
 	if err != nil {
 		return err
 	}
+
 	if macroExists("tunables/global") {
 		p.Imports = append(p.Imports, "#include <tunables/global>")
 	} else {
 		p.Imports = append(p.Imports, "@{PROC}=/proc/")
 	}
+
 	if macroExists("abstractions/base") {
 		p.InnerImports = append(p.InnerImports, "#include <abstractions/base>")
 	}
+
+	ver, err := aaparser.GetVersion()
+	if err != nil {
+		return err
+	}
+	p.Version = ver
+
 	if err := compiled.Execute(out, p); err != nil {
 		return err
 	}
@@ -89,7 +96,7 @@ func InstallDefault(name string) error {
 	return nil
 }
 
-// IsLoaded checks if a passed profile as been loaded into the kernel.
+// IsLoaded checks if a passed profile has been loaded into the kernel.
 func IsLoaded(name string) error {
 	file, err := os.Open("/sys/kernel/security/apparmor/profiles")
 	if err != nil {

@@ -22,7 +22,8 @@ func (a *volumeDriverAdapter) Create(name string, opts map[string]string) (volum
 	return &volumeAdapter{
 		proxy:      a.proxy,
 		name:       name,
-		driverName: a.name}, nil
+		driverName: a.name,
+	}, nil
 }
 
 func (a *volumeDriverAdapter) Remove(v volume.Volume) error {
@@ -63,6 +64,7 @@ func (a *volumeDriverAdapter) Get(name string) (volume.Volume, error) {
 		name:       v.Name,
 		driverName: a.Name(),
 		eMount:     v.Mountpoint,
+		status:     v.Status,
 	}, nil
 }
 
@@ -71,11 +73,13 @@ type volumeAdapter struct {
 	name       string
 	driverName string
 	eMount     string // ephemeral host volume path
+	status     map[string]interface{}
 }
 
 type proxyVolume struct {
 	Name       string
 	Mountpoint string
+	Status     map[string]interface{}
 }
 
 func (a *volumeAdapter) Name() string {
@@ -87,19 +91,34 @@ func (a *volumeAdapter) DriverName() string {
 }
 
 func (a *volumeAdapter) Path() string {
-	if len(a.eMount) > 0 {
-		return a.eMount
+	if len(a.eMount) == 0 {
+		a.eMount, _ = a.proxy.Path(a.name)
 	}
-	m, _ := a.proxy.Path(a.name)
-	return m
+	return a.eMount
 }
 
-func (a *volumeAdapter) Mount() (string, error) {
+func (a *volumeAdapter) CachedPath() string {
+	return a.eMount
+}
+
+func (a *volumeAdapter) Mount(id string) (string, error) {
 	var err error
-	a.eMount, err = a.proxy.Mount(a.name)
+	a.eMount, err = a.proxy.Mount(a.name, id)
 	return a.eMount, err
 }
 
-func (a *volumeAdapter) Unmount() error {
-	return a.proxy.Unmount(a.name)
+func (a *volumeAdapter) Unmount(id string) error {
+	err := a.proxy.Unmount(a.name, id)
+	if err == nil {
+		a.eMount = ""
+	}
+	return err
+}
+
+func (a *volumeAdapter) Status() map[string]interface{} {
+	out := make(map[string]interface{}, len(a.status))
+	for k, v := range a.status {
+		out[k] = v
+	}
+	return out
 }

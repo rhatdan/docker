@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/docker/docker/cliconfig"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/go-check/check"
 )
@@ -49,7 +52,7 @@ type DockerRegistrySuite struct {
 
 func (s *DockerRegistrySuite) SetUpTest(c *check.C) {
 	testRequires(c, DaemonIsLinux, RegistryHosting)
-	s.reg = setupRegistry(c, false, false)
+	s.reg = setupRegistry(c, false, "", "")
 	s.d = NewDaemon(c)
 }
 
@@ -77,7 +80,7 @@ type DockerSchema1RegistrySuite struct {
 
 func (s *DockerSchema1RegistrySuite) SetUpTest(c *check.C) {
 	testRequires(c, DaemonIsLinux, RegistryHosting)
-	s.reg = setupRegistry(c, true, false)
+	s.reg = setupRegistry(c, true, "", "")
 	s.d = NewDaemon(c)
 }
 
@@ -92,24 +95,24 @@ func (s *DockerSchema1RegistrySuite) TearDownTest(c *check.C) {
 }
 
 func init() {
-	check.Suite(&DockerRegistryAuthSuite{
+	check.Suite(&DockerRegistryAuthHtpasswdSuite{
 		ds: &DockerSuite{},
 	})
 }
 
-type DockerRegistryAuthSuite struct {
+type DockerRegistryAuthHtpasswdSuite struct {
 	ds  *DockerSuite
 	reg *testRegistryV2
 	d   *Daemon
 }
 
-func (s *DockerRegistryAuthSuite) SetUpTest(c *check.C) {
+func (s *DockerRegistryAuthHtpasswdSuite) SetUpTest(c *check.C) {
 	testRequires(c, DaemonIsLinux, RegistryHosting)
-	s.reg = setupRegistry(c, false, true)
+	s.reg = setupRegistry(c, false, "htpasswd", "")
 	s.d = NewDaemon(c)
 }
 
-func (s *DockerRegistryAuthSuite) TearDownTest(c *check.C) {
+func (s *DockerRegistryAuthHtpasswdSuite) TearDownTest(c *check.C) {
 	if s.reg != nil {
 		out, err := s.d.Cmd("logout", privateRegistryURL)
 		c.Assert(err, check.IsNil, check.Commentf(out))
@@ -119,6 +122,42 @@ func (s *DockerRegistryAuthSuite) TearDownTest(c *check.C) {
 		s.d.Stop()
 	}
 	s.ds.TearDownTest(c)
+}
+
+func init() {
+	check.Suite(&DockerRegistryAuthTokenSuite{
+		ds: &DockerSuite{},
+	})
+}
+
+type DockerRegistryAuthTokenSuite struct {
+	ds  *DockerSuite
+	reg *testRegistryV2
+	d   *Daemon
+}
+
+func (s *DockerRegistryAuthTokenSuite) SetUpTest(c *check.C) {
+	testRequires(c, DaemonIsLinux, RegistryHosting)
+	s.d = NewDaemon(c)
+}
+
+func (s *DockerRegistryAuthTokenSuite) TearDownTest(c *check.C) {
+	if s.reg != nil {
+		out, err := s.d.Cmd("logout", privateRegistryURL)
+		c.Assert(err, check.IsNil, check.Commentf(out))
+		s.reg.Close()
+	}
+	if s.d != nil {
+		s.d.Stop()
+	}
+	s.ds.TearDownTest(c)
+}
+
+func (s *DockerRegistryAuthTokenSuite) setupRegistryWithTokenService(c *check.C, tokenURL string) {
+	if s == nil {
+		c.Fatal("registry suite isn't initialized")
+	}
+	s.reg = setupRegistry(c, false, "token", tokenURL)
 }
 
 func init() {
@@ -158,8 +197,8 @@ type DockerTrustSuite struct {
 }
 
 func (s *DockerTrustSuite) SetUpTest(c *check.C) {
-	testRequires(c, RegistryHosting, NotaryHosting)
-	s.reg = setupRegistry(c, false, false)
+	testRequires(c, RegistryHosting, NotaryServerHosting)
+	s.reg = setupRegistry(c, false, "", "")
 	s.not = setupNotary(c)
 }
 
@@ -170,5 +209,8 @@ func (s *DockerTrustSuite) TearDownTest(c *check.C) {
 	if s.not != nil {
 		s.not.Close()
 	}
+
+	// Remove trusted keys and metadata after test
+	os.RemoveAll(filepath.Join(cliconfig.ConfigDir(), "trust"))
 	s.ds.TearDownTest(c)
 }

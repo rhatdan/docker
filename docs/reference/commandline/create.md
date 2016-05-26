@@ -74,22 +74,28 @@ Creates a new container.
       -P, --publish-all             Publish all exposed ports to random ports
       -p, --publish=[]              Publish a container's port(s) to the host
       --pid=""                      PID namespace to use
+      --pids-limit=-1                Tune container pids limit (set -1 for unlimited), kernel >= 4.3
       --privileged                  Give extended privileges to this container
       --read-only                   Mount the container's root filesystem as read only
       --restart="no"                Restart policy (no, on-failure[:max-retry], always, unless-stopped)
       --security-opt=[]             Security options
       --stop-signal="SIGTERM"       Signal to stop a container
       --shm-size=[]                 Size of `/dev/shm`. The format is `<number><unit>`. `number` must be greater than `0`.  Unit is optional and can be `b` (bytes), `k` (kilobytes), `m` (megabytes), or `g` (gigabytes). If you omit the unit, the system uses bytes. If you omit the size entirely, the system uses `64m`.
+      --storage-opt=[]              Set storage driver options per container
+      --sysctl[=*[]*]]              Configure namespaced kernel parameters at runtime
       -t, --tty                     Allocate a pseudo-TTY
       -u, --user=""                 Username or UID
+      --userns=""                   Container user namespace
+                                    'host': Use the Docker host user namespace
+                                    '': Use the Docker daemon user namespace specified by `--userns-remap` option.
       --ulimit=[]                   Ulimit options
       --uts=""                      UTS namespace to use
       -v, --volume=[host-src:]container-dest[:<options>]
                                     Bind mount a volume. The comma-delimited
-                                    `options` are [rw|ro], [z|Z], or
-                                    [[r]shared|[r]slave|[r]private]. The
-                                    'host-src' is an absolute path or a name
-                                    value.
+                                    `options` are [rw|ro], [z|Z],
+                                    [[r]shared|[r]slave|[r]private], and
+                                    [nocopy]. The 'host-src' is an absolute path
+                                    or a name value.
       --volume-driver=""            Container's volume driver
       --volumes-from=[]             Mount volumes from the specified container(s)
       -w, --workdir=""              Working directory inside the container
@@ -141,6 +147,13 @@ then be used from the subsequent container:
     drwx--S---  2 1000 staff  460 Dec  5 00:51 .ssh
     drwxr-xr-x 32 1000 staff 1140 Dec  5 04:01 docker
 
+Set storage driver options per container. 
+
+    $ docker create -it --storage-opt size=120G fedora /bin/bash
+
+This (size) will allow to set the container rootfs size to 120G at creation time. 
+User cannot pass a size less than the Default BaseFS Size. 
+
 ### Specify isolation technology for container (--isolation)
 
 This option is useful in situations where you are running Docker containers on
@@ -151,7 +164,8 @@ Linux namespaces. On Microsoft Windows, you can specify these values:
 
 | Value     | Description                                                                                                                                                   |
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `default` | Use the value specified by the Docker daemon's `--exec-opt` . If the `daemon` does not specify an isolation technology, Microsoft Windows uses `process` as its default value.  |
+| `default` | Use the value specified by the Docker daemon's `--exec-opt` . If the `daemon` does not specify an isolation technology, Microsoft Windows uses `process` as its default value if the
+daemon is running on Windows server, or `hyperv` if running on Windows client.  |
 | `process` | Namespace isolation only.                                                                                                                                     |
 | `hyperv`   | Hyper-V hypervisor partition-based isolation.                                                                                                                  |
 

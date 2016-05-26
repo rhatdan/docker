@@ -21,7 +21,7 @@ const extName = "VolumeDriver"
 // NewVolumeDriver returns a driver has the given name mapped on the given client.
 func NewVolumeDriver(name string, c client) volume.Driver {
 	proxy := &volumeDriverProxy{c}
-	return &volumeDriverAdapter{name, proxy}
+	return &volumeDriverAdapter{name: name, proxy: proxy}
 }
 
 type opts map[string]string
@@ -38,9 +38,9 @@ type volumeDriver interface {
 	// Get the mountpoint of the given volume
 	Path(name string) (mountpoint string, err error)
 	// Mount the given volume and return the mountpoint
-	Mount(name string) (mountpoint string, err error)
+	Mount(name, id string) (mountpoint string, err error)
 	// Unmount the given volume
-	Unmount(name string) (err error)
+	Unmount(name, id string) (err error)
 	// List lists all the volumes known to the driver
 	List() (volumes list, err error)
 	// Get retrieves the volume with the requested name
@@ -71,7 +71,7 @@ func Register(extension volume.Driver, name string) bool {
 	return true
 }
 
-// Unregister dissociates the name from it's driver, if the association exists.
+// Unregister dissociates the name from its driver, if the association exists.
 func Unregister(name string) bool {
 	drivers.Lock()
 	defer drivers.Unlock()
@@ -114,7 +114,7 @@ func Lookup(name string) (volume.Driver, error) {
 	return d, nil
 }
 
-// GetDriver returns a volume driver by it's name.
+// GetDriver returns a volume driver by its name.
 // If the driver is empty, it looks for the local driver.
 func GetDriver(name string) (volume.Driver, error) {
 	if name == "" {

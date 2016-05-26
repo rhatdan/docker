@@ -3,10 +3,9 @@ package volume
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/docker/pkg/system"
 )
 
@@ -38,9 +37,11 @@ type Volume interface {
 	Path() string
 	// Mount mounts the volume and returns the absolute path to
 	// where it can be consumed.
-	Mount() (string, error)
+	Mount(id string) (string, error)
 	// Unmount unmounts the volume when it is no longer in use.
-	Unmount() error
+	Unmount(id string) error
+	// Status returns low-level status information about a volume
+	Status() map[string]interface{}
 }
 
 // MountPoint is the intersection point between a volume and a container. It
@@ -60,29 +61,39 @@ type MountPoint struct {
 	// Note Propagation is not used on Windows
 	Propagation string // Mount propagation string
 	Named       bool   // specifies if the mountpoint was specified by name
+
+	// Specifies if data should be copied from the container before the first mount
+	// Use a pointer here so we can tell if the user set this value explicitly
+	// This allows us to error out when the user explicitly enabled copy but we can't copy due to the volume being populated
+	CopyData bool `json:"-"`
+	// ID is the opaque ID used to pass to the volume driver.
+	// This should be set by calls to `Mount` and unset by calls to `Unmount`
+	ID string
 }
 
 // Setup sets up a mount point by either mounting the volume if it is
 // configured, or creating the source directory if supplied.
 func (m *MountPoint) Setup() (string, error) {
 	if m.Volume != nil {
-		return m.Volume.Mount()
-	}
-	if len(m.Source) > 0 {
-		if _, err := os.Stat(m.Source); err != nil {
-			if !os.IsNotExist(err) {
-				return "", err
-			}
-			if runtime.GOOS != "windows" { // Windows does not have deprecation issues here
-				logrus.Warnf("Auto-creating non-existent volume host path %s, this is deprecated and will be removed soon", m.Source)
-				if err := system.MkdirAll(m.Source, 0755); err != nil {
-					return "", err
-				}
-			}
+		if m.ID == "" {
+			m.ID = stringid.GenerateNonCryptoID()
 		}
-		return m.Source, nil
+		return m.Volume.Mount(m.ID)
 	}
-	return "", fmt.Errorf("Unable to setup mount point, neither source nor volume defined")
+	if len(m.Source) == 0 {
+		return "", fmt.Errorf("Unable to setup mount point, neither source nor volume defined")
+	}
+	// system.MkdirAll() produces an error if m.Source exists and is a file (not a directory),
+	// so first check if the path does not exist
+	if _, err := os.Stat(m.Source); err != nil {
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		if err := system.MkdirAll(m.Source, 0755); err != nil {
+			return "", err
+		}
+	}
+	return m.Source, nil
 }
 
 // Path returns the path of a volume in a mount point.
@@ -93,7 +104,7 @@ func (m *MountPoint) Path() string {
 	return m.Source
 }
 
-// ParseVolumesFrom ensure that the supplied volumes-from is valid.
+// ParseVolumesFrom ensures that the supplied volumes-from is valid.
 func ParseVolumesFrom(spec string) (string, string, error) {
 	if len(spec) == 0 {
 		return "", "", fmt.Errorf("malformed volumes-from specification: %s", spec)
@@ -113,6 +124,10 @@ func ParseVolumesFrom(spec string) (string, string, error) {
 		// the same propagation property as of the original volume
 		// in data container. This probably can be relaxed in future.
 		if HasPropagation(mode) {
+			return "", "", errInvalidMode(mode)
+		}
+		// Do not allow copy modes on volumes-from
+		if _, isSet := getCopyMode(mode); isSet {
 			return "", "", errInvalidMode(mode)
 		}
 	}

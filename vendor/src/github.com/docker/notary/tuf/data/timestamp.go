@@ -2,11 +2,10 @@ package data
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
-	"time"
 
 	"github.com/docker/go/canonical/json"
+	"github.com/docker/notary"
 )
 
 // SignedTimestamp is a fully unpacked timestamp.json
@@ -18,29 +17,39 @@ type SignedTimestamp struct {
 
 // Timestamp is the Signed component of a timestamp.json
 type Timestamp struct {
-	Type    string    `json:"_type"`
-	Version int       `json:"version"`
-	Expires time.Time `json:"expires"`
-	Meta    Files     `json:"meta"`
+	SignedCommon
+	Meta Files `json:"meta"`
 }
 
-// isValidTimestampStructure returns an error, or nil, depending on whether the content of the struct
+// IsValidTimestampStructure returns an error, or nil, depending on whether the content of the struct
 // is valid for timestamp metadata.  This does not check signatures or expiry, just that
 // the metadata content is valid.
-func isValidTimestampStructure(t Timestamp) error {
+func IsValidTimestampStructure(t Timestamp) error {
 	expectedType := TUFTypes[CanonicalTimestampRole]
 	if t.Type != expectedType {
 		return ErrInvalidMetadata{
 			role: CanonicalTimestampRole, msg: fmt.Sprintf("expected type %s, not %s", expectedType, t.Type)}
 	}
 
+	if t.Version < 1 {
+		return ErrInvalidMetadata{
+			role: CanonicalTimestampRole, msg: "version cannot be less than one"}
+	}
+
 	// Meta is a map of FileMeta, so if the role isn't in the map it returns
 	// an empty FileMeta, which has an empty map, and you can check on keys
 	// from an empty map.
-	if cs, ok := t.Meta[CanonicalSnapshotRole].Hashes["sha256"]; !ok || len(cs) != sha256.Size {
+	//
+	// For now sha256 is required and sha512 is not.
+	if _, ok := t.Meta[CanonicalSnapshotRole].Hashes[notary.SHA256]; !ok {
 		return ErrInvalidMetadata{
-			role: CanonicalTimestampRole, msg: "missing or invalid snapshot sha256 checksum information"}
+			role: CanonicalTimestampRole, msg: "missing snapshot sha256 checksum information"}
 	}
+	if err := CheckValidHashStructures(t.Meta[CanonicalSnapshotRole].Hashes); err != nil {
+		return ErrInvalidMetadata{
+			role: CanonicalTimestampRole, msg: fmt.Sprintf("invalid snapshot checksum information, %v", err)}
+	}
+
 	return nil
 }
 
@@ -50,16 +59,18 @@ func NewTimestamp(snapshot *Signed) (*SignedTimestamp, error) {
 	if err != nil {
 		return nil, err
 	}
-	snapshotMeta, err := NewFileMeta(bytes.NewReader(snapshotJSON), "sha256")
+	snapshotMeta, err := NewFileMeta(bytes.NewReader(snapshotJSON), NotaryDefaultHashes...)
 	if err != nil {
 		return nil, err
 	}
 	return &SignedTimestamp{
 		Signatures: make([]Signature, 0),
 		Signed: Timestamp{
-			Type:    TUFTypes["timestamp"],
-			Version: 0,
-			Expires: DefaultExpires("timestamp"),
+			SignedCommon: SignedCommon{
+				Type:    TUFTypes[CanonicalTimestampRole],
+				Version: 0,
+				Expires: DefaultExpires(CanonicalTimestampRole),
+			},
 			Meta: Files{
 				CanonicalSnapshotRole: snapshotMeta,
 			},
@@ -83,7 +94,7 @@ func (ts *SignedTimestamp) ToSigned() (*Signed, error) {
 	copy(sigs, ts.Signatures)
 	return &Signed{
 		Signatures: sigs,
-		Signed:     signed,
+		Signed:     &signed,
 	}, nil
 }
 
@@ -110,10 +121,10 @@ func (ts *SignedTimestamp) MarshalJSON() ([]byte, error) {
 // SignedTimestamp
 func TimestampFromSigned(s *Signed) (*SignedTimestamp, error) {
 	ts := Timestamp{}
-	if err := defaultSerializer.Unmarshal(s.Signed, &ts); err != nil {
+	if err := defaultSerializer.Unmarshal(*s.Signed, &ts); err != nil {
 		return nil, err
 	}
-	if err := isValidTimestampStructure(ts); err != nil {
+	if err := IsValidTimestampStructure(ts); err != nil {
 		return nil, err
 	}
 	sigs := make([]Signature, len(s.Signatures))

@@ -67,6 +67,8 @@ type endpoint struct {
 	ipamOptions       map[string]string
 	aliases           map[string]string
 	myAliases         []string
+	svcID             string
+	svcName           string
 	dbIndex           uint64
 	dbExists          bool
 	sync.Mutex
@@ -89,6 +91,9 @@ func (ep *endpoint) MarshalJSON() ([]byte, error) {
 	epMap["anonymous"] = ep.anonymous
 	epMap["disableResolution"] = ep.disableResolution
 	epMap["myAliases"] = ep.myAliases
+	epMap["svcName"] = ep.svcName
+	epMap["svcID"] = ep.svcID
+
 	return json.Marshal(epMap)
 }
 
@@ -172,6 +177,15 @@ func (ep *endpoint) UnmarshalJSON(b []byte) (err error) {
 	if l, ok := epMap["locator"]; ok {
 		ep.locator = l.(string)
 	}
+
+	if sn, ok := epMap["svcName"]; ok {
+		ep.svcName = sn.(string)
+	}
+
+	if si, ok := epMap["svcID"]; ok {
+		ep.svcID = si.(string)
+	}
+
 	ma, _ := json.Marshal(epMap["myAliases"])
 	var myAliases []string
 	json.Unmarshal(ma, &myAliases)
@@ -196,6 +210,8 @@ func (ep *endpoint) CopyTo(o datastore.KVObject) error {
 	dstEp.dbExists = ep.dbExists
 	dstEp.anonymous = ep.anonymous
 	dstEp.disableResolution = ep.disableResolution
+	dstEp.svcName = ep.svcName
+	dstEp.svcID = ep.svcID
 
 	if ep.iface != nil {
 		dstEp.iface = &endpointInterface{}
@@ -359,22 +375,16 @@ func (ep *endpoint) Join(sbox Sandbox, options ...EndpointOption) error {
 	sb.joinLeaveStart()
 	defer sb.joinLeaveEnd()
 
-	return ep.sbJoin(sbox, options...)
+	return ep.sbJoin(sb, options...)
 }
 
-func (ep *endpoint) sbJoin(sbox Sandbox, options ...EndpointOption) error {
-	var err error
-	sb, ok := sbox.(*sandbox)
-	if !ok {
-		return types.BadRequestErrorf("not a valid Sandbox interface")
-	}
-
-	network, err := ep.getNetworkFromStore()
+func (ep *endpoint) sbJoin(sb *sandbox, options ...EndpointOption) error {
+	n, err := ep.getNetworkFromStore()
 	if err != nil {
 		return fmt.Errorf("failed to get network from store during join: %v", err)
 	}
 
-	ep, err = network.getEndpointFromStore(ep.ID())
+	ep, err = n.getEndpointFromStore(ep.ID())
 	if err != nil {
 		return fmt.Errorf("failed to get endpoint from store during join: %v", err)
 	}
@@ -384,11 +394,8 @@ func (ep *endpoint) sbJoin(sbox Sandbox, options ...EndpointOption) error {
 		ep.Unlock()
 		return types.ForbiddenErrorf("another container is attached to the same network endpoint")
 	}
-	ep.Unlock()
-
-	ep.Lock()
-	ep.network = network
-	ep.sandboxID = sbox.ID()
+	ep.network = n
+	ep.sandboxID = sb.ID()
 	ep.joinInfo = &endpointJoinInfo{}
 	epid := ep.id
 	ep.Unlock()
@@ -400,32 +407,31 @@ func (ep *endpoint) sbJoin(sbox Sandbox, options ...EndpointOption) error {
 		}
 	}()
 
-	network.Lock()
-	nid := network.id
-	network.Unlock()
+	nid := n.ID()
 
 	ep.processOptions(options...)
 
-	driver, err := network.driver(true)
+	d, err := n.driver(true)
 	if err != nil {
 		return fmt.Errorf("failed to join endpoint: %v", err)
 	}
 
-	err = driver.Join(nid, epid, sbox.Key(), ep, sbox.Labels())
+	err = d.Join(nid, epid, sb.Key(), ep, sb.Labels())
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err != nil {
-			// Do not alter global err variable, it's needed by the previous defer
-			if err := driver.Leave(nid, epid); err != nil {
+			if err := d.Leave(nid, epid); err != nil {
 				log.Warnf("driver leave failed while rolling back join: %v", err)
 			}
 		}
 	}()
 
 	// Watch for service records
-	network.getController().watchSvcRecord(ep)
+	if !n.getController().cfg.Daemon.IsAgent {
+		n.getController().watchSvcRecord(ep)
+	}
 
 	address := ""
 	if ip := ep.getFirstInterfaceAddress(); ip != nil {
@@ -434,27 +440,23 @@ func (ep *endpoint) sbJoin(sbox Sandbox, options ...EndpointOption) error {
 	if err = sb.updateHostsFile(address); err != nil {
 		return err
 	}
-	if err = sb.updateDNS(network.enableIPv6); err != nil {
+	if err = sb.updateDNS(n.enableIPv6); err != nil {
 		return err
 	}
 
-	if err = network.getController().updateToStore(ep); err != nil {
+	if err = n.getController().updateToStore(ep); err != nil {
 		return err
 	}
+
+	// Current endpoint providing external connectivity for the sandbox
+	extEp := sb.getGatewayEndpoint()
 
 	sb.Lock()
 	heap.Push(&sb.endpoints, ep)
 	sb.Unlock()
 	defer func() {
 		if err != nil {
-			for i, e := range sb.getConnectedEndpoints() {
-				if e == ep {
-					sb.Lock()
-					heap.Remove(&sb.endpoints, i)
-					sb.Unlock()
-					return
-				}
-			}
+			sb.removeEndpoint(ep)
 		}
 	}()
 
@@ -462,9 +464,54 @@ func (ep *endpoint) sbJoin(sbox Sandbox, options ...EndpointOption) error {
 		return err
 	}
 
-	if sb.needDefaultGW() {
-		return sb.setupDefaultGW(ep)
+	if e := ep.addToCluster(); e != nil {
+		log.Errorf("Could not update state for endpoint %s into cluster: %v", ep.Name(), e)
 	}
+
+	if sb.needDefaultGW() && sb.getEndpointInGWNetwork() == nil {
+		return sb.setupDefaultGW()
+	}
+
+	moveExtConn := sb.getGatewayEndpoint() != extEp
+
+	if moveExtConn {
+		if extEp != nil {
+			log.Debugf("Revoking external connectivity on endpoint %s (%s)", extEp.Name(), extEp.ID())
+			if err = d.RevokeExternalConnectivity(extEp.network.ID(), extEp.ID()); err != nil {
+				return types.InternalErrorf(
+					"driver failed revoking external connectivity on endpoint %s (%s): %v",
+					extEp.Name(), extEp.ID(), err)
+			}
+			defer func() {
+				if err != nil {
+					if e := d.ProgramExternalConnectivity(extEp.network.ID(), extEp.ID(), sb.Labels()); e != nil {
+						log.Warnf("Failed to roll-back external connectivity on endpoint %s (%s): %v",
+							extEp.Name(), extEp.ID(), e)
+					}
+				}
+			}()
+		}
+		if !n.internal {
+			log.Debugf("Programming external connectivity on endpoint %s (%s)", ep.Name(), ep.ID())
+			if err = d.ProgramExternalConnectivity(n.ID(), ep.ID(), sb.Labels()); err != nil {
+				return types.InternalErrorf(
+					"driver failed programming external connectivity on endpoint %s (%s): %v",
+					ep.Name(), ep.ID(), err)
+			}
+		}
+
+		if sb.resolver != nil {
+			sb.resolver.FlushExtServers()
+		}
+	}
+
+	if !sb.needDefaultGW() {
+		if err := sb.clearDefaultGW(); err != nil {
+			log.Warnf("Failure while disconnecting sandbox %s (%s) from gateway network: %v",
+				sb.ID(), sb.ContainerID(), err)
+		}
+	}
+
 	return nil
 }
 
@@ -533,15 +580,14 @@ func (ep *endpoint) Leave(sbox Sandbox, options ...EndpointOption) error {
 	sb.joinLeaveStart()
 	defer sb.joinLeaveEnd()
 
-	return ep.sbLeave(sbox, false, options...)
-}
-
-func (ep *endpoint) sbLeave(sbox Sandbox, force bool, options ...EndpointOption) error {
-	sb, ok := sbox.(*sandbox)
-	if !ok {
-		return types.BadRequestErrorf("not a valid Sandbox interface")
+	if sb.resolver != nil {
+		sb.resolver.FlushExtServers()
 	}
 
+	return ep.sbLeave(sb, false, options...)
+}
+
+func (ep *endpoint) sbLeave(sb *sandbox, force bool, options ...EndpointOption) error {
 	n, err := ep.getNetworkFromStore()
 	if err != nil {
 		return fmt.Errorf("failed to get network from store during leave: %v", err)
@@ -559,8 +605,8 @@ func (ep *endpoint) sbLeave(sbox Sandbox, force bool, options ...EndpointOption)
 	if sid == "" {
 		return types.ForbiddenErrorf("cannot leave endpoint with no attached sandbox")
 	}
-	if sid != sbox.ID() {
-		return types.ForbiddenErrorf("unexpected sandbox ID in leave request. Expected %s. Got %s", ep.sandboxID, sbox.ID())
+	if sid != sb.ID() {
+		return types.ForbiddenErrorf("unexpected sandbox ID in leave request. Expected %s. Got %s", ep.sandboxID, sb.ID())
 	}
 
 	ep.processOptions(options...)
@@ -575,7 +621,19 @@ func (ep *endpoint) sbLeave(sbox Sandbox, force bool, options ...EndpointOption)
 	ep.network = n
 	ep.Unlock()
 
+	// Current endpoint providing external connectivity to the sandbox
+	extEp := sb.getGatewayEndpoint()
+	moveExtConn := extEp != nil && (extEp.ID() == ep.ID())
+
 	if d != nil {
+		if moveExtConn {
+			log.Debugf("Revoking external connectivity on endpoint %s (%s)", ep.Name(), ep.ID())
+			if err := d.RevokeExternalConnectivity(n.id, ep.id); err != nil {
+				log.Warnf("driver failed revoking external connectivity on endpoint %s (%s): %v",
+					ep.Name(), ep.ID(), err)
+			}
+		}
+
 		if err := d.Leave(n.id, ep.id); err != nil {
 			if _, ok := err.(types.MaskableError); !ok {
 				log.Warnf("driver error disconnecting container %s : %v", ep.name, err)
@@ -596,7 +654,32 @@ func (ep *endpoint) sbLeave(sbox Sandbox, force bool, options ...EndpointOption)
 		return err
 	}
 
+	if e := ep.deleteFromCluster(); e != nil {
+		log.Errorf("Could not delete state for endpoint %s from cluster: %v", ep.Name(), e)
+	}
+
 	sb.deleteHostsEntries(n.getSvcRecords(ep))
+	if !sb.inDelete && sb.needDefaultGW() && sb.getEndpointInGWNetwork() == nil {
+		return sb.setupDefaultGW()
+	}
+
+	// New endpoint providing external connectivity for the sandbox
+	extEp = sb.getGatewayEndpoint()
+	if moveExtConn && extEp != nil {
+		log.Debugf("Programming external connectivity on endpoint %s (%s)", extEp.Name(), extEp.ID())
+		if err := d.ProgramExternalConnectivity(extEp.network.ID(), extEp.ID(), sb.Labels()); err != nil {
+			log.Warnf("driver failed programming external connectivity on endpoint %s: (%s) %v",
+				extEp.Name(), extEp.ID(), err)
+		}
+	}
+
+	if !sb.needDefaultGW() {
+		if err := sb.clearDefaultGW(); err != nil {
+			log.Warnf("Failure while disconnecting sandbox %s (%s) from gateway network: %v",
+				sb.ID(), sb.ContainerID(), err)
+		}
+	}
+
 	return nil
 }
 
@@ -643,7 +726,7 @@ func (ep *endpoint) Delete(force bool) error {
 	}
 
 	if sb != nil {
-		if e := ep.sbLeave(sb, force); e != nil {
+		if e := ep.sbLeave(sb.(*sandbox), force); e != nil {
 			log.Warnf("failed to leave sandbox for endpoint %s : %v", name, e)
 		}
 	}
@@ -673,7 +756,9 @@ func (ep *endpoint) Delete(force bool) error {
 	}()
 
 	// unwatch for service records
-	n.getController().unWatchSvcRecord(ep)
+	if !n.getController().cfg.Daemon.IsAgent {
+		n.getController().unWatchSvcRecord(ep)
+	}
 
 	if err = ep.deleteEndpoint(force); err != nil && !force {
 		return err
@@ -806,6 +891,14 @@ func CreateOptionAlias(name string, alias string) EndpointOption {
 	}
 }
 
+// CreateOptionService function returns an option setter for setting service binding configuration
+func CreateOptionService(name, id string) EndpointOption {
+	return func(ep *endpoint) {
+		ep.svcName = name
+		ep.svcID = id
+	}
+}
+
 //CreateOptionMyAlias function returns an option setter for setting endpoint's self alias
 func CreateOptionMyAlias(alias string) EndpointOption {
 	return func(ep *endpoint) {
@@ -924,14 +1017,18 @@ func (ep *endpoint) releaseAddress() {
 
 	log.Debugf("Releasing addresses for endpoint %s's interface on network %s", ep.Name(), n.Name())
 
-	ipam, err := n.getController().getIpamDriver(n.ipamType)
+	ipam, _, err := n.getController().getIPAMDriver(n.ipamType)
 	if err != nil {
 		log.Warnf("Failed to retrieve ipam driver to release interface address on delete of endpoint %s (%s): %v", ep.Name(), ep.ID(), err)
 		return
 	}
-	if err := ipam.ReleaseAddress(ep.iface.v4PoolID, ep.iface.addr.IP); err != nil {
-		log.Warnf("Failed to release ip address %s on delete of endpoint %s (%s): %v", ep.iface.addr.IP, ep.Name(), ep.ID(), err)
+
+	if ep.iface.addr != nil {
+		if err := ipam.ReleaseAddress(ep.iface.v4PoolID, ep.iface.addr.IP); err != nil {
+			log.Warnf("Failed to release ip address %s on delete of endpoint %s (%s): %v", ep.iface.addr.IP, ep.Name(), ep.ID(), err)
+		}
 	}
+
 	if ep.iface.addrv6 != nil && ep.iface.addrv6.IP.IsGlobalUnicast() {
 		if err := ipam.ReleaseAddress(ep.iface.v6PoolID, ep.iface.addrv6.IP); err != nil {
 			log.Warnf("Failed to release ip address %s on delete of endpoint %s (%s): %v", ep.iface.addrv6.IP, ep.Name(), ep.ID(), err)
@@ -954,9 +1051,22 @@ func (c *controller) cleanupLocalEndpoints() {
 		}
 
 		for _, ep := range epl {
+			log.Infof("Removing stale endpoint %s (%s)", ep.name, ep.id)
 			if err := ep.Delete(true); err != nil {
 				log.Warnf("Could not delete local endpoint %s during endpoint cleanup: %v", ep.name, err)
 			}
+		}
+
+		epl, err = n.getEndpointsFromStore()
+		if err != nil {
+			log.Warnf("Could not get list of endpoints in network %s for count update: %v", n.name, err)
+			continue
+		}
+
+		epCnt := n.getEpCnt().EndpointCnt()
+		if epCnt != uint64(len(epl)) {
+			log.Infof("Fixing inconsistent endpoint_cnt for network %s. Expected=%d, Actual=%d", n.name, len(epl), epCnt)
+			n.getEpCnt().setCnt(uint64(len(epl)))
 		}
 	}
 }

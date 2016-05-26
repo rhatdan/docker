@@ -81,7 +81,7 @@ Docker image comprising four layers.
     Status: Downloaded newer image for ubuntu:latest
 
 Each image layer has it's own directory under `/var/lib/docker/overlay/`. This 
-is where the the contents of each image layer are stored. 
+is where the contents of each image layer are stored. 
 
 The output of the command below shows the four directories that store the 
 contents of each image layer just pulled. However, as can be seen, the image 
@@ -218,7 +218,7 @@ OverlayFS. The procedure assumes that the Docker daemon is in a stopped state.
 
 3. Start the Docker daemon with the `overlay` storage driver.
 
-        $ docker daemon --storage-driver=overlay &
+        $ dockerd --storage-driver=overlay &
         [1] 29403
         root@ip-10-0-0-174:/home/ubuntu# INFO[0000] Listening for HTTP on unix (/var/run/docker.sock)
         INFO[0000] Option DefaultDriver: bridge

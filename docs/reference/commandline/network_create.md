@@ -23,6 +23,7 @@ parent = "smn_cli"
     --ipam-driver=default    IP Address Management Driver
     --ipam-opt=map[]         Set custom IPAM driver specific options
     --ipv6                   Enable IPv6 networking
+    --label=[]               Set metadata on a network
     -o --opt=map[]           Set custom driver specific options
     --subnet=[]              Subnet in CIDR format that represents a network segment
 
@@ -97,7 +98,7 @@ disconnect` command.
 
 ## Specifying advanced options
 
-When you create a network, Engine creates a non-overlapping subnetwork for the network by default. This subnetwork is not a subdivision of an existing network. It is purely for ip-addressing purposes. You can override this default and specify subnetwork values directly using the the `--subnet` option. On a `bridge` network you can only create a single subnet:
+When you create a network, Engine creates a non-overlapping subnetwork for the network by default. This subnetwork is not a subdivision of an existing network. It is purely for ip-addressing purposes. You can override this default and specify subnetwork values directly using the `--subnet` option. On a `bridge` network you can only create a single subnet:
 
 ```bash
 docker network create -d --subnet=192.168.0.0/16

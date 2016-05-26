@@ -117,86 +117,8 @@ func (s *DockerSuite) TestPsListContainersBase(c *check.C) {
 
 }
 
-// FIXME remove this for 1.12 as --since and --before are deprecated
-func (s *DockerSuite) TestPsListContainersDeprecatedSinceAndBefore(c *check.C) {
-	out, _ := runSleepingContainer(c, "-d")
-	firstID := strings.TrimSpace(out)
-
-	out, _ = runSleepingContainer(c, "-d")
-	secondID := strings.TrimSpace(out)
-
-	// not long running
-	out, _ = dockerCmd(c, "run", "-d", "busybox", "true")
-	thirdID := strings.TrimSpace(out)
-
-	out, _ = runSleepingContainer(c, "-d")
-	fourthID := strings.TrimSpace(out)
-
-	// make sure the second is running
-	c.Assert(waitRun(secondID), checker.IsNil)
-
-	// make sure third one is not running
-	dockerCmd(c, "wait", thirdID)
-
-	// make sure the forth is running
-	c.Assert(waitRun(fourthID), checker.IsNil)
-
-	// since
-	out, _ = dockerCmd(c, "ps", "--since="+firstID, "-a")
-	expected := []string{fourthID, thirdID, secondID}
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("SINCE & ALL: Container list is not in the correct order: %v \n%s", expected, out))
-
-	out, _ = dockerCmd(c, "ps", "--since="+firstID)
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("SINCE: Container list is not in the correct order: %v \n%s", expected, out))
-
-	// before
-	out, _ = dockerCmd(c, "ps", "--before="+thirdID, "-a")
-	expected = []string{secondID, firstID}
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("BEFORE & ALL: Container list is not in the correct order: %v \n%s", expected, out))
-
-	out, _ = dockerCmd(c, "ps", "--before="+thirdID)
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("BEFORE: Container list is not in the correct order: %v \n%s", expected, out))
-
-	// since & before
-	out, _ = dockerCmd(c, "ps", "--since="+firstID, "--before="+fourthID, "-a")
-	expected = []string{thirdID, secondID}
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("SINCE, BEFORE & ALL: Container list is not in the correct order: %v \n%s", expected, out))
-
-	out, _ = dockerCmd(c, "ps", "--since="+firstID, "--before="+fourthID)
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("SINCE, BEFORE: Container list is not in the correct order: %v \n%s", expected, out))
-
-	// since & limit
-	out, _ = dockerCmd(c, "ps", "--since="+firstID, "-n=2", "-a")
-	expected = []string{fourthID, thirdID}
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("SINCE, LIMIT & ALL: Container list is not in the correct order: %v \n%s", expected, out))
-
-	out, _ = dockerCmd(c, "ps", "--since="+firstID, "-n=2")
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("SINCE, LIMIT: Container list is not in the correct order: %v \n%s", expected, out))
-
-	// before & limit
-	out, _ = dockerCmd(c, "ps", "--before="+fourthID, "-n=1", "-a")
-	expected = []string{thirdID}
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("BEFORE, LIMIT & ALL: Container list is not in the correct order: %v \n%s", expected, out))
-
-	out, _ = dockerCmd(c, "ps", "--before="+fourthID, "-n=1")
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("BEFORE, LIMIT: Container list is not in the correct order: %v \n%s", expected, out))
-
-	// since & before & limit
-	out, _ = dockerCmd(c, "ps", "--since="+firstID, "--before="+fourthID, "-n=1", "-a")
-	expected = []string{thirdID}
-	c.Assert(assertContainerList(out, expected), checker.Equals, true, check.Commentf("SINCE, BEFORE, LIMIT & ALL: Container list is not in the correct order: %v \n%s", expected, out))
-
-}
-
 func assertContainerList(out string, expected []string) bool {
 	lines := strings.Split(strings.Trim(out, "\n "), "\n")
-	// FIXME remove this for 1.12 as --since and --before are deprecated
-	// This is here to remove potential Warning: lines (printed out with deprecated flags)
-	for i := 0; i < 2; i++ {
-		if strings.Contains(lines[0], "Warning:") {
-			lines = lines[1:]
-		}
-	}
 
 	if len(lines)-1 != len(expected) {
 		return false
@@ -211,6 +133,12 @@ func assertContainerList(out string, expected []string) bool {
 	}
 
 	return true
+}
+
+func (s *DockerSuite) TestPsListContainersInvalidFilterName(c *check.C) {
+	out, _, err := dockerCmdWithError("ps", "-f", "invalidFilter=test")
+	c.Assert(err, checker.NotNil)
+	c.Assert(out, checker.Contains, "Invalid filter")
 }
 
 func (s *DockerSuite) TestPsListContainersSize(c *check.C) {
@@ -573,7 +501,7 @@ func (s *DockerSuite) TestPsLinkedWithNoTrunc(c *check.C) {
 func (s *DockerSuite) TestPsGroupPortRange(c *check.C) {
 	// Problematic on Windows as it doesn't support port ranges as of Jan 2016
 	testRequires(c, DaemonIsLinux)
-	portRange := "3800-3900"
+	portRange := "3850-3900"
 	dockerCmd(c, "run", "-d", "--name", "porttest", "-p", portRange+":"+portRange, "busybox", "top")
 
 	out, _ := dockerCmd(c, "ps")
@@ -647,7 +575,22 @@ func (s *DockerSuite) TestPsFormatMultiNames(c *check.C) {
 		truncNames = append(truncNames, l)
 	}
 	c.Assert(expected, checker.DeepEquals, truncNames, check.Commentf("Expected array with truncated names: %v, got: %v", expected, truncNames))
+}
 
+// Test for GitHub issue #21772
+func (s *DockerSuite) TestPsNamesMultipleTime(c *check.C) {
+	runSleepingContainer(c, "--name=test1")
+	runSleepingContainer(c, "--name=test2")
+
+	//use the new format capabilities to list the names twice
+	out, _ := dockerCmd(c, "ps", "--format", "{{.Names}} {{.Names}}")
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	expected := []string{"test2 test2", "test1 test1"}
+	var names []string
+	for _, l := range lines {
+		names = append(names, l)
+	}
+	c.Assert(expected, checker.DeepEquals, names, check.Commentf("Expected array with names displayed twice: %v, got: %v", expected, names))
 }
 
 func (s *DockerSuite) TestPsFormatHeaders(c *check.C) {
@@ -758,22 +701,40 @@ func (s *DockerSuite) TestPsShowMounts(c *check.C) {
 	mp := prefix + slash + "test"
 
 	dockerCmd(c, "volume", "create", "--name", "ps-volume-test")
+	// volume mount containers
 	runSleepingContainer(c, "--name=volume-test-1", "--volume", "ps-volume-test:"+mp)
 	c.Assert(waitRun("volume-test-1"), checker.IsNil)
 	runSleepingContainer(c, "--name=volume-test-2", "--volume", mp)
 	c.Assert(waitRun("volume-test-2"), checker.IsNil)
+	// bind mount container
+	var bindMountSource string
+	var bindMountDestination string
+	if DaemonIsWindows.Condition() {
+		bindMountSource = "c:\\"
+		bindMountDestination = "c:\\t"
+	} else {
+		bindMountSource = "/tmp"
+		bindMountDestination = "/t"
+	}
+	runSleepingContainer(c, "--name=bind-mount-test", "-v", bindMountSource+":"+bindMountDestination)
+	c.Assert(waitRun("bind-mount-test"), checker.IsNil)
 
 	out, _ := dockerCmd(c, "ps", "--format", "{{.Names}} {{.Mounts}}")
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	c.Assert(lines, checker.HasLen, 2)
+	c.Assert(lines, checker.HasLen, 3)
 
 	fields := strings.Fields(lines[0])
+	c.Assert(fields, checker.HasLen, 2)
+	c.Assert(fields[0], checker.Equals, "bind-mount-test")
+	c.Assert(fields[1], checker.Equals, bindMountSource)
+
+	fields = strings.Fields(lines[1])
 	c.Assert(fields, checker.HasLen, 2)
 
 	annonymounsVolumeID := fields[1]
 
-	fields = strings.Fields(lines[1])
+	fields = strings.Fields(lines[2])
 	c.Assert(fields[1], checker.Equals, "ps-volume-test")
 
 	// filter by volume name
@@ -799,6 +760,28 @@ func (s *DockerSuite) TestPsShowMounts(c *check.C) {
 	c.Assert(fields[1], checker.Equals, annonymounsVolumeID)
 	fields = strings.Fields(lines[1])
 	c.Assert(fields[1], checker.Equals, "ps-volume-test")
+
+	// filter by bind mount source
+	out, _ = dockerCmd(c, "ps", "--format", "{{.Names}} {{.Mounts}}", "--filter", "volume="+bindMountSource)
+
+	lines = strings.Split(strings.TrimSpace(string(out)), "\n")
+	c.Assert(lines, checker.HasLen, 1)
+
+	fields = strings.Fields(lines[0])
+	c.Assert(fields, checker.HasLen, 2)
+	c.Assert(fields[0], checker.Equals, "bind-mount-test")
+	c.Assert(fields[1], checker.Equals, bindMountSource)
+
+	// filter by bind mount destination
+	out, _ = dockerCmd(c, "ps", "--format", "{{.Names}} {{.Mounts}}", "--filter", "volume="+bindMountDestination)
+
+	lines = strings.Split(strings.TrimSpace(string(out)), "\n")
+	c.Assert(lines, checker.HasLen, 1)
+
+	fields = strings.Fields(lines[0])
+	c.Assert(fields, checker.HasLen, 2)
+	c.Assert(fields[0], checker.Equals, "bind-mount-test")
+	c.Assert(fields[1], checker.Equals, bindMountSource)
 
 	// empty results filtering by unknown mount point
 	out, _ = dockerCmd(c, "ps", "--format", "{{.Names}} {{.Mounts}}", "--filter", "volume="+prefix+slash+"this-path-was-never-mounted")

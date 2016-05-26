@@ -24,11 +24,11 @@ type inputValidationError interface {
 	IsValidationError() bool
 }
 
-// WriteError decodes a specific docker error and sends it in the response.
-func WriteError(w http.ResponseWriter, err error) {
-	if err == nil || w == nil {
-		logrus.WithFields(logrus.Fields{"error": err, "writer": w}).Error("unexpected HTTP error handling")
-		return
+// GetHTTPErrorStatusCode retrieve status code from error message
+func GetHTTPErrorStatusCode(err error) int {
+	if err == nil {
+		logrus.WithFields(logrus.Fields{"error": err}).Error("unexpected HTTP error handling")
+		return http.StatusInternalServerError
 	}
 
 	var statusCode int
@@ -49,9 +49,11 @@ func WriteError(w http.ResponseWriter, err error) {
 			"not found":             http.StatusNotFound,
 			"no such":               http.StatusNotFound,
 			"bad parameter":         http.StatusBadRequest,
+			"no command":            http.StatusBadRequest,
 			"conflict":              http.StatusConflict,
 			"impossible":            http.StatusNotAcceptable,
 			"wrong login/password":  http.StatusUnauthorized,
+			"unauthorized":          http.StatusUnauthorized,
 			"hasn't been activated": http.StatusForbidden,
 		} {
 			if strings.Contains(errStr, keyword) {
@@ -65,5 +67,16 @@ func WriteError(w http.ResponseWriter, err error) {
 		statusCode = http.StatusInternalServerError
 	}
 
-	http.Error(w, errMsg, statusCode)
+	return statusCode
+}
+
+// WriteError decodes a specific docker error and sends it in the response.
+func WriteError(w http.ResponseWriter, err error) {
+	if err == nil || w == nil {
+		logrus.WithFields(logrus.Fields{"error": err, "writer": w}).Error("unexpected HTTP error handling")
+		return
+	}
+
+	statusCode := GetHTTPErrorStatusCode(err)
+	http.Error(w, err.Error(), statusCode)
 }

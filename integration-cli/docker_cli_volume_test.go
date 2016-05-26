@@ -138,6 +138,24 @@ func (s *DockerSuite) TestVolumeCliLsFilterDangling(c *check.C) {
 	c.Assert(out, check.Not(checker.Contains), "testnotinuse1\n", check.Commentf("expected volume 'testnotinuse1' in output"))
 	c.Assert(out, checker.Contains, "testisinuse1\n", check.Commentf("expected volume 'testisinuse1' in output"))
 	c.Assert(out, checker.Contains, "testisinuse2\n", check.Commentf("expected volume 'testisinuse2' in output"))
+
+	out, _ = dockerCmd(c, "volume", "ls", "--filter", "name=testisin")
+	c.Assert(out, check.Not(checker.Contains), "testnotinuse1\n", check.Commentf("expected volume 'testnotinuse1' in output"))
+	c.Assert(out, checker.Contains, "testisinuse1\n", check.Commentf("execpeted volume 'testisinuse1' in output"))
+	c.Assert(out, checker.Contains, "testisinuse2\n", check.Commentf("expected volume 'testisinuse2' in output"))
+
+	out, _ = dockerCmd(c, "volume", "ls", "--filter", "driver=invalidDriver")
+	outArr := strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(len(outArr), check.Equals, 1, check.Commentf("%s\n", out))
+
+	out, _ = dockerCmd(c, "volume", "ls", "--filter", "driver=local")
+	outArr = strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(len(outArr), check.Equals, 4, check.Commentf("\n%s", out))
+
+	out, _ = dockerCmd(c, "volume", "ls", "--filter", "driver=loc")
+	outArr = strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(len(outArr), check.Equals, 4, check.Commentf("\n%s", out))
+
 }
 
 func (s *DockerSuite) TestVolumeCliLsErrorWithInvalidFilterName(c *check.C) {
@@ -217,4 +235,67 @@ func (s *DockerSuite) TestVolumeCliInspectTmplError(c *check.C) {
 	c.Assert(err, checker.NotNil, check.Commentf("Output: %s", out))
 	c.Assert(exitCode, checker.Equals, 1, check.Commentf("Output: %s", out))
 	c.Assert(out, checker.Contains, "Template parsing error")
+}
+
+func (s *DockerSuite) TestVolumeCliCreateWithOpts(c *check.C) {
+	testRequires(c, DaemonIsLinux)
+
+	dockerCmd(c, "volume", "create", "-d", "local", "--name", "test", "--opt=type=tmpfs", "--opt=device=tmpfs", "--opt=o=size=1m,uid=1000")
+	out, _ := dockerCmd(c, "run", "-v", "test:/foo", "busybox", "mount")
+
+	mounts := strings.Split(out, "\n")
+	var found bool
+	for _, m := range mounts {
+		if strings.Contains(m, "/foo") {
+			found = true
+			info := strings.Fields(m)
+			// tmpfs on <path> type tmpfs (rw,relatime,size=1024k,uid=1000)
+			c.Assert(info[0], checker.Equals, "tmpfs")
+			c.Assert(info[2], checker.Equals, "/foo")
+			c.Assert(info[4], checker.Equals, "tmpfs")
+			c.Assert(info[5], checker.Contains, "uid=1000")
+			c.Assert(info[5], checker.Contains, "size=1024k")
+		}
+	}
+	c.Assert(found, checker.Equals, true)
+}
+
+func (s *DockerSuite) TestVolumeCliCreateLabel(c *check.C) {
+	testVol := "testvolcreatelabel"
+	testLabel := "foo"
+	testValue := "bar"
+
+	out, _, err := dockerCmdWithError("volume", "create", "--label", testLabel+"="+testValue, "--name", testVol)
+	c.Assert(err, check.IsNil)
+
+	out, _ = dockerCmd(c, "volume", "inspect", "--format='{{ .Labels."+testLabel+" }}'", testVol)
+	c.Assert(strings.TrimSpace(out), check.Equals, testValue)
+}
+
+func (s *DockerSuite) TestVolumeCliCreateLabelMultiple(c *check.C) {
+	testVol := "testvolcreatelabel"
+
+	testLabels := map[string]string{
+		"foo": "bar",
+		"baz": "foo",
+	}
+
+	args := []string{
+		"volume",
+		"create",
+		"--name",
+		testVol,
+	}
+
+	for k, v := range testLabels {
+		args = append(args, "--label", k+"="+v)
+	}
+
+	out, _, err := dockerCmdWithError(args...)
+	c.Assert(err, check.IsNil)
+
+	for k, v := range testLabels {
+		out, _ = dockerCmd(c, "volume", "inspect", "--format='{{ .Labels."+k+" }}'", testVol)
+		c.Assert(strings.TrimSpace(out), check.Equals, v)
+	}
 }

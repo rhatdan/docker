@@ -17,7 +17,6 @@ import (
 	"github.com/docker/distribution/manifest/schema1"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/docker/distribution/registry/api/errcode"
-	"github.com/docker/distribution/registry/client"
 	"github.com/docker/distribution/registry/client/auth"
 	"github.com/docker/distribution/registry/client/transport"
 	"github.com/docker/docker/distribution/metadata"
@@ -278,7 +277,19 @@ func (ld *v2LayerDescriptor) Download(ctx context.Context, progressOutput progre
 		ld.verifier = nil
 		return nil, 0, xfer.DoNotRetry{Err: err}
 	}
-	return tmpFile, size, nil
+
+	// hand off the temporary file to the download manager, so it will only
+	// be closed once
+	ld.tmpFile = nil
+
+	return ioutils.NewReadCloserWrapper(tmpFile, func() error {
+		tmpFile.Close()
+		err := os.RemoveAll(tmpFile.Name())
+		if err != nil {
+			logrus.Errorf("Failed to remove temp file: %s", tmpFile.Name())
+		}
+		return err
+	}), size, nil
 }
 
 func (ld *v2LayerDescriptor) Close() {
@@ -326,7 +337,7 @@ func (p *v2Puller) pullV2Tag(ctx context.Context, ref reference.Named) (tagUpdat
 		// NOTE: not using TagService.Get, since it uses HEAD requests
 		// against the manifests endpoint, which are not supported by
 		// all registry versions.
-		manifest, err = manSvc.Get(ctx, "", client.WithTag(tagged.Tag()))
+		manifest, err = manSvc.Get(ctx, "", distribution.WithTag(tagged.Tag()))
 		if err != nil {
 			return false, allowV1Fallback(err)
 		}

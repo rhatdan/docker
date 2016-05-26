@@ -182,7 +182,7 @@ pull them down to your Docker host to build containers from them.
 for images. Public storage is searchable and can be downloaded by anyone.
 Private storage is excluded from search results and only you and your users can
 pull images down and use them to build containers. You can [sign up for a storage plan
-here](https://hub.docker.com/plans).
+here](https://www.docker.com/pricing).
 
 ### How does a container work?
 A container consists of an operating system, user-added files, and meta-data. As
@@ -214,8 +214,7 @@ In order, Docker Engine does the following:
 - **Pulls the `ubuntu` image:** Docker Engine checks for the presence of the `ubuntu`
 image. If the image already exists, then Docker Engine uses it for the new container.
 If it doesn't exist locally on the host, then Docker Engine pulls it from
-[Docker Hub](https://hub.docker.com). If the image already exists, then Docker Engine
-uses it for the new container.
+[Docker Hub](https://hub.docker.com).
 - **Creates a new container:** Once Docker Engine has the image, it uses it to create a
 container.
 - **Allocates a filesystem and mounts a read-write _layer_:** The container is created in

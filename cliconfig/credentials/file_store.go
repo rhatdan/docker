@@ -3,18 +3,18 @@ package credentials
 import (
 	"strings"
 
-	"github.com/docker/docker/cliconfig"
+	"github.com/docker/docker/cliconfig/configfile"
 	"github.com/docker/engine-api/types"
 )
 
 // fileStore implements a credentials store using
 // the docker configuration file to keep the credentials in plain text.
 type fileStore struct {
-	file *cliconfig.ConfigFile
+	file *configfile.ConfigFile
 }
 
 // NewFileStore creates a new file credentials store.
-func NewFileStore(file *cliconfig.ConfigFile) Store {
+func NewFileStore(file *configfile.ConfigFile) Store {
 	return &fileStore{
 		file: file,
 	}
@@ -41,6 +41,10 @@ func (c *fileStore) Get(serverAddress string) (types.AuthConfig, error) {
 		authConfig = types.AuthConfig{}
 	}
 	return authConfig, nil
+}
+
+func (c *fileStore) GetAll() (map[string]types.AuthConfig, error) {
+	return c.file.AuthConfigs, nil
 }
 
 // Store saves the given credentials in the file store.

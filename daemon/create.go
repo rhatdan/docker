@@ -5,11 +5,11 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/container"
-	"github.com/docker/docker/daemon/logger"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/stringid"
+	"github.com/docker/docker/runconfig"
 	volumestore "github.com/docker/docker/volume/store"
 	"github.com/docker/engine-api/types"
 	containertypes "github.com/docker/engine-api/types/container"
@@ -70,34 +70,32 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig) (retC *containe
 		return nil, err
 	}
 
+	if err := daemon.mergeAndVerifyLogConfig(&params.HostConfig.LogConfig); err != nil {
+		return nil, err
+	}
+
 	if container, err = daemon.newContainer(params.Name, params.Config, imgID); err != nil {
 		return nil, err
 	}
 	defer func() {
 		if retErr != nil {
-			if err := daemon.ContainerRm(container.ID, &types.ContainerRmConfig{ForceRemove: true}); err != nil {
-				logrus.Errorf("Clean up Error! Cannot destroy container %s: %v", container.ID, err)
+			if err := daemon.cleanupContainer(container, true); err != nil {
+				logrus.Errorf("failed to cleanup container on create error: %v", err)
 			}
 		}
 	}()
 
-	logCfg := container.GetLogConfig(daemon.defaultLogConfig)
-	if err := logger.ValidateLogOpts(logCfg.Type, logCfg.Config); err != nil {
-		return nil, err
-	}
-
 	if err := daemon.setSecurityOptions(container, params.HostConfig); err != nil {
 		return nil, err
 	}
+
+	container.HostConfig.StorageOpt = params.HostConfig.StorageOpt
 
 	// Set RWLayer for container after mount labels have been set
 	if err := daemon.setRWLayer(container); err != nil {
 		return nil, err
 	}
 
-	if err := daemon.Register(container); err != nil {
-		return nil, err
-	}
 	rootUID, rootGID, err := idtools.GetRootUIDGID(daemon.uidMaps, daemon.gidMaps)
 	if err != nil {
 		return nil, err
@@ -125,13 +123,19 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig) (retC *containe
 	if params.NetworkingConfig != nil {
 		endpointsConfigs = params.NetworkingConfig.EndpointsConfig
 	}
+	// Make sure NetworkMode has an acceptable value. We do this to ensure
+	// backwards API compatibility.
+	container.HostConfig = runconfig.SetDefaultNetModeIfBlank(container.HostConfig)
 
 	if err := daemon.updateContainerNetworkSettings(container, endpointsConfigs); err != nil {
 		return nil, err
 	}
 
-	if err := container.ToDiskLocking(); err != nil {
+	if err := container.ToDisk(); err != nil {
 		logrus.Errorf("Error saving new container to disk: %v", err)
+		return nil, err
+	}
+	if err := daemon.Register(container); err != nil {
 		return nil, err
 	}
 	daemon.LogContainerEvent(container, "create")
@@ -142,13 +146,40 @@ func (daemon *Daemon) generateSecurityOpt(ipcMode containertypes.IpcMode, pidMod
 	if ipcMode.IsHost() || pidMode.IsHost() {
 		return label.DisableSecOpt(), nil
 	}
-	if ipcContainer := ipcMode.Container(); ipcContainer != "" {
+
+	var ipcLabel []string
+	var pidLabel []string
+	ipcContainer := ipcMode.Container()
+	pidContainer := pidMode.Container()
+	if ipcContainer != "" {
 		c, err := daemon.GetContainer(ipcContainer)
 		if err != nil {
 			return nil, err
 		}
+		ipcLabel = label.DupSecOpt(c.ProcessLabel)
+		if pidContainer == "" {
+			return ipcLabel, err
+		}
+	}
+	if pidContainer != "" {
+		c, err := daemon.GetContainer(pidContainer)
+		if err != nil {
+			return nil, err
+		}
 
-		return label.DupSecOpt(c.ProcessLabel), nil
+		pidLabel = label.DupSecOpt(c.ProcessLabel)
+		if ipcContainer == "" {
+			return pidLabel, err
+		}
+	}
+
+	if pidLabel != nil && ipcLabel != nil {
+		for i := 0; i < len(pidLabel); i++ {
+			if pidLabel[i] != ipcLabel[i] {
+				return nil, fmt.Errorf("--ipc and --pid containers SELinux labels aren't the same")
+			}
+		}
+		return pidLabel, nil
 	}
 	return nil, nil
 }
@@ -162,7 +193,7 @@ func (daemon *Daemon) setRWLayer(container *container.Container) error {
 		}
 		layerID = img.RootFS.ChainID()
 	}
-	rwLayer, err := daemon.layerStore.CreateRWLayer(container.ID, layerID, container.MountLabel, daemon.setupInitLayer)
+	rwLayer, err := daemon.layerStore.CreateRWLayer(container.ID, layerID, container.MountLabel, daemon.setupInitLayer, container.HostConfig.StorageOpt)
 	if err != nil {
 		return err
 	}
@@ -173,12 +204,12 @@ func (daemon *Daemon) setRWLayer(container *container.Container) error {
 
 // VolumeCreate creates a volume with the specified name, driver, and opts
 // This is called directly from the remote API
-func (daemon *Daemon) VolumeCreate(name, driverName string, opts map[string]string) (*types.Volume, error) {
+func (daemon *Daemon) VolumeCreate(name, driverName string, opts, labels map[string]string) (*types.Volume, error) {
 	if name == "" {
 		name = stringid.GenerateNonCryptoID()
 	}
 
-	v, err := daemon.volumes.Create(name, driverName, opts)
+	v, err := daemon.volumes.Create(name, driverName, opts, labels)
 	if err != nil {
 		if volumestore.IsNameConflict(err) {
 			return nil, fmt.Errorf("A volume named %s already exists. Choose a different volume name.", name)
@@ -187,5 +218,19 @@ func (daemon *Daemon) VolumeCreate(name, driverName string, opts map[string]stri
 	}
 
 	daemon.LogVolumeEvent(v.Name(), "create", map[string]string{"driver": v.DriverName()})
-	return volumeToAPIType(v), nil
+	apiV := volumeToAPIType(v)
+	apiV.Mountpoint = v.Path()
+	return apiV, nil
+}
+
+func (daemon *Daemon) mergeAndVerifyConfig(config *containertypes.Config, img *image.Image) error {
+	if img != nil && img.Config != nil {
+		if err := merge(config, img.Config); err != nil {
+			return err
+		}
+	}
+	if len(config.Entrypoint) == 0 && len(config.Cmd) == 0 {
+		return fmt.Errorf("No command specified")
+	}
+	return nil
 }

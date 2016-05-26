@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/docker/engine-api/types/container"
 )
@@ -25,6 +24,9 @@ func (daemon *Daemon) ContainerUpdate(name string, hostConfig *container.HostCon
 
 // ContainerUpdateCmdOnBuild updates Path and Args for the container with ID cID.
 func (daemon *Daemon) ContainerUpdateCmdOnBuild(cID string, cmd []string) error {
+	if len(cmd) == 0 {
+		return nil
+	}
 	c, err := daemon.GetContainer(cID)
 	if err != nil {
 		return err
@@ -71,17 +73,12 @@ func (daemon *Daemon) update(name string, hostConfig *container.HostConfig) erro
 	// if Restart Policy changed, we need to update container monitor
 	container.UpdateMonitor(hostConfig.RestartPolicy)
 
-	// if container is restarting, wait 5 seconds until it's running
-	if container.IsRestarting() {
-		container.WaitRunning(5 * time.Second)
-	}
-
 	// If container is not running, update hostConfig struct is enough,
 	// resources will be updated when the container is started again.
 	// If container is running (including paused), we need to update configs
 	// to the real world.
 	if container.IsRunning() && !container.IsRestarting() {
-		if err := daemon.execDriver.Update(container.Command); err != nil {
+		if err := daemon.containerd.UpdateResources(container.ID, toContainerdResources(hostConfig.Resources)); err != nil {
 			restoreConfig = true
 			return errCannotUpdate(container.ID, err)
 		}

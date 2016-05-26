@@ -83,7 +83,18 @@ func (d *driver) call(methodName string, arg interface{}, retVal maybeError) err
 	return nil
 }
 
-func (d *driver) CreateNetwork(id string, options map[string]interface{}, ipV4Data, ipV6Data []driverapi.IPAMData) error {
+func (d *driver) NetworkAllocate(id string, option map[string]string, ipV4Data, ipV6Data []driverapi.IPAMData) (map[string]string, error) {
+	return nil, types.NotImplementedErrorf("not implemented")
+}
+
+func (d *driver) NetworkFree(id string) error {
+	return types.NotImplementedErrorf("not implemented")
+}
+
+func (d *driver) EventNotify(etype driverapi.EventType, nid, tableName, key string, value []byte) {
+}
+
+func (d *driver) CreateNetwork(id string, options map[string]interface{}, nInfo driverapi.NetworkInfo, ipV4Data, ipV6Data []driverapi.IPAMData) error {
 	create := &api.CreateNetworkRequest{
 		NetworkID: id,
 		Options:   options,
@@ -245,6 +256,35 @@ func (d *driver) Leave(nid, eid string) error {
 		EndpointID: eid,
 	}
 	return d.call("Leave", leave, &api.LeaveResponse{})
+}
+
+// ProgramExternalConnectivity is invoked to program the rules to allow external connectivity for the endpoint.
+func (d *driver) ProgramExternalConnectivity(nid, eid string, options map[string]interface{}) error {
+	data := &api.ProgramExternalConnectivityRequest{
+		NetworkID:  nid,
+		EndpointID: eid,
+		Options:    options,
+	}
+	err := d.call("ProgramExternalConnectivity", data, &api.ProgramExternalConnectivityResponse{})
+	if err != nil && plugins.IsNotFound(err) {
+		// It is not mandatory yet to support this method
+		return nil
+	}
+	return err
+}
+
+// RevokeExternalConnectivity method is invoked to remove any external connectivity programming related to the endpoint.
+func (d *driver) RevokeExternalConnectivity(nid, eid string) error {
+	data := &api.RevokeExternalConnectivityRequest{
+		NetworkID:  nid,
+		EndpointID: eid,
+	}
+	err := d.call("RevokeExternalConnectivity", data, &api.RevokeExternalConnectivityResponse{})
+	if err != nil && plugins.IsNotFound(err) {
+		// It is not mandatory yet to support this method
+		return nil
+	}
+	return err
 }
 
 func (d *driver) Type() string {

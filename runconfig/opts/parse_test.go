@@ -385,17 +385,25 @@ func TestParseWithMemorySwap(t *testing.T) {
 }
 
 func TestParseHostname(t *testing.T) {
-	hostname := "--hostname=hostname"
+	validHostnames := map[string]string{
+		"hostname":    "hostname",
+		"host-name":   "host-name",
+		"hostname123": "hostname123",
+		"123hostname": "123hostname",
+		"hostname-of-63-bytes-long-should-be-valid-and-without-any-error": "hostname-of-63-bytes-long-should-be-valid-and-without-any-error",
+	}
 	hostnameWithDomain := "--hostname=hostname.domainname"
 	hostnameWithDomainTld := "--hostname=hostname.domainname.tld"
-	if config, _ := mustParse(t, hostname); config.Hostname != "hostname" && config.Domainname != "" {
-		t.Fatalf("Expected the config to have 'hostname' as hostname, got '%v'", config.Hostname)
+	for hostname, expectedHostname := range validHostnames {
+		if config, _ := mustParse(t, fmt.Sprintf("--hostname=%s", hostname)); config.Hostname != expectedHostname {
+			t.Fatalf("Expected the config to have 'hostname' as hostname, got '%v'", config.Hostname)
+		}
 	}
-	if config, _ := mustParse(t, hostnameWithDomain); config.Hostname != "hostname" && config.Domainname != "domainname" {
-		t.Fatalf("Expected the config to have 'hostname' as hostname, got '%v'", config.Hostname)
+	if config, _ := mustParse(t, hostnameWithDomain); config.Hostname != "hostname.domainname" && config.Domainname != "" {
+		t.Fatalf("Expected the config to have 'hostname' as hostname.domainname, got '%v'", config.Hostname)
 	}
-	if config, _ := mustParse(t, hostnameWithDomainTld); config.Hostname != "hostname" && config.Domainname != "domainname.tld" {
-		t.Fatalf("Expected the config to have 'hostname' as hostname, got '%v'", config.Hostname)
+	if config, _ := mustParse(t, hostnameWithDomainTld); config.Hostname != "hostname.domainname.tld" && config.Domainname != "" {
+		t.Fatalf("Expected the config to have 'hostname' as hostname.domainname.tld, got '%v'", config.Hostname)
 	}
 }
 
@@ -801,6 +809,9 @@ func TestVolumeSplitN(t *testing.T) {
 		{`..\`, -1, []string{`..\`}},
 		{`c:\:..\`, -1, []string{`c:\`, `..\`}},
 		{`c:\:d:\:xyzzy`, -1, []string{`c:\`, `d:\`, `xyzzy`}},
+
+		// Cover directories with one-character name
+		{`/tmp/x/y:/foo/x/y`, -1, []string{`/tmp/x/y`, `/foo/x/y`}},
 	} {
 		res := volumeSplitN(x.input, x.n)
 		if len(res) < len(x.expected) {

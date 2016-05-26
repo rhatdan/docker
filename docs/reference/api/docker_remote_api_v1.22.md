@@ -58,9 +58,15 @@ List containers
                  },
                  "SizeRw": 12288,
                  "SizeRootFs": 0,
+                 "HostConfig": {
+                         "NetworkMode": "default"
+                 },
                  "NetworkSettings": {
                          "Networks": {
                                  "bridge": {
+                                          "IPAMConfig": null,
+                                          "Links": null,
+                                          "Aliases": null,
                                           "NetworkID": "7ea29fc1412292a2d7bba362f9253545fecdfa8ce9a6e37dd10ba8bee7129812",
                                           "EndpointID": "2cdc4edb1ded3631c81f57966563e5c8525b81121bb3706a9a9a3ae102711f3f",
                                           "Gateway": "172.17.0.1",
@@ -86,9 +92,15 @@ List containers
                  "Labels": {},
                  "SizeRw": 12288,
                  "SizeRootFs": 0,
+                 "HostConfig": {
+                         "NetworkMode": "default"
+                 },
                  "NetworkSettings": {
                          "Networks": {
                                  "bridge": {
+                                          "IPAMConfig": null,
+                                          "Links": null,
+                                          "Aliases": null,
                                           "NetworkID": "7ea29fc1412292a2d7bba362f9253545fecdfa8ce9a6e37dd10ba8bee7129812",
                                           "EndpointID": "88eaed7b37b38c2a3f0c4bc796494fdf51b270c2d22656412a2ca5d559a64d7a",
                                           "Gateway": "172.17.0.1",
@@ -115,9 +127,15 @@ List containers
                  "Labels": {},
                  "SizeRw":12288,
                  "SizeRootFs":0,
+                 "HostConfig": {
+                         "NetworkMode": "default"
+                 },
                  "NetworkSettings": {
                          "Networks": {
                                  "bridge": {
+                                          "IPAMConfig": null,
+                                          "Links": null,
+                                          "Aliases": null,
                                           "NetworkID": "7ea29fc1412292a2d7bba362f9253545fecdfa8ce9a6e37dd10ba8bee7129812",
                                           "EndpointID": "8b27c041c30326d59cd6e6f510d4f8d1d570a228466f956edf7815508f78e30d",
                                           "Gateway": "172.17.0.1",
@@ -144,9 +162,15 @@ List containers
                  "Labels": {},
                  "SizeRw": 12288,
                  "SizeRootFs": 0,
+                 "HostConfig": {
+                         "NetworkMode": "default"
+                 },
                  "NetworkSettings": {
                          "Networks": {
                                  "bridge": {
+                                          "IPAMConfig": null,
+                                          "Links": null,
+                                          "Aliases": null,
                                           "NetworkID": "7ea29fc1412292a2d7bba362f9253545fecdfa8ce9a6e37dd10ba8bee7129812",
                                           "EndpointID": "d91c7b2f0644403d7ef3095985ea0e2370325cd2332ff3a3225c4247328e66e9",
                                           "Gateway": "172.17.0.1",
@@ -222,17 +246,9 @@ Create a container
                    "com.example.license": "GPL",
                    "com.example.version": "1.0"
            },
-           "Mounts": [
-             {
-               "Name": "fac362...80535",
-               "Source": "/data",
-               "Destination": "/data",
-               "Driver": "local",
-               "Mode": "ro,Z",
-               "RW": false,
-               "Propagation": ""
-             }
-           ],
+           "Volumes": {
+             "/volumes/data": {}
+           },
            "WorkingDir": "",
            "NetworkDisabled": false,
            "MacAddress": "12:34:56:78:9a:bc",
@@ -278,10 +294,21 @@ Create a container
              "Devices": [],
              "Ulimits": [{}],
              "LogConfig": { "Type": "json-file", "Config": {} },
-             "SecurityOpt": [""],
+             "SecurityOpt": [],
              "CgroupParent": "",
              "VolumeDriver": "",
              "ShmSize": 67108864
+          },
+          "NetworkingConfig": {
+          "EndpointsConfig": {
+              "isolated_nw" : {
+                  "IPAMConfig": {
+                      "IPv4Address":"172.20.30.33",
+                      "IPv6Address":"2001:db8:abcd::3033"
+                  },
+                  "Links":["container_1", "container_2"],
+                  "Aliases":["server_x", "server_y"]
+              }
           }
       }
 
@@ -302,31 +329,6 @@ Json Parameters:
 -   **Domainname** - A string value containing the domain name to use
       for the container.
 -   **User** - A string value specifying the user inside the container.
--   **Memory** - Memory limit in bytes.
--   **MemorySwap** - Total memory limit (memory + swap); set `-1` to enable unlimited swap.
-      You must use this with `memory` and make the swap value larger than `memory`.
--   **MemoryReservation** - Memory soft limit in bytes.
--   **KernelMemory** - Kernel memory limit in bytes.
--   **CpuShares** - An integer value containing the container's CPU Shares
-      (ie. the relative weight vs other containers).
--   **CpuPeriod** - The length of a CPU period in microseconds.
--   **CpuQuota** - Microseconds of CPU time that the container can get in a CPU period.
--   **Cpuset** - Deprecated please don't use. Use `CpusetCpus` instead.
--   **CpusetCpus** - String value containing the `cgroups CpusetCpus` to use.
--   **CpusetMems** - Memory nodes (MEMs) in which to allow execution (0-3, 0,1). Only effective on NUMA systems.
--   **BlkioWeight** - Block IO weight (relative weight) accepts a weight value between 10 and 1000.
--   **BlkioWeightDevice** - Block IO weight (relative device weight) in the form of:        `"BlkioWeightDevice": [{"Path": "device_path", "Weight": weight}]`
--   **BlkioDeviceReadBps** - Limit read rate (bytes per second) from a device in the form of:	`"BlkioDeviceReadBps": [{"Path": "device_path", "Rate": rate}]`, for example:
-	`"BlkioDeviceReadBps": [{"Path": "/dev/sda", "Rate": "1024"}]"`
--   **BlkioDeviceWriteBps** - Limit write rate (bytes per second) to a device in the form of:	`"BlkioDeviceWriteBps": [{"Path": "device_path", "Rate": rate}]`, for example:
-	`"BlkioDeviceWriteBps": [{"Path": "/dev/sda", "Rate": "1024"}]"`
--   **BlkioDeviceReadIOps** - Limit read rate (IO per second) from a device in the form of:	`"BlkioDeviceReadIOps": [{"Path": "device_path", "Rate": rate}]`, for example:
-	`"BlkioDeviceReadIOps": [{"Path": "/dev/sda", "Rate": "1000"}]`
--   **BlkioDeviceWiiteIOps** - Limit write rate (IO per second) to a device in the form of:	`"BlkioDeviceWriteIOps": [{"Path": "device_path", "Rate": rate}]`, for example:
-	`"BlkioDeviceWriteIOps": [{"Path": "/dev/sda", "Rate": "1000"}]`
--   **MemorySwappiness** - Tune a container's memory swappiness behavior. Accepts an integer between 0 and 100.
--   **OomKillDisable** - Boolean value, whether to disable OOM Killer for the container or not.
--   **OomScoreAdj** - An integer value containing the score given to the container in order to tune OOM killer preferences.
 -   **AttachStdin** - Boolean value, attaches to `stdin`.
 -   **AttachStdout** - Boolean value, attaches to `stdout`.
 -   **AttachStderr** - Boolean value, attaches to `stderr`.
@@ -339,7 +341,8 @@ Json Parameters:
 -   **Entrypoint** - Set the entry point for the container as a string or an array
       of strings.
 -   **Image** - A string specifying the image name to use for the container.
--   **Mounts** - An array of mount points in the container.
+-   **Volumes** - An object mapping mount point paths (strings) inside the
+      container to empty objects.
 -   **WorkingDir** - A string specifying the working directory for commands to
       run in.
 -   **NetworkDisabled** - Boolean value, when true disables networking for the
@@ -349,13 +352,36 @@ Json Parameters:
 -   **StopSignal** - Signal to stop a container as a string or unsigned integer. `SIGTERM` by default.
 -   **HostConfig**
     -   **Binds** – A list of volume bindings for this container. Each volume binding is a string in one of these forms:
-           + `container_path` to create a new volume for the container
            + `host_path:container_path` to bind-mount a host path into the container
            + `host_path:container_path:ro` to make the bind-mount read-only inside the container.
            + `volume_name:container_path` to bind-mount a volume managed by a volume plugin into the container.
            + `volume_name:container_path:ro` to make the bind mount read-only inside the container.
     -   **Links** - A list of links for the container. Each link entry should be
           in the form of `container_name:alias`.
+    -   **Memory** - Memory limit in bytes.
+    -   **MemorySwap** - Total memory limit (memory + swap); set `-1` to enable unlimited swap.
+          You must use this with `memory` and make the swap value larger than `memory`.
+    -   **MemoryReservation** - Memory soft limit in bytes.
+    -   **KernelMemory** - Kernel memory limit in bytes.
+    -   **CpuShares** - An integer value containing the container's CPU Shares
+          (ie. the relative weight vs other containers).
+    -   **CpuPeriod** - The length of a CPU period in microseconds.
+    -   **CpuQuota** - Microseconds of CPU time that the container can get in a CPU period.
+    -   **CpusetCpus** - String value containing the `cgroups CpusetCpus` to use.
+    -   **CpusetMems** - Memory nodes (MEMs) in which to allow execution (0-3, 0,1). Only effective on NUMA systems.
+    -   **BlkioWeight** - Block IO weight (relative weight) accepts a weight value between 10 and 1000.
+    -   **BlkioWeightDevice** - Block IO weight (relative device weight) in the form of:        `"BlkioWeightDevice": [{"Path": "device_path", "Weight": weight}]`
+    -   **BlkioDeviceReadBps** - Limit read rate (bytes per second) from a device in the form of:	`"BlkioDeviceReadBps": [{"Path": "device_path", "Rate": rate}]`, for example:
+        `"BlkioDeviceReadBps": [{"Path": "/dev/sda", "Rate": "1024"}]"`
+    -   **BlkioDeviceWriteBps** - Limit write rate (bytes per second) to a device in the form of:	`"BlkioDeviceWriteBps": [{"Path": "device_path", "Rate": rate}]`, for example:
+        `"BlkioDeviceWriteBps": [{"Path": "/dev/sda", "Rate": "1024"}]"`
+    -   **BlkioDeviceReadIOps** - Limit read rate (IO per second) from a device in the form of:	`"BlkioDeviceReadIOps": [{"Path": "device_path", "Rate": rate}]`, for example:
+        `"BlkioDeviceReadIOps": [{"Path": "/dev/sda", "Rate": "1000"}]`
+    -   **BlkioDeviceWiiteIOps** - Limit write rate (IO per second) to a device in the form of:	`"BlkioDeviceWriteIOps": [{"Path": "device_path", "Rate": rate}]`, for example:
+        `"BlkioDeviceWriteIOps": [{"Path": "/dev/sda", "Rate": "1000"}]`
+    -   **MemorySwappiness** - Tune a container's memory swappiness behavior. Accepts an integer between 0 and 100.
+    -   **OomKillDisable** - Boolean value, whether to disable OOM Killer for the container or not.
+    -   **OomScoreAdj** - An integer value containing the score given to the container in order to tune OOM killer preferences.
     -   **PortBindings** - A map of exposed container ports and the host port they
           should map to. A JSON object in the form
           `{ <port>/<protocol>: [{ "HostPort": "<port>" }] }`
@@ -412,6 +438,7 @@ Query Parameters:
 Status Codes:
 
 -   **201** – no error
+-   **400** – bad parameter
 -   **404** – no such container
 -   **406** – impossible to attach (container not running)
 -   **500** – server error
@@ -467,7 +494,9 @@ Return low-level information on the container `id`
 			"StdinOnce": false,
 			"Tty": false,
 			"User": "",
-			"Volumes": null,
+			"Volumes": {
+                          "/volumes/data": {}
+                        },
 			"WorkingDir": "",
 			"StopSignal": "SIGTERM"
 		},
@@ -1638,14 +1667,14 @@ Query Parameters:
                 }
             }
 
-        This object maps the hostname of a registry to an object containing the
-        "username" and "password" for that registry. Multiple registries may
-        be specified as the build may be based on an image requiring
-        authentication to pull from any arbitrary registry. Only the registry
-        domain name (and port if not the default "443") are required. However
-        (for legacy reasons) the "official" Docker, Inc. hosted registry must
-        be specified with both a "https://" prefix and a "/v1/" suffix even
-        though Docker will prefer to use the v2 registry API.
+    This object maps the hostname of a registry to an object containing the
+    "username" and "password" for that registry. Multiple registries may
+    be specified as the build may be based on an image requiring
+    authentication to pull from any arbitrary registry. Only the registry
+    domain name (and port if not the default "443") are required. However
+    (for legacy reasons) the "official" Docker, Inc. hosted registry must
+    be specified with both a "https://" prefix and a "/v1/" suffix even
+    though Docker will prefer to use the v2 registry API.
 
 Status Codes:
 
@@ -1956,7 +1985,7 @@ Tag the image `name` into a repository
 
 **Example response**:
 
-    HTTP/1.1 201 OK
+    HTTP/1.1 201 Created
 
 Query Parameters:
 
@@ -2105,6 +2134,7 @@ Display system-wide information
 
     {
         "Architecture": "x86_64",
+        "ClusterStore": "etcd://localhost:2379",
         "Containers": 11,
         "ContainersRunning": 7,
         "ContainersStopped": 3,
@@ -2112,21 +2142,9 @@ Display system-wide information
         "CpuCfsPeriod": true,
         "CpuCfsQuota": true,
         "Debug": false,
-        "DiscoveryBackend": "etcd://localhost:2379",
         "DockerRootDir": "/var/lib/docker",
         "Driver": "btrfs",
         "DriverStatus": [[""]],
-        "SystemStatus": [["State", "Healthy"]],
-        "Plugins": {
-            "Volume": [
-                "local"
-            ],
-            "Network": [
-                "null",
-                "host",
-                "bridge"
-            ]
-        },
         "ExecutionDriver": "native-0.1",
         "ExperimentalBuild": false,
         "HttpProxy": "http://test:test@localhost:8080",
@@ -2151,8 +2169,17 @@ Display system-wide information
         "NoProxy": "9.81.1.160",
         "OomKillDisable": true,
         "OSType": "linux",
-        "OomScoreAdj": 500,
         "OperatingSystem": "Boot2Docker",
+        "Plugins": {
+            "Volume": [
+                "local"
+            ],
+            "Network": [
+                "null",
+                "host",
+                "bridge"
+            ]
+        },
         "RegistryConfig": {
             "IndexConfigs": {
                 "docker.io": {
@@ -2166,9 +2193,10 @@ Display system-wide information
                 "127.0.0.0/8"
             ]
         },
+        "ServerVersion": "1.9.0",
         "SwapLimit": false,
+        "SystemStatus": [["State", "Healthy"]],
         "SystemTime": "2015-03-10T11:11:23.730591467-07:00"
-        "ServerVersion": "1.9.0"
     }
 
 Status Codes:
@@ -2332,49 +2360,157 @@ Docker networks report the following events:
 
     HTTP/1.1 200 OK
     Content-Type: application/json
+    Server: Docker/1.10.0 (linux)
+    Date: Fri, 29 Apr 2016 15:18:06 GMT
+    Transfer-Encoding: chunked
 
-    [
-	    {
-		"action": "pull",
-		"type": "image",
-		"actor": {
-			"id": "busybox:latest",
-			"attributes": {}
-		}
-		"time": 1442421700,
-		"timeNano": 1442421700598988358
-	    },
-            {
-		"action": "create",
-		"type": "container",
-		"actor": {
-			"id": "5745704abe9caa5",
-			"attributes": {"image": "busybox"}
-		}
-		"time": 1442421716,
-		"timeNano": 1442421716853979870
-	    },
-            {
-		"action": "attach",
-		"type": "container",
-		"actor": {
-			"id": "5745704abe9caa5",
-			"attributes": {"image": "busybox"}
-		}
-		"time": 1442421716,
-		"timeNano": 1442421716894759198
-	    },
-            {
-		"action": "start",
-		"type": "container",
-		"actor": {
-			"id": "5745704abe9caa5",
-			"attributes": {"image": "busybox"}
-		}
-		"time": 1442421716,
-		"timeNano": 1442421716983607193
-	    }
-    ]
+    {
+      "status": "pull",
+      "id": "alpine:latest",
+      "Type": "image",
+      "Action": "pull",
+      "Actor": {
+        "ID": "alpine:latest",
+        "Attributes": {
+          "name": "alpine"
+        }
+      },
+      "time": 1461943101,
+      "timeNano": 1461943101301854122
+    }
+    {
+      "status": "create",
+      "id": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+      "from": "alpine",
+      "Type": "container",
+      "Action": "create",
+      "Actor": {
+        "ID": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+        "Attributes": {
+          "com.example.some-label": "some-label-value",
+          "image": "alpine",
+          "name": "my-container"
+        }
+      },
+      "time": 1461943101,
+      "timeNano": 1461943101381709551
+    }
+    {
+      "status": "attach",
+      "id": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+      "from": "alpine",
+      "Type": "container",
+      "Action": "attach",
+      "Actor": {
+        "ID": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+        "Attributes": {
+          "com.example.some-label": "some-label-value",
+          "image": "alpine",
+          "name": "my-container"
+        }
+      },
+      "time": 1461943101,
+      "timeNano": 1461943101383858412
+    }
+    {
+      "Type": "network",
+      "Action": "connect",
+      "Actor": {
+        "ID": "7dc8ac97d5d29ef6c31b6052f3938c1e8f2749abbd17d1bd1febf2608db1b474",
+        "Attributes": {
+          "container": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+          "name": "bridge",
+          "type": "bridge"
+        }
+      },
+      "time": 1461943101,
+      "timeNano": 1461943101394865557
+    }
+    {
+      "status": "start",
+      "id": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+      "from": "alpine",
+      "Type": "container",
+      "Action": "start",
+      "Actor": {
+        "ID": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+        "Attributes": {
+          "com.example.some-label": "some-label-value",
+          "image": "alpine",
+          "name": "my-container"
+        }
+      },
+      "time": 1461943101,
+      "timeNano": 1461943101607533796
+    }
+    {
+      "status": "resize",
+      "id": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+      "from": "alpine",
+      "Type": "container",
+      "Action": "resize",
+      "Actor": {
+        "ID": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+        "Attributes": {
+          "com.example.some-label": "some-label-value",
+          "height": "46",
+          "image": "alpine",
+          "name": "my-container",
+          "width": "204"
+        }
+      },
+      "time": 1461943101,
+      "timeNano": 1461943101610269268
+    }
+    {
+      "status": "die",
+      "id": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+      "from": "alpine",
+      "Type": "container",
+      "Action": "die",
+      "Actor": {
+        "ID": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+        "Attributes": {
+          "com.example.some-label": "some-label-value",
+          "exitCode": "0",
+          "image": "alpine",
+          "name": "my-container"
+        }
+      },
+      "time": 1461943105,
+      "timeNano": 1461943105079144137
+    }
+    {
+      "Type": "network",
+      "Action": "disconnect",
+      "Actor": {
+        "ID": "7dc8ac97d5d29ef6c31b6052f3938c1e8f2749abbd17d1bd1febf2608db1b474",
+        "Attributes": {
+          "container": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+          "name": "bridge",
+          "type": "bridge"
+        }
+      },
+      "time": 1461943105,
+      "timeNano": 1461943105230860245
+    }
+    {
+      "status": "destroy",
+      "id": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+      "from": "alpine",
+      "Type": "container",
+      "Action": "destroy",
+      "Actor": {
+        "ID": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743",
+        "Attributes": {
+          "com.example.some-label": "some-label-value",
+          "image": "alpine",
+          "name": "my-container"
+        }
+      },
+      "time": 1461943105,
+      "timeNano": 1461943105338056026
+    }
 
 Query Parameters:
 
@@ -2520,7 +2656,7 @@ Sets up an exec instance in a running container `id`
 
 **Example response**:
 
-    HTTP/1.1 201 OK
+    HTTP/1.1 201 Created
     Content-Type: application/json
 
     {
@@ -2567,8 +2703,8 @@ interactive session with the `exec` command.
 
 **Example response**:
 
-    HTTP/1.1 201 OK
-    Content-Type: application/json
+    HTTP/1.1 200 OK
+    Content-Type: application/vnd.docker.raw-stream
 
     {{ STREAM }}
 
@@ -2600,7 +2736,7 @@ This API is valid only if `tty` was specified as part of creating and starting t
 
 **Example response**:
 
-    HTTP/1.1 201 OK
+    HTTP/1.1 201 Created
     Content-Type: text/plain
 
 Query Parameters:
@@ -2626,112 +2762,28 @@ Return low-level information about the `exec` command `id`.
 **Example response**:
 
     HTTP/1.1 200 OK
-    Content-Type: plain/text
+    Content-Type: application/json
 
     {
-      "ID" : "11fb006128e8ceb3942e7c58d77750f24210e35f879dd204ac975c184b820b39",
-      "Running" : false,
-      "ExitCode" : 2,
-      "ProcessConfig" : {
-        "privileged" : false,
-        "user" : "",
-        "tty" : false,
-        "entrypoint" : "sh",
-        "arguments" : [
-          "-c",
-          "exit 2"
-        ]
-      },
-      "OpenStdin" : false,
-      "OpenStderr" : false,
-      "OpenStdout" : false,
-      "Container" : {
-        "State" : {
-          "Status" : "running",
-          "Running" : true,
-          "Paused" : false,
-          "Restarting" : false,
-          "OOMKilled" : false,
-          "Pid" : 3650,
-          "ExitCode" : 0,
-          "Error" : "",
-          "StartedAt" : "2014-11-17T22:26:03.717657531Z",
-          "FinishedAt" : "0001-01-01T00:00:00Z"
+        "CanRemove": false,
+        "ContainerID": "b53ee82b53a40c7dca428523e34f741f3abc51d9f297a14ff874bf761b995126",
+        "DetachKeys": "",
+        "ExitCode": 2,
+        "ID": "f33bbfb39f5b142420f4759b2348913bd4a8d1a6d7fd56499cb41a1bb91d7b3b",
+        "OpenStderr": true,
+        "OpenStdin": true,
+        "OpenStdout": true,
+        "ProcessConfig": {
+            "arguments": [
+                "-c",
+                "exit 2"
+            ],
+            "entrypoint": "sh",
+            "privileged": false,
+            "tty": true,
+            "user": "1000"
         },
-        "ID" : "8f177a186b977fb451136e0fdf182abff5599a08b3c7f6ef0d36a55aaf89634c",
-        "Created" : "2014-11-17T22:26:03.626304998Z",
-        "Path" : "date",
-        "Args" : [],
-        "Config" : {
-          "Hostname" : "8f177a186b97",
-          "Domainname" : "",
-          "User" : "",
-          "AttachStdin" : false,
-          "AttachStdout" : false,
-          "AttachStderr" : false,
-          "ExposedPorts" : null,
-          "Tty" : false,
-          "OpenStdin" : false,
-          "StdinOnce" : false,
-          "Env" : [ "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" ],
-          "Cmd" : [
-            "date"
-          ],
-          "Image" : "ubuntu",
-          "Volumes" : null,
-          "WorkingDir" : "",
-          "Entrypoint" : null,
-          "NetworkDisabled" : false,
-          "MacAddress" : "",
-          "OnBuild" : null,
-          "SecurityOpt" : null
-        },
-        "Image" : "5506de2b643be1e6febbf3b8a240760c6843244c41e12aa2f60ccbb7153d17f5",
-        "NetworkSettings": {
-            "Bridge": "",
-            "SandboxID": "",
-            "HairpinMode": false,
-            "LinkLocalIPv6Address": "",
-            "LinkLocalIPv6PrefixLen": 0,
-            "Ports": null,
-            "SandboxKey": "",
-            "SecondaryIPAddresses": null,
-            "SecondaryIPv6Addresses": null,
-            "EndpointID": "",
-            "Gateway": "",
-            "GlobalIPv6Address": "",
-            "GlobalIPv6PrefixLen": 0,
-            "IPAddress": "",
-            "IPPrefixLen": 0,
-            "IPv6Gateway": "",
-            "MacAddress": "",
-            "Networks": {
-                "bridge": {
-                    "NetworkID": "7ea29fc1412292a2d7bba362f9253545fecdfa8ce9a6e37dd10ba8bee7129812",
-                    "EndpointID": "7587b82f0dada3656fda26588aee72630c6fab1536d36e394b2bfbcf898c971d",
-                    "Gateway": "172.17.0.1",
-                    "IPAddress": "172.17.0.2",
-                    "IPPrefixLen": 16,
-                    "IPv6Gateway": "",
-                    "GlobalIPv6Address": "",
-                    "GlobalIPv6PrefixLen": 0,
-                    "MacAddress": "02:42:ac:12:00:02"
-                }
-            }
-        },
-        "ResolvConfPath" : "/var/lib/docker/containers/8f177a186b977fb451136e0fdf182abff5599a08b3c7f6ef0d36a55aaf89634c/resolv.conf",
-        "HostnamePath" : "/var/lib/docker/containers/8f177a186b977fb451136e0fdf182abff5599a08b3c7f6ef0d36a55aaf89634c/hostname",
-        "HostsPath" : "/var/lib/docker/containers/8f177a186b977fb451136e0fdf182abff5599a08b3c7f6ef0d36a55aaf89634c/hosts",
-        "LogPath": "/var/lib/docker/containers/1eb5fabf5a03807136561b3c00adcd2992b535d624d5e18b6cdc6a6844d9767b/1eb5fabf5a03807136561b3c00adcd2992b535d624d5e18b6cdc6a6844d9767b-json.log",
-        "Name" : "/test",
-        "Driver" : "aufs",
-        "ExecDriver" : "native-0.2",
-        "MountLabel" : "",
-        "ProcessLabel" : "",
-        "AppArmorProfile" : "",
-        "RestartCount" : 0,
-        "Mounts" : []
-      }
+        "Running": false
     }
 
 Status Codes:
@@ -2762,7 +2814,8 @@ Status Codes:
           "Driver": "local",
           "Mountpoint": "/var/lib/docker/volumes/tardis"
         }
-      ]
+      ],
+      "Warnings": []
     }
 
 Query Parameters:
@@ -3018,11 +3071,17 @@ Content-Type: application/json
   "Name":"isolated_nw",
   "Driver":"bridge",
   "IPAM":{
-    "Config":[{
-      "Subnet":"172.20.0.0/16",
-      "IPRange":"172.20.10.0/24",
-      "Gateway":"172.20.10.11"
-    }],
+    "Config":[
+       {
+          "Subnet":"172.20.0.0/16",
+          "IPRange":"172.20.10.0/24",
+          "Gateway":"172.20.10.11"
+        },
+        {
+          "Subnet":"2001:db8:abcd::/64",
+          "Gateway":"2001:db8:abcd::1011"
+        }
+    ],
     "Options": {
         "foo": "bar"
     }
@@ -3061,7 +3120,7 @@ JSON Parameters:
 
 `POST /networks/(id)/connect`
 
-Connects a container to a network
+Connect a container to a network
 
 **Example request**:
 
@@ -3098,7 +3157,7 @@ JSON Parameters:
 
 `POST /networks/(id)/disconnect`
 
-Disconnects a container from a network
+Disconnect a container from a network
 
 **Example request**:
 

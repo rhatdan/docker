@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	Cli "github.com/docker/docker/cli"
 	"github.com/docker/docker/pkg/ioutils"
 	flag "github.com/docker/docker/pkg/mflag"
@@ -20,7 +22,7 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 
 	cmd.ParseFlags(args, true)
 
-	info, err := cli.client.Info()
+	info, err := cli.client.Info(context.Background())
 	if err != nil {
 		return err
 	}
@@ -50,6 +52,7 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 	}
 	ioutils.FprintfIfNotEmpty(cli.out, "Execution Driver: %s\n", info.ExecutionDriver)
 	ioutils.FprintfIfNotEmpty(cli.out, "Logging Driver: %s\n", info.LoggingDriver)
+	ioutils.FprintfIfNotEmpty(cli.out, "Cgroup Driver: %s\n", info.CgroupDriver)
 
 	fmt.Fprintf(cli.out, "Plugins: \n")
 	fmt.Fprintf(cli.out, " Volume:")
@@ -74,8 +77,8 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 	ioutils.FprintfIfNotEmpty(cli.out, "Name: %s\n", info.Name)
 	ioutils.FprintfIfNotEmpty(cli.out, "ID: %s\n", info.ID)
 	fmt.Fprintf(cli.out, "Docker Root Dir: %s\n", info.DockerRootDir)
-	fmt.Fprintf(cli.out, "Debug mode (client): %v\n", utils.IsDebugEnabled())
-	fmt.Fprintf(cli.out, "Debug mode (server): %v\n", info.Debug)
+	fmt.Fprintf(cli.out, "Debug Mode (client): %v\n", utils.IsDebugEnabled())
+	fmt.Fprintf(cli.out, "Debug Mode (server): %v\n", info.Debug)
 
 	if info.Debug {
 		fmt.Fprintf(cli.out, " File Descriptors: %d\n", info.NFd)
@@ -92,8 +95,8 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 		u := cli.configFile.AuthConfigs[info.IndexServerAddress].Username
 		if len(u) > 0 {
 			fmt.Fprintf(cli.out, "Username: %v\n", u)
-			fmt.Fprintf(cli.out, "Registry: %v\n", info.IndexServerAddress)
 		}
+		fmt.Fprintf(cli.out, "Registry: %v\n", info.IndexServerAddress)
 	}
 
 	// Only output these warnings if the server does not support these features
@@ -103,6 +106,9 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 		}
 		if !info.SwapLimit {
 			fmt.Fprintln(cli.err, "WARNING: No swap limit support")
+		}
+		if !info.KernelMemory {
+			fmt.Fprintln(cli.err, "WARNING: No kernel memory limit support")
 		}
 		if !info.OomKillDisable {
 			fmt.Fprintln(cli.err, "WARNING: No oom kill disable support")
@@ -139,11 +145,25 @@ func (cli *DockerCli) CmdInfo(args ...string) error {
 
 	ioutils.FprintfIfTrue(cli.out, "Experimental: %v\n", info.ExperimentalBuild)
 	if info.ClusterStore != "" {
-		fmt.Fprintf(cli.out, "Cluster store: %s\n", info.ClusterStore)
+		fmt.Fprintf(cli.out, "Cluster Store: %s\n", info.ClusterStore)
 	}
 
 	if info.ClusterAdvertise != "" {
-		fmt.Fprintf(cli.out, "Cluster advertise: %s\n", info.ClusterAdvertise)
+		fmt.Fprintf(cli.out, "Cluster Advertise: %s\n", info.ClusterAdvertise)
+	}
+
+	if info.RegistryConfig != nil && (len(info.RegistryConfig.InsecureRegistryCIDRs) > 0 || len(info.RegistryConfig.IndexConfigs) > 0) {
+		fmt.Fprintln(cli.out, "Insecure Registries:")
+		for _, registry := range info.RegistryConfig.IndexConfigs {
+			if registry.Secure == false {
+				fmt.Fprintf(cli.out, " %s\n", registry.Name)
+			}
+		}
+
+		for _, registry := range info.RegistryConfig.InsecureRegistryCIDRs {
+			mask, _ := registry.Mask.Size()
+			fmt.Fprintf(cli.out, " %s/%d\n", registry.IP.String(), mask)
+		}
 	}
 	return nil
 }

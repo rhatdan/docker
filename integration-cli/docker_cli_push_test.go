@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,7 +43,7 @@ func (s *DockerSuite) TestPushUnprefixedRepo(c *check.C) {
 
 func testPushUntagged(c *check.C) {
 	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
-	expected := "Repository does not exist"
+	expected := "An image does not exist locally with the tag"
 
 	out, _, err := dockerCmdWithError("push", repoName)
 	c.Assert(err, check.NotNil, check.Commentf("pushing the image to the private registry should have failed: output %q", out))
@@ -148,6 +150,61 @@ func (s *DockerSchema1RegistrySuite) TestPushEmptyLayer(c *check.C) {
 	testPushEmptyLayer(c)
 }
 
+// testConcurrentPush pushes multiple tags to the same repo
+// concurrently.
+func testConcurrentPush(c *check.C) {
+	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+
+	repos := []string{}
+	for _, tag := range []string{"push1", "push2", "push3"} {
+		repo := fmt.Sprintf("%v:%v", repoName, tag)
+		_, err := buildImage(repo, fmt.Sprintf(`
+	FROM busybox
+	ENTRYPOINT ["/bin/echo"]
+	ENV FOO foo
+	ENV BAR bar
+	CMD echo %s
+`, repo), true)
+		c.Assert(err, checker.IsNil)
+		repos = append(repos, repo)
+	}
+
+	// Push tags, in parallel
+	results := make(chan error)
+
+	for _, repo := range repos {
+		go func(repo string) {
+			_, _, err := runCommandWithOutput(exec.Command(dockerBinary, "push", repo))
+			results <- err
+		}(repo)
+	}
+
+	for range repos {
+		err := <-results
+		c.Assert(err, checker.IsNil, check.Commentf("concurrent push failed with error: %v", err))
+	}
+
+	// Clear local images store.
+	args := append([]string{"rmi"}, repos...)
+	dockerCmd(c, args...)
+
+	// Re-pull and run individual tags, to make sure pushes succeeded
+	for _, repo := range repos {
+		dockerCmd(c, "pull", repo)
+		dockerCmd(c, "inspect", repo)
+		out, _ := dockerCmd(c, "run", "--rm", repo)
+		c.Assert(strings.TrimSpace(out), checker.Equals, "/bin/sh -c echo "+repo)
+	}
+}
+
+func (s *DockerRegistrySuite) TestConcurrentPush(c *check.C) {
+	testConcurrentPush(c)
+}
+
+func (s *DockerSchema1RegistrySuite) TestConcurrentPush(c *check.C) {
+	testConcurrentPush(c)
+}
+
 func (s *DockerRegistrySuite) TestCrossRepositoryLayerPush(c *check.C) {
 	sourceRepoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
 	// tag the image to upload it to the private registry
@@ -231,6 +288,12 @@ func (s *DockerTrustSuite) TestTrustedPush(c *check.C) {
 	out, _, err = runCommandWithOutput(pullCmd)
 	c.Assert(err, check.IsNil, check.Commentf(out))
 	c.Assert(string(out), checker.Contains, "Status: Downloaded", check.Commentf(out))
+
+	// Assert that we rotated the snapshot key to the server by checking our local keystore
+	contents, err := ioutil.ReadDir(filepath.Join(cliconfig.ConfigDir(), "trust/private/tuf_keys", privateRegistryURL, "dockerclitrusted/pushtest"))
+	c.Assert(err, check.IsNil, check.Commentf("Unable to read local tuf key files"))
+	// Check that we only have 1 key (targets key)
+	c.Assert(contents, checker.HasLen, 1)
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithEnvPasswords(c *check.C) {
@@ -250,20 +313,6 @@ func (s *DockerTrustSuite) TestTrustedPushWithEnvPasswords(c *check.C) {
 	out, _, err = runCommandWithOutput(pullCmd)
 	c.Assert(err, check.IsNil, check.Commentf(out))
 	c.Assert(string(out), checker.Contains, "Status: Downloaded", check.Commentf(out))
-}
-
-// This test ensures backwards compatibility with old ENV variables. Should be
-// deprecated by 1.10
-func (s *DockerTrustSuite) TestTrustedPushWithDeprecatedEnvPasswords(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercli/trusteddeprecated:latest", privateRegistryURL)
-	// tag the image and upload it to the private registry
-	dockerCmd(c, "tag", "busybox", repoName)
-
-	pushCmd := exec.Command(dockerBinary, "push", repoName)
-	s.trustedCmdWithDeprecatedEnvPassphrases(pushCmd, "12345678", "12345678")
-	out, _, err := runCommandWithOutput(pushCmd)
-	c.Assert(err, check.IsNil, check.Commentf("Error running trusted push: %s\n%s", err, out))
-	c.Assert(out, checker.Contains, "Signing and pushing trust metadata", check.Commentf("Missing expected output on trusted push"))
 }
 
 func (s *DockerTrustSuite) TestTrustedPushWithFailingServer(c *check.C) {
@@ -360,28 +409,6 @@ func (s *DockerTrustSuite) TestTrustedPushWithIncorrectPassphraseForNonRoot(c *c
 	c.Assert(out, checker.Contains, "could not find necessary signing keys", check.Commentf("Missing expected output on trusted push with short targets/snapsnot passphrase"))
 }
 
-// This test ensures backwards compatibility with old ENV variables. Should be
-// deprecated by 1.10
-func (s *DockerTrustSuite) TestTrustedPushWithIncorrectDeprecatedPassphraseForNonRoot(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockercliincorretdeprecatedpwd/trusted:latest", privateRegistryURL)
-	// tag the image and upload it to the private registry
-	dockerCmd(c, "tag", "busybox", repoName)
-
-	// Push with default passphrases
-	pushCmd := exec.Command(dockerBinary, "push", repoName)
-	s.trustedCmd(pushCmd)
-	out, _, err := runCommandWithOutput(pushCmd)
-	c.Assert(err, check.IsNil, check.Commentf("trusted push failed: %s\n%s", err, out))
-	c.Assert(out, checker.Contains, "Signing and pushing trust metadata", check.Commentf("Missing expected output on trusted push"))
-
-	// Push with wrong passphrases
-	pushCmd = exec.Command(dockerBinary, "push", repoName)
-	s.trustedCmdWithDeprecatedEnvPassphrases(pushCmd, "12345678", "87654321")
-	out, _, err = runCommandWithOutput(pushCmd)
-	c.Assert(err, check.NotNil, check.Commentf("Error missing from trusted push with short targets passphrase: \n%s", out))
-	c.Assert(out, checker.Contains, "could not find necessary signing keys", check.Commentf("Missing expected output on trusted push with short targets/snapsnot passphrase"))
-}
-
 func (s *DockerTrustSuite) TestTrustedPushWithExpiredSnapshot(c *check.C) {
 	c.Skip("Currently changes system time, causing instability")
 	repoName := fmt.Sprintf("%v/dockercliexpiredsnapshot/trusted:latest", privateRegistryURL)
@@ -434,34 +461,232 @@ func (s *DockerTrustSuite) TestTrustedPushWithExpiredTimestamp(c *check.C) {
 	})
 }
 
-func (s *DockerTrustSuite) TestTrustedPushWithReleasesDelegation(c *check.C) {
-	repoName := fmt.Sprintf("%v/dockerclireleasedelegation/trusted", privateRegistryURL)
+func (s *DockerTrustSuite) TestTrustedPushWithReleasesDelegationOnly(c *check.C) {
+	testRequires(c, NotaryHosting)
+	repoName := fmt.Sprintf("%v/dockerclireleasedelegationinitfirst/trusted", privateRegistryURL)
 	targetName := fmt.Sprintf("%s:latest", repoName)
-	pwd := "12345678"
-	s.setupDelegations(c, repoName, pwd)
+	s.notaryInitRepo(c, repoName)
+	s.notaryCreateDelegation(c, repoName, "targets/releases", s.not.keys[0].Public)
+	s.notaryPublish(c, repoName)
+
+	s.notaryImportKey(c, repoName, "targets/releases", s.not.keys[0].Private)
 
 	// tag the image and upload it to the private registry
 	dockerCmd(c, "tag", "busybox", targetName)
 
-	pushCmd := exec.Command(dockerBinary, "-D", "push", targetName)
-	s.trustedCmdWithPassphrases(pushCmd, pwd, pwd)
+	pushCmd := exec.Command(dockerBinary, "push", targetName)
+	s.trustedCmd(pushCmd)
 	out, _, err := runCommandWithOutput(pushCmd)
 	c.Assert(err, check.IsNil, check.Commentf("trusted push failed: %s\n%s", err, out))
 	c.Assert(out, checker.Contains, "Signing and pushing trust metadata", check.Commentf("Missing expected output on trusted push with existing tag"))
+	// check to make sure that the target has been added to targets/releases and not targets
+	s.assertTargetInRoles(c, repoName, "latest", "targets/releases")
+	s.assertTargetNotInRoles(c, repoName, "latest", "targets")
 
 	// Try pull after push
+	os.RemoveAll(filepath.Join(cliconfig.ConfigDir(), "trust"))
+
 	pullCmd := exec.Command(dockerBinary, "pull", targetName)
 	s.trustedCmd(pullCmd)
 	out, _, err = runCommandWithOutput(pullCmd)
 	c.Assert(err, check.IsNil, check.Commentf(out))
 	c.Assert(string(out), checker.Contains, "Status: Downloaded", check.Commentf(out))
+}
 
-	// check to make sure that the target has been added to targets/releases and not targets
-	contents, err := ioutil.ReadFile(filepath.Join(cliconfig.ConfigDir(), "trust/tuf", repoName, "metadata/targets.json"))
-	c.Assert(err, check.IsNil, check.Commentf("Unable to read targets metadata"))
-	c.Assert(strings.Contains(string(contents), `"latest"`), checker.False, check.Commentf(string(contents)))
+func (s *DockerTrustSuite) TestTrustedPushSignsAllFirstLevelRolesWeHaveKeysFor(c *check.C) {
+	testRequires(c, NotaryHosting)
+	repoName := fmt.Sprintf("%v/dockerclimanyroles/trusted", privateRegistryURL)
+	targetName := fmt.Sprintf("%s:latest", repoName)
+	s.notaryInitRepo(c, repoName)
+	s.notaryCreateDelegation(c, repoName, "targets/role1", s.not.keys[0].Public)
+	s.notaryCreateDelegation(c, repoName, "targets/role2", s.not.keys[1].Public)
+	s.notaryCreateDelegation(c, repoName, "targets/role3", s.not.keys[2].Public)
 
-	contents, err = ioutil.ReadFile(filepath.Join(cliconfig.ConfigDir(), "trust/tuf", repoName, "metadata/targets/releases.json"))
-	c.Assert(err, check.IsNil, check.Commentf("Unable to read targets/releases metadata"))
-	c.Assert(string(contents), checker.Contains, `"latest"`, check.Commentf(string(contents)))
+	// import everything except the third key
+	s.notaryImportKey(c, repoName, "targets/role1", s.not.keys[0].Private)
+	s.notaryImportKey(c, repoName, "targets/role2", s.not.keys[1].Private)
+
+	s.notaryCreateDelegation(c, repoName, "targets/role1/subrole", s.not.keys[3].Public)
+	s.notaryImportKey(c, repoName, "targets/role1/subrole", s.not.keys[3].Private)
+
+	s.notaryPublish(c, repoName)
+
+	// tag the image and upload it to the private registry
+	dockerCmd(c, "tag", "busybox", targetName)
+
+	pushCmd := exec.Command(dockerBinary, "push", targetName)
+	s.trustedCmd(pushCmd)
+	out, _, err := runCommandWithOutput(pushCmd)
+	c.Assert(err, check.IsNil, check.Commentf("trusted push failed: %s\n%s", err, out))
+	c.Assert(out, checker.Contains, "Signing and pushing trust metadata", check.Commentf("Missing expected output on trusted push with existing tag"))
+
+	// check to make sure that the target has been added to targets/role1 and targets/role2, and
+	// not targets (because there are delegations) or targets/role3 (due to missing key) or
+	// targets/role1/subrole (due to it being a second level delegation)
+	s.assertTargetInRoles(c, repoName, "latest", "targets/role1", "targets/role2")
+	s.assertTargetNotInRoles(c, repoName, "latest", "targets")
+
+	// Try pull after push
+	os.RemoveAll(filepath.Join(cliconfig.ConfigDir(), "trust"))
+
+	// pull should fail because none of these are the releases role
+	pullCmd := exec.Command(dockerBinary, "pull", targetName)
+	s.trustedCmd(pullCmd)
+	out, _, err = runCommandWithOutput(pullCmd)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+}
+
+func (s *DockerTrustSuite) TestTrustedPushSignsForRolesWithKeysAndValidPaths(c *check.C) {
+	repoName := fmt.Sprintf("%v/dockerclirolesbykeysandpaths/trusted", privateRegistryURL)
+	targetName := fmt.Sprintf("%s:latest", repoName)
+	s.notaryInitRepo(c, repoName)
+	s.notaryCreateDelegation(c, repoName, "targets/role1", s.not.keys[0].Public, "l", "z")
+	s.notaryCreateDelegation(c, repoName, "targets/role2", s.not.keys[1].Public, "x", "y")
+	s.notaryCreateDelegation(c, repoName, "targets/role3", s.not.keys[2].Public, "latest")
+	s.notaryCreateDelegation(c, repoName, "targets/role4", s.not.keys[3].Public, "latest")
+
+	// import everything except the third key
+	s.notaryImportKey(c, repoName, "targets/role1", s.not.keys[0].Private)
+	s.notaryImportKey(c, repoName, "targets/role2", s.not.keys[1].Private)
+	s.notaryImportKey(c, repoName, "targets/role4", s.not.keys[3].Private)
+
+	s.notaryPublish(c, repoName)
+
+	// tag the image and upload it to the private registry
+	dockerCmd(c, "tag", "busybox", targetName)
+
+	pushCmd := exec.Command(dockerBinary, "push", targetName)
+	s.trustedCmd(pushCmd)
+	out, _, err := runCommandWithOutput(pushCmd)
+	c.Assert(err, check.IsNil, check.Commentf("trusted push failed: %s\n%s", err, out))
+	c.Assert(out, checker.Contains, "Signing and pushing trust metadata", check.Commentf("Missing expected output on trusted push with existing tag"))
+
+	// check to make sure that the target has been added to targets/role1 and targets/role4, and
+	// not targets (because there are delegations) or targets/role2 (due to path restrictions) or
+	// targets/role3 (due to missing key)
+	s.assertTargetInRoles(c, repoName, "latest", "targets/role1", "targets/role4")
+	s.assertTargetNotInRoles(c, repoName, "latest", "targets")
+
+	// Try pull after push
+	os.RemoveAll(filepath.Join(cliconfig.ConfigDir(), "trust"))
+
+	// pull should fail because none of these are the releases role
+	pullCmd := exec.Command(dockerBinary, "pull", targetName)
+	s.trustedCmd(pullCmd)
+	out, _, err = runCommandWithOutput(pullCmd)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+}
+
+func (s *DockerTrustSuite) TestTrustedPushDoesntSignTargetsIfDelegationsExist(c *check.C) {
+	testRequires(c, NotaryHosting)
+	repoName := fmt.Sprintf("%v/dockerclireleasedelegationnotsignable/trusted", privateRegistryURL)
+	targetName := fmt.Sprintf("%s:latest", repoName)
+	s.notaryInitRepo(c, repoName)
+	s.notaryCreateDelegation(c, repoName, "targets/role1", s.not.keys[0].Public)
+	s.notaryPublish(c, repoName)
+
+	// do not import any delegations key
+
+	// tag the image and upload it to the private registry
+	dockerCmd(c, "tag", "busybox", targetName)
+
+	pushCmd := exec.Command(dockerBinary, "push", targetName)
+	s.trustedCmd(pushCmd)
+	out, _, err := runCommandWithOutput(pushCmd)
+	c.Assert(err, check.NotNil, check.Commentf("trusted push succeeded but should have failed:\n%s", out))
+	c.Assert(out, checker.Contains, "no valid signing keys",
+		check.Commentf("Missing expected output on trusted push without keys"))
+
+	s.assertTargetNotInRoles(c, repoName, "latest", "targets", "targets/role1")
+}
+
+func (s *DockerRegistryAuthHtpasswdSuite) TestPushNoCredentialsNoRetry(c *check.C) {
+	repoName := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	dockerCmd(c, "tag", "busybox", repoName)
+	out, _, err := dockerCmdWithError("push", repoName)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+	c.Assert(out, check.Not(checker.Contains), "Retrying")
+	c.Assert(out, checker.Contains, "no basic auth credentials")
+}
+
+// This may be flaky but it's needed not to regress on unauthorized push, see #21054
+func (s *DockerSuite) TestPushToCentralRegistryUnauthorized(c *check.C) {
+	testRequires(c, Network)
+	repoName := "test/busybox"
+	dockerCmd(c, "tag", "busybox", repoName)
+	out, _, err := dockerCmdWithError("push", repoName)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+	c.Assert(out, check.Not(checker.Contains), "Retrying")
+}
+
+func getTestTokenService(status int, body string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(body))
+	}))
+}
+
+func (s *DockerRegistryAuthTokenSuite) TestPushTokenServiceUnauthResponse(c *check.C) {
+	ts := getTestTokenService(http.StatusUnauthorized, `{"errors": [{"Code":"UNAUTHORIZED", "message": "a message", "detail": null}]}`)
+	defer ts.Close()
+	s.setupRegistryWithTokenService(c, ts.URL)
+	repoName := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	dockerCmd(c, "tag", "busybox", repoName)
+	out, _, err := dockerCmdWithError("push", repoName)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+	c.Assert(out, checker.Not(checker.Contains), "Retrying")
+	c.Assert(out, checker.Contains, "unauthorized: a message")
+}
+
+func (s *DockerRegistryAuthTokenSuite) TestPushMisconfiguredTokenServiceResponseUnauthorized(c *check.C) {
+	ts := getTestTokenService(http.StatusUnauthorized, `{"error": "unauthorized"}`)
+	defer ts.Close()
+	s.setupRegistryWithTokenService(c, ts.URL)
+	repoName := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	dockerCmd(c, "tag", "busybox", repoName)
+	out, _, err := dockerCmdWithError("push", repoName)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+	c.Assert(out, checker.Not(checker.Contains), "Retrying")
+	split := strings.Split(out, "\n")
+	c.Assert(split[len(split)-2], check.Equals, "unauthorized: authentication required")
+}
+
+func (s *DockerRegistryAuthTokenSuite) TestPushMisconfiguredTokenServiceResponseError(c *check.C) {
+	ts := getTestTokenService(http.StatusInternalServerError, `{"error": "unexpected"}`)
+	defer ts.Close()
+	s.setupRegistryWithTokenService(c, ts.URL)
+	repoName := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	dockerCmd(c, "tag", "busybox", repoName)
+	out, _, err := dockerCmdWithError("push", repoName)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+	c.Assert(out, checker.Contains, "Retrying")
+	split := strings.Split(out, "\n")
+	c.Assert(split[len(split)-2], check.Equals, "received unexpected HTTP status: 500 Internal Server Error")
+}
+
+func (s *DockerRegistryAuthTokenSuite) TestPushMisconfiguredTokenServiceResponseUnparsable(c *check.C) {
+	ts := getTestTokenService(http.StatusForbidden, `no way`)
+	defer ts.Close()
+	s.setupRegistryWithTokenService(c, ts.URL)
+	repoName := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	dockerCmd(c, "tag", "busybox", repoName)
+	out, _, err := dockerCmdWithError("push", repoName)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+	c.Assert(out, checker.Not(checker.Contains), "Retrying")
+	split := strings.Split(out, "\n")
+	c.Assert(split[len(split)-2], checker.Contains, "error parsing HTTP 403 response body: ")
+}
+
+func (s *DockerRegistryAuthTokenSuite) TestPushMisconfiguredTokenServiceResponseNoToken(c *check.C) {
+	ts := getTestTokenService(http.StatusOK, `{"something": "wrong"}`)
+	defer ts.Close()
+	s.setupRegistryWithTokenService(c, ts.URL)
+	repoName := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	dockerCmd(c, "tag", "busybox", repoName)
+	out, _, err := dockerCmdWithError("push", repoName)
+	c.Assert(err, check.NotNil, check.Commentf(out))
+	c.Assert(out, checker.Not(checker.Contains), "Retrying")
+	split := strings.Split(out, "\n")
+	c.Assert(split[len(split)-2], check.Equals, "authorization server did not include a token in the response")
 }

@@ -4,22 +4,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/docker/docker/daemon/execdriver"
 )
 
 func TestStateRunStop(t *testing.T) {
 	s := NewState()
 	for i := 1; i < 3; i++ { // full lifecycle two times
-		started := make(chan struct{})
-		var pid int64
-		go func() {
-			runPid, _ := s.WaitRunning(-1 * time.Second)
-			atomic.StoreInt64(&pid, int64(runPid))
-			close(started)
-		}()
 		s.Lock()
-		s.SetRunning(i + 100)
+		s.SetRunning(i+100, false)
 		s.Unlock()
 
 		if !s.IsRunning() {
@@ -31,19 +22,6 @@ func TestStateRunStop(t *testing.T) {
 		if s.ExitCode != 0 {
 			t.Fatalf("ExitCode %v, expected 0", s.ExitCode)
 		}
-		select {
-		case <-time.After(100 * time.Millisecond):
-			t.Fatal("Start callback doesn't fire in 100 milliseconds")
-		case <-started:
-			t.Log("Start callback fired")
-		}
-		runPid := int(atomic.LoadInt64(&pid))
-		if runPid != i+100 {
-			t.Fatalf("Pid %v, expected %v", runPid, i+100)
-		}
-		if pid, err := s.WaitRunning(-1 * time.Second); err != nil || pid != i+100 {
-			t.Fatalf("WaitRunning returned pid: %v, err: %v, expected pid: %v, err: %v", pid, err, i+100, nil)
-		}
 
 		stopped := make(chan struct{})
 		var exit int64
@@ -52,7 +30,7 @@ func TestStateRunStop(t *testing.T) {
 			atomic.StoreInt64(&exit, int64(exitCode))
 			close(stopped)
 		}()
-		s.SetStoppedLocking(&execdriver.ExitStatus{ExitCode: i})
+		s.SetStoppedLocking(&ExitStatus{ExitCode: i})
 		if s.IsRunning() {
 			t.Fatal("State is running")
 		}
@@ -80,32 +58,30 @@ func TestStateRunStop(t *testing.T) {
 
 func TestStateTimeoutWait(t *testing.T) {
 	s := NewState()
-	started := make(chan struct{})
-	go func() {
-		s.WaitRunning(100 * time.Millisecond)
-		close(started)
-	}()
-	select {
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("Start callback doesn't fire in 100 milliseconds")
-	case <-started:
-		t.Log("Start callback fired")
-	}
-
-	s.Lock()
-	s.SetRunning(49)
-	s.Unlock()
-
 	stopped := make(chan struct{})
 	go func() {
-		s.WaitRunning(100 * time.Millisecond)
+		s.WaitStop(100 * time.Millisecond)
 		close(stopped)
 	}()
 	select {
 	case <-time.After(200 * time.Millisecond):
-		t.Fatal("Start callback doesn't fire in 100 milliseconds")
+		t.Fatal("Stop callback doesn't fire in 100 milliseconds")
 	case <-stopped:
-		t.Log("Start callback fired")
+		t.Log("Stop callback fired")
+	}
+
+	s.SetStoppedLocking(&ExitStatus{ExitCode: 1})
+
+	stopped = make(chan struct{})
+	go func() {
+		s.WaitStop(100 * time.Millisecond)
+		close(stopped)
+	}()
+	select {
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Stop callback doesn't fire in 100 milliseconds")
+	case <-stopped:
+		t.Log("Stop callback fired")
 	}
 
 }

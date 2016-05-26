@@ -60,6 +60,27 @@ func (s *DockerSuite) TestCreateArgs(c *check.C) {
 
 }
 
+// Make sure we can grow the container's rootfs at creation time.
+func (s *DockerSuite) TestCreateGrowRootfs(c *check.C) {
+	testRequires(c, Devicemapper)
+	out, _ := dockerCmd(c, "create", "--storage-opt", "size=120G", "busybox")
+
+	cleanedContainerID := strings.TrimSpace(out)
+
+	inspectOut := inspectField(c, cleanedContainerID, "HostConfig.StorageOpt")
+	c.Assert(inspectOut, checker.Equals, "map[size:120G]")
+}
+
+// Make sure we cannot shrink the container's rootfs at creation time.
+func (s *DockerSuite) TestCreateShrinkRootfs(c *check.C) {
+	testRequires(c, Devicemapper)
+
+	// Ensure this fails because of the defaultBaseFsSize is 10G
+	out, _, err := dockerCmdWithError("create", "--storage-opt", "size=5G", "busybox")
+	c.Assert(err, check.NotNil, check.Commentf(out))
+	c.Assert(out, checker.Contains, "Container size cannot be smaller than")
+}
+
 // Make sure we can set hostconfig options too
 func (s *DockerSuite) TestCreateHostConfig(c *check.C) {
 	out, _ := dockerCmd(c, "create", "-P", "busybox", "echo")
@@ -241,8 +262,7 @@ func (s *DockerSuite) TestCreateRM(c *check.C) {
 
 func (s *DockerSuite) TestCreateModeIpcContainer(c *check.C) {
 	// Uses Linux specific functionality (--ipc)
-	testRequires(c, DaemonIsLinux)
-	testRequires(c, SameHostDaemon, NotUserNamespace)
+	testRequires(c, DaemonIsLinux, SameHostDaemon)
 
 	out, _ := dockerCmd(c, "create", "busybox")
 	id := strings.TrimSpace(out)
@@ -443,8 +463,18 @@ func (s *DockerSuite) TestCreateWithWorkdir(c *check.C) {
 
 func (s *DockerSuite) TestCreateWithInvalidLogOpts(c *check.C) {
 	name := "test-invalidate-log-opts"
-	_, _, err := dockerCmdWithError("create", "--name", name, "--log-opt", "invalid=true")
+	out, _, err := dockerCmdWithError("create", "--name", name, "--log-opt", "invalid=true", "busybox")
 	c.Assert(err, checker.NotNil)
-	out, _ := dockerCmd(c, "ps", "-a")
+	c.Assert(out, checker.Contains, "unknown log opt")
+
+	out, _ = dockerCmd(c, "ps", "-a")
 	c.Assert(out, checker.Not(checker.Contains), name)
+}
+
+// #20972
+func (s *DockerSuite) TestCreate64ByteHexID(c *check.C) {
+	out := inspectField(c, "busybox", "Id")
+	imageID := strings.TrimPrefix(strings.TrimSpace(string(out)), "sha256:")
+
+	dockerCmd(c, "create", imageID)
 }

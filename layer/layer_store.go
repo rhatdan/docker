@@ -263,7 +263,7 @@ func (ls *layerStore) Register(ts io.Reader, parent ChainID) (Layer, error) {
 		references:     map[Layer]struct{}{},
 	}
 
-	if err = ls.driver.Create(layer.cacheID, pid, ""); err != nil {
+	if err = ls.driver.Create(layer.cacheID, pid, "", nil); err != nil {
 		return nil, err
 	}
 
@@ -334,7 +334,10 @@ func (ls *layerStore) get(l ChainID) *roLayer {
 }
 
 func (ls *layerStore) Get(l ChainID) (Layer, error) {
-	layer := ls.get(l)
+	ls.layerL.Lock()
+	defer ls.layerL.Unlock()
+
+	layer := ls.getWithoutLock(l)
 	if layer == nil {
 		return nil, ErrLayerDoesNotExist
 	}
@@ -414,7 +417,7 @@ func (ls *layerStore) Release(l Layer) ([]Metadata, error) {
 	return ls.releaseLayer(layer)
 }
 
-func (ls *layerStore) CreateRWLayer(name string, parent ChainID, mountLabel string, initFunc MountInit) (RWLayer, error) {
+func (ls *layerStore) CreateRWLayer(name string, parent ChainID, mountLabel string, initFunc MountInit, storageOpt map[string]string) (RWLayer, error) {
 	ls.mountL.Lock()
 	defer ls.mountL.Unlock()
 	m, ok := ls.mounts[name]
@@ -451,14 +454,14 @@ func (ls *layerStore) CreateRWLayer(name string, parent ChainID, mountLabel stri
 	}
 
 	if initFunc != nil {
-		pid, err = ls.initMount(m.mountID, pid, mountLabel, initFunc)
+		pid, err = ls.initMount(m.mountID, pid, mountLabel, initFunc, storageOpt)
 		if err != nil {
 			return nil, err
 		}
 		m.initID = pid
 	}
 
-	if err = ls.driver.Create(m.mountID, pid, ""); err != nil {
+	if err = ls.driver.CreateReadWrite(m.mountID, pid, "", storageOpt); err != nil {
 		return nil, err
 	}
 
@@ -478,6 +481,18 @@ func (ls *layerStore) GetRWLayer(id string) (RWLayer, error) {
 	}
 
 	return mount.getReference(), nil
+}
+
+func (ls *layerStore) GetMountID(id string) (string, error) {
+	ls.mountL.Lock()
+	defer ls.mountL.Unlock()
+	mount, ok := ls.mounts[id]
+	if !ok {
+		return "", ErrMountDoesNotExist
+	}
+	logrus.Debugf("GetMountID id: %s -> mountID: %s", id, mount.mountID)
+
+	return mount.mountID, nil
 }
 
 func (ls *layerStore) ReleaseRWLayer(l RWLayer) ([]Metadata, error) {
@@ -549,14 +564,14 @@ func (ls *layerStore) saveMount(mount *mountedLayer) error {
 	return nil
 }
 
-func (ls *layerStore) initMount(graphID, parent, mountLabel string, initFunc MountInit) (string, error) {
+func (ls *layerStore) initMount(graphID, parent, mountLabel string, initFunc MountInit, storageOpt map[string]string) (string, error) {
 	// Use "<graph-id>-init" to maintain compatibility with graph drivers
 	// which are expecting this layer with this special name. If all
 	// graph drivers can be updated to not rely on knowing about this layer
 	// then the initID should be randomly generated.
 	initID := fmt.Sprintf("%s-init", graphID)
 
-	if err := ls.driver.Create(initID, parent, mountLabel); err != nil {
+	if err := ls.driver.Create(initID, parent, mountLabel, storageOpt); err != nil {
 		return "", err
 	}
 	p, err := ls.driver.Get(initID, "")
@@ -577,11 +592,7 @@ func (ls *layerStore) initMount(graphID, parent, mountLabel string, initFunc Mou
 }
 
 func (ls *layerStore) assembleTarTo(graphID string, metadata io.ReadCloser, size *int64, w io.Writer) error {
-	type diffPathDriver interface {
-		DiffPath(string) (string, func() error, error)
-	}
-
-	diffDriver, ok := ls.driver.(diffPathDriver)
+	diffDriver, ok := ls.driver.(graphdriver.DiffGetterDriver)
 	if !ok {
 		diffDriver = &naiveDiffPathDriver{ls.driver}
 	}
@@ -589,17 +600,16 @@ func (ls *layerStore) assembleTarTo(graphID string, metadata io.ReadCloser, size
 	defer metadata.Close()
 
 	// get our relative path to the container
-	fsPath, releasePath, err := diffDriver.DiffPath(graphID)
+	fileGetCloser, err := diffDriver.DiffGetter(graphID)
 	if err != nil {
 		return err
 	}
-	defer releasePath()
+	defer fileGetCloser.Close()
 
 	metaUnpacker := storage.NewJSONUnpacker(metadata)
 	upackerCounter := &unpackSizeCounter{metaUnpacker, size}
-	fileGetter := storage.NewPathFileGetter(fsPath)
-	logrus.Debugf("Assembling tar data for %s from %s", graphID, fsPath)
-	return asm.WriteOutputTarStream(fileGetter, upackerCounter, w)
+	logrus.Debugf("Assembling tar data for %s", graphID)
+	return asm.WriteOutputTarStream(fileGetCloser, upackerCounter, w)
 }
 
 func (ls *layerStore) Cleanup() error {
@@ -618,12 +628,20 @@ type naiveDiffPathDriver struct {
 	graphdriver.Driver
 }
 
-func (n *naiveDiffPathDriver) DiffPath(id string) (string, func() error, error) {
+type fileGetPutter struct {
+	storage.FileGetter
+	driver graphdriver.Driver
+	id     string
+}
+
+func (w *fileGetPutter) Close() error {
+	return w.driver.Put(w.id)
+}
+
+func (n *naiveDiffPathDriver) DiffGetter(id string) (graphdriver.FileGetCloser, error) {
 	p, err := n.Driver.Get(id, "")
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	return p, func() error {
-		return n.Driver.Put(id)
-	}, nil
+	return &fileGetPutter{storage.NewPathFileGetter(p), n.Driver, id}, nil
 }

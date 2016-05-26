@@ -1,22 +1,16 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
-	"text/template"
+
+	"golang.org/x/net/context"
 
 	"github.com/docker/docker/api/client/inspect"
 	Cli "github.com/docker/docker/cli"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/docker/utils/templates"
 	"github.com/docker/engine-api/client"
 )
-
-var funcMap = template.FuncMap{
-	"json": func(v interface{}) string {
-		a, _ := json.Marshal(v)
-		return string(a)
-	},
-}
 
 // CmdInspect displays low-level information on one or more containers or images.
 //
@@ -34,38 +28,40 @@ func (cli *DockerCli) CmdInspect(args ...string) error {
 		return fmt.Errorf("%q is not a valid value for --type", *inspectType)
 	}
 
+	ctx := context.Background()
+
 	var elementSearcher inspectSearcher
 	switch *inspectType {
 	case "container":
-		elementSearcher = cli.inspectContainers(*size)
+		elementSearcher = cli.inspectContainers(ctx, *size)
 	case "image":
-		elementSearcher = cli.inspectImages(*size)
+		elementSearcher = cli.inspectImages(ctx, *size)
 	default:
-		elementSearcher = cli.inspectAll(*size)
+		elementSearcher = cli.inspectAll(ctx, *size)
 	}
 
 	return cli.inspectElements(*tmplStr, cmd.Args(), elementSearcher)
 }
 
-func (cli *DockerCli) inspectContainers(getSize bool) inspectSearcher {
+func (cli *DockerCli) inspectContainers(ctx context.Context, getSize bool) inspectSearcher {
 	return func(ref string) (interface{}, []byte, error) {
-		return cli.client.ContainerInspectWithRaw(ref, getSize)
+		return cli.client.ContainerInspectWithRaw(ctx, ref, getSize)
 	}
 }
 
-func (cli *DockerCli) inspectImages(getSize bool) inspectSearcher {
+func (cli *DockerCli) inspectImages(ctx context.Context, getSize bool) inspectSearcher {
 	return func(ref string) (interface{}, []byte, error) {
-		return cli.client.ImageInspectWithRaw(ref, getSize)
+		return cli.client.ImageInspectWithRaw(ctx, ref, getSize)
 	}
 }
 
-func (cli *DockerCli) inspectAll(getSize bool) inspectSearcher {
+func (cli *DockerCli) inspectAll(ctx context.Context, getSize bool) inspectSearcher {
 	return func(ref string) (interface{}, []byte, error) {
-		c, rawContainer, err := cli.client.ContainerInspectWithRaw(ref, getSize)
+		c, rawContainer, err := cli.client.ContainerInspectWithRaw(ctx, ref, getSize)
 		if err != nil {
 			// Search for image with that id if a container doesn't exist.
 			if client.IsErrContainerNotFound(err) {
-				i, rawImage, err := cli.client.ImageInspectWithRaw(ref, getSize)
+				i, rawImage, err := cli.client.ImageInspectWithRaw(ctx, ref, getSize)
 				if err != nil {
 					if client.IsErrImageNotFound(err) {
 						return nil, nil, fmt.Errorf("Error: No such image or container: %s", ref)
@@ -123,7 +119,7 @@ func (cli *DockerCli) inspectErrorStatus(err error) (status int) {
 func (cli *DockerCli) newInspectorWithTemplate(tmplStr string) (inspect.Inspector, error) {
 	elementInspector := inspect.NewIndentedInspector(cli.out)
 	if tmplStr != "" {
-		tmpl, err := template.New("").Funcs(funcMap).Parse(tmplStr)
+		tmpl, err := templates.Parse(tmplStr)
 		if err != nil {
 			return nil, fmt.Errorf("Template parsing error: %s", err)
 		}

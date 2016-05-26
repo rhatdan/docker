@@ -8,12 +8,13 @@ import (
 	"runtime"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	Cli "github.com/docker/docker/cli"
-	"github.com/docker/docker/cliconfig"
+	"github.com/docker/docker/cliconfig/configfile"
 	"github.com/docker/docker/cliconfig/credentials"
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/pkg/term"
-	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 )
 
@@ -39,36 +40,33 @@ func (cli *DockerCli) CmdLogin(args ...string) error {
 		cli.in = os.Stdin
 	}
 
+	ctx := context.Background()
 	var serverAddress string
 	var isDefaultRegistry bool
 	if len(cmd.Args()) > 0 {
 		serverAddress = cmd.Arg(0)
 	} else {
-		serverAddress = cli.electAuthServer()
+		serverAddress = cli.electAuthServer(ctx)
 		isDefaultRegistry = true
 	}
-
 	authConfig, err := cli.configureAuth(*flUser, *flPassword, serverAddress, isDefaultRegistry)
 	if err != nil {
 		return err
 	}
-
-	response, err := cli.client.RegistryLogin(authConfig)
+	response, err := cli.client.RegistryLogin(ctx, authConfig)
 	if err != nil {
-		if client.IsErrUnauthorized(err) {
-			if err2 := eraseCredentials(cli.configFile, authConfig.ServerAddress); err2 != nil {
-				fmt.Fprintf(cli.out, "WARNING: could not save credentials: %v\n", err2)
-			}
-		}
 		return err
 	}
-
+	if response.IdentityToken != "" {
+		authConfig.Password = ""
+		authConfig.IdentityToken = response.IdentityToken
+	}
 	if err := storeCredentials(cli.configFile, authConfig); err != nil {
 		return fmt.Errorf("Error saving credentials: %v", err)
 	}
 
 	if response.Status != "" {
-		fmt.Fprintf(cli.out, "%s\n", response.Status)
+		fmt.Fprintln(cli.out, response.Status)
 	}
 	return nil
 }
@@ -87,6 +85,17 @@ func (cli *DockerCli) configureAuth(flUser, flPassword, serverAddress string, is
 		return authconfig, err
 	}
 
+	// Some links documenting this:
+	// - https://code.google.com/archive/p/mintty/issues/56
+	// - https://github.com/docker/docker/issues/15272
+	// - https://mintty.github.io/ (compatibility)
+	// Linux will hit this if you attempt `cat | docker login`, and Windows
+	// will hit this if you attempt docker login from mintty where stdin
+	// is a pipe, not a character based console.
+	if flPassword == "" && !cli.isTerminalIn {
+		return authconfig, fmt.Errorf("Error: Cannot perform an interactive logon from a non TTY device")
+	}
+
 	authconfig.Username = strings.TrimSpace(authconfig.Username)
 
 	if flUser = strings.TrimSpace(flUser); flUser == "" {
@@ -101,11 +110,9 @@ func (cli *DockerCli) configureAuth(flUser, flPassword, serverAddress string, is
 			flUser = authconfig.Username
 		}
 	}
-
 	if flUser == "" {
 		return authconfig, fmt.Errorf("Error: Non-null Username Required")
 	}
-
 	if flPassword == "" {
 		oldState, err := term.SaveState(cli.inFd)
 		if err != nil {
@@ -126,6 +133,7 @@ func (cli *DockerCli) configureAuth(flUser, flPassword, serverAddress string, is
 	authconfig.Username = flUser
 	authconfig.Password = flPassword
 	authconfig.ServerAddress = serverAddress
+	authconfig.IdentityToken = ""
 
 	return authconfig, nil
 }
@@ -142,28 +150,33 @@ func readInput(in io.Reader, out io.Writer) string {
 
 // getCredentials loads the user credentials from a credentials store.
 // The store is determined by the config file settings.
-func getCredentials(c *cliconfig.ConfigFile, serverAddress string) (types.AuthConfig, error) {
+func getCredentials(c *configfile.ConfigFile, serverAddress string) (types.AuthConfig, error) {
 	s := loadCredentialsStore(c)
 	return s.Get(serverAddress)
 }
 
+func getAllCredentials(c *configfile.ConfigFile) (map[string]types.AuthConfig, error) {
+	s := loadCredentialsStore(c)
+	return s.GetAll()
+}
+
 // storeCredentials saves the user credentials in a credentials store.
 // The store is determined by the config file settings.
-func storeCredentials(c *cliconfig.ConfigFile, auth types.AuthConfig) error {
+func storeCredentials(c *configfile.ConfigFile, auth types.AuthConfig) error {
 	s := loadCredentialsStore(c)
 	return s.Store(auth)
 }
 
 // eraseCredentials removes the user credentials from a credentials store.
 // The store is determined by the config file settings.
-func eraseCredentials(c *cliconfig.ConfigFile, serverAddress string) error {
+func eraseCredentials(c *configfile.ConfigFile, serverAddress string) error {
 	s := loadCredentialsStore(c)
 	return s.Erase(serverAddress)
 }
 
 // loadCredentialsStore initializes a new credentials store based
 // in the settings provided in the configuration file.
-func loadCredentialsStore(c *cliconfig.ConfigFile) credentials.Store {
+func loadCredentialsStore(c *configfile.ConfigFile) credentials.Store {
 	if c.CredentialsStore != "" {
 		return credentials.NewNativeStore(c)
 	}

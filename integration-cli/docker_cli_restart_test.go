@@ -20,6 +20,10 @@ func (s *DockerSuite) TestRestartStoppedContainer(c *check.C) {
 
 	dockerCmd(c, "restart", cleanedContainerID)
 
+	// Wait until the container has stopped
+	err = waitInspect(cleanedContainerID, "{{.State.Running}}", "false", 20*time.Second)
+	c.Assert(err, checker.IsNil)
+
 	out, _ = dockerCmd(c, "logs", cleanedContainerID)
 	c.Assert(out, checker.Equals, "foobar\nfoobar\n")
 }
@@ -183,4 +187,56 @@ func (s *DockerSuite) TestRestartWithPolicyUserDefinedNetwork(c *check.C) {
 	c.Assert(err, check.IsNil)
 	_, _, err = dockerCmdWithError("exec", "second", "ping", "-c", "1", "foo")
 	c.Assert(err, check.IsNil)
+}
+
+func (s *DockerSuite) TestRestartPolicyAfterRestart(c *check.C) {
+	testRequires(c, SameHostDaemon)
+
+	out, _ := runSleepingContainer(c, "-d", "--restart=always")
+	id := strings.TrimSpace(out)
+	c.Assert(waitRun(id), check.IsNil)
+
+	dockerCmd(c, "restart", id)
+
+	c.Assert(waitRun(id), check.IsNil)
+
+	pidStr := inspectField(c, id, "State.Pid")
+
+	pid, err := strconv.Atoi(pidStr)
+	c.Assert(err, check.IsNil)
+
+	p, err := os.FindProcess(pid)
+	c.Assert(err, check.IsNil)
+	c.Assert(p, check.NotNil)
+
+	err = p.Kill()
+	c.Assert(err, check.IsNil)
+
+	err = waitInspect(id, "{{.RestartCount}}", "1", 30*time.Second)
+	c.Assert(err, check.IsNil)
+
+	err = waitInspect(id, "{{.State.Status}}", "running", 30*time.Second)
+	c.Assert(err, check.IsNil)
+}
+
+func (s *DockerSuite) TestRestartContainerwithRestartPolicy(c *check.C) {
+	out1, _ := dockerCmd(c, "run", "-d", "--restart=on-failure:3", "busybox", "false")
+	out2, _ := dockerCmd(c, "run", "-d", "--restart=always", "busybox", "false")
+
+	id1 := strings.TrimSpace(string(out1))
+	id2 := strings.TrimSpace(string(out2))
+	waitTimeout := 15 * time.Second
+	if daemonPlatform == "windows" {
+		waitTimeout = 150 * time.Second
+	}
+	err := waitInspect(id1, "{{ .State.Restarting }} {{ .State.Running }}", "false false", waitTimeout)
+	c.Assert(err, checker.IsNil)
+
+	dockerCmd(c, "restart", id1)
+	dockerCmd(c, "restart", id2)
+
+	dockerCmd(c, "stop", id1)
+	dockerCmd(c, "stop", id2)
+	dockerCmd(c, "start", id1)
+	dockerCmd(c, "start", id2)
 }

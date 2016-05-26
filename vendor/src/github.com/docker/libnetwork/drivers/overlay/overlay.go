@@ -88,7 +88,7 @@ func Fini(drv driverapi.Driver) {
 
 func (d *driver) configure() error {
 	if d.store == nil {
-		return types.NoServiceErrorf("datastore is not available")
+		return nil
 	}
 
 	if d.vxlanIdm == nil {
@@ -147,10 +147,14 @@ func (d *driver) nodeJoin(node string, self bool) {
 		d.Lock()
 		d.bindAddress = node
 		d.Unlock()
-		err := d.serfInit()
-		if err != nil {
-			logrus.Errorf("initializing serf instance failed: %v", err)
-			return
+
+		// If there is no cluster store there is no need to start serf.
+		if d.store != nil {
+			err := d.serfInit()
+			if err != nil {
+				logrus.Errorf("initializing serf instance failed: %v", err)
+				return
+			}
 		}
 	}
 
@@ -180,13 +184,24 @@ func (d *driver) nodeJoin(node string, self bool) {
 }
 
 func (d *driver) pushLocalEndpointEvent(action, nid, eid string) {
+	n := d.network(nid)
+	if n == nil {
+		logrus.Debugf("Error pushing local endpoint event for network %s", nid)
+		return
+	}
+	ep := n.endpoint(eid)
+	if ep == nil {
+		logrus.Debugf("Error pushing local endpoint event for ep %s / %s", nid, eid)
+		return
+	}
+
 	if !d.isSerfAlive() {
 		return
 	}
 	d.notifyCh <- ovNotify{
 		action: "join",
-		nid:    nid,
-		eid:    eid,
+		nw:     n,
+		ep:     ep,
 	}
 }
 

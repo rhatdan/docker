@@ -361,7 +361,16 @@ RUN /bin/bash -c 'source $HOME/.bashrc ; echo $HOME'
 > This means that normal shell processing does not happen. For example,
 > `RUN [ "echo", "$HOME" ]` will not do variable substitution on `$HOME`.
 > If you want shell processing then either use the *shell* form or execute
-> a shell directly, for example: `RUN [ "sh", "-c", "echo", "$HOME" ]`.
+> a shell directly, for example: `RUN [ "sh", "-c", "echo $HOME" ]`.
+>
+> **Note**:
+> In the *JSON* form, it is necessary to escape backslashes. This is
+> particularly relevant on Windows where the backslash is the path seperator.
+> The following line would otherwise be treated as *shell* form due to not
+> being valid JSON, and fail in an unexpected way:
+> `RUN ["c:\windows\system32\tasklist.exe"]`
+> The correct syntax for this example is:
+> `RUN ["c:\\windows\\system32\\tasklist.exe"]`
 
 The cache for `RUN` instructions isn't invalidated automatically during
 the next build. The cache for an instruction like
@@ -834,7 +843,7 @@ does some more work:
 
 # USE the trap if you need to also do manual cleanup after the service is stopped,
 #     or need to start multiple services in the one container
-trap "echo TRAPed signal" HUP INT QUIT KILL TERM
+trap "echo TRAPed signal" HUP INT QUIT TERM
 
 # start service in background here
 /usr/sbin/apachectl start
@@ -1021,6 +1030,8 @@ and for any `RUN`, `CMD` and `ENTRYPOINT` instructions that follow it in the
 
 The `WORKDIR` instruction sets the working directory for any `RUN`, `CMD`,
 `ENTRYPOINT`, `COPY` and `ADD` instructions that follow it in the `Dockerfile`.
+If the `WORKDIR` doesn't exist, it will be created even if its not used in any
+subsequent `Dockerfile` instruction.
 
 It can be used multiple times in the one `Dockerfile`. If a relative path
 is provided, it will be relative to the path of the previous `WORKDIR`
@@ -1172,8 +1183,11 @@ To use these, simply pass them on the command line using the `--build-arg
 `ARG` variables are not persisted into the built image as `ENV` variables are.
 However, `ARG` variables do impact the build cache in similar ways. If a
 Dockerfile defines an `ARG` variable whose value is different from a previous
-build, then a "cache miss" occurs upon its first usage, not its declaration.
-For example, consider this Dockerfile:
+build, then a "cache miss" occurs upon its first usage, not its definition. In
+particular, all `RUN` instructions following an `ARG` instruction use the `ARG`
+variable implicitly (as an environment variable), thus can cause a cache miss.
+
+For example, consider these two Dockerfile:
 
 ```
 1 FROM ubuntu
@@ -1181,12 +1195,17 @@ For example, consider this Dockerfile:
 3 RUN echo $CONT_IMG_VER
 ```
 
-If you specify `--build-arg CONT_IMG_VER=<value>` on the command line the
-specification on line 2 does not cause a cache miss; line 3 does cause a cache
-miss. The definition on line 2 has no impact on the resulting image. The `RUN`
-on line 3 executes a command and in doing so defines a set of environment
-variables, including `CONT_IMG_VER`. At that point, the `ARG` variable may
-impact the resulting image, so a cache miss occurs.
+```
+1 FROM ubuntu
+2 ARG CONT_IMG_VER
+3 RUN echo hello
+```
+
+If you specify `--build-arg CONT_IMG_VER=<value>` on the command line, in both
+cases, the specification on line 2 does not cause a cache miss; line 3 does
+cause a cache miss.`ARG CONT_IMG_VER` causes the RUN line to be identified
+as the same as running `CONT_IMG_VER=<value>` echo hello, so if the `<value>`
+changes, we get a cache miss.
 
 Consider another example under the same command line:
 
@@ -1200,6 +1219,20 @@ In this example, the cache miss occurs on line 3. The miss happens because
 the variable's value in the `ENV` references the `ARG` variable and that
 variable is changed through the command line. In this example, the `ENV`
 command causes the image to include the value.
+
+If an `ENV` instruction overrides an `ARG` instruction of the same name, like
+this Dockerfile:
+
+```
+1 FROM ubuntu
+2 ARG CONT_IMG_VER
+3 ENV CONT_IMG_VER hello
+4 RUN echo $CONT_IMG_VER
+```
+
+Line 3 does not cause a cache miss because the value of `CONT_IMG_VER` is a
+constant (`hello`). As a result, the environment variables and values used on
+the `RUN` (line 4) doesn't change between builds.
 
 ## ONBUILD
 

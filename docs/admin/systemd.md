@@ -33,15 +33,19 @@ If you want Docker to start at boot, you should also:
 There are a number of ways to configure the daemon flags and environment variables
 for your Docker daemon.
 
-The recommended way is to use a systemd drop-in file. These are local files in
-the `/etc/systemd/system/docker.service.d` directory. This could also be
-`/etc/systemd/system/docker.service`, which also works for overriding the
-defaults from `/lib/systemd/system/docker.service`.
+The recommended way is to use a systemd drop-in file (as described in
+the <a target="_blank"
+href="https://www.freedesktop.org/software/systemd/man/systemd.unit.html">systemd.unit</a>
+documentation). These are local files named `<something>.conf` in the
+`/etc/systemd/system/docker.service.d` directory. This could also be
+`/etc/systemd/system/docker.service`, which also works for overriding
+the defaults from `/lib/systemd/system/docker.service`.
 
-However, if you had previously used a package which had an `EnvironmentFile`
-(often pointing to `/etc/sysconfig/docker`) then for backwards compatibility,
-you drop a file in the `/etc/systemd/system/docker.service.d`
-directory including the following:
+However, if you had previously used a package which had an
+`EnvironmentFile` (often pointing to `/etc/sysconfig/docker`) then for
+backwards compatibility, you drop a file with a `.conf` extension into
+the `/etc/systemd/system/docker.service.d` directory including the
+following:
 
     [Service]
     EnvironmentFile=-/etc/sysconfig/docker
@@ -56,14 +60,14 @@ directory including the following:
 
 To check if the `docker.service` uses an `EnvironmentFile`:
 
-    $ sudo systemctl show docker | grep EnvironmentFile
+    $ systemctl show docker | grep EnvironmentFile
     EnvironmentFile=-/etc/sysconfig/docker (ignore_errors=yes)
 
 Alternatively, find out where the service file is located:
 
-    $ sudo systemctl status docker | grep Loaded
-       Loaded: loaded (/usr/lib/systemd/system/docker.service; enabled)
-    $ sudo grep EnvironmentFile /usr/lib/systemd/system/docker.service
+    $ systemctl show --property=FragmentPath docker
+    FragmentPath=/usr/lib/systemd/system/docker.service
+    $ grep EnvironmentFile /usr/lib/systemd/system/docker.service
     EnvironmentFile=-/etc/sysconfig/docker
 
 You can customize the Docker daemon options using override files as explained in the
@@ -143,7 +147,7 @@ Flush changes:
 
 Verify that the configuration has been loaded:
 
-    $ sudo systemctl show docker --property Environment
+    $ systemctl show --property=Environment docker
     Environment=HTTP_PROXY=http://proxy.example.com:80/
 
 Restart Docker:

@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/engine-api/types"
+	"github.com/docker/engine-api/types/versions"
 	"golang.org/x/net/context"
 )
 
@@ -36,14 +37,13 @@ func (s *containerRouter) postContainerExecCreate(ctx context.Context, w http.Re
 	if err := json.NewDecoder(r.Body).Decode(execConfig); err != nil {
 		return err
 	}
-	execConfig.Container = name
 
 	if len(execConfig.Cmd) == 0 {
 		return fmt.Errorf("No exec command specified")
 	}
 
 	// Register an instance of Exec in container.
-	id, err := s.backend.ContainerExecCreate(execConfig)
+	id, err := s.backend.ContainerExecCreate(name, execConfig)
 	if err != nil {
 		logrus.Errorf("Error setting up exec command in container %s: %v", name, err)
 		return err
@@ -61,7 +61,7 @@ func (s *containerRouter) postContainerExecStart(ctx context.Context, w http.Res
 	}
 
 	version := httputils.VersionFromContext(ctx)
-	if version.GreaterThan("1.21") {
+	if versions.GreaterThan(version, "1.21") {
 		if err := httputils.CheckForJSON(r); err != nil {
 			return err
 		}
@@ -103,8 +103,6 @@ func (s *containerRouter) postContainerExecStart(ctx context.Context, w http.Res
 			stderr = stdcopy.NewStdWriter(outStream, stdcopy.Stderr)
 			stdout = stdcopy.NewStdWriter(outStream, stdcopy.Stdout)
 		}
-	} else {
-		outStream = w
 	}
 
 	// Now run the user process in container.
@@ -112,7 +110,8 @@ func (s *containerRouter) postContainerExecStart(ctx context.Context, w http.Res
 		if execStartCheck.Detach {
 			return err
 		}
-		logrus.Errorf("Error running exec in container: %v\n", err)
+		stdout.Write([]byte(err.Error() + "\r\n"))
+		logrus.Errorf("Error running exec in container: %v", err)
 	}
 	return nil
 }

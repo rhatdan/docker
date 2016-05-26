@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/docker/distribution"
@@ -16,6 +15,7 @@ import (
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/registry"
 	"github.com/docker/engine-api/types"
+	"github.com/docker/go-connections/sockets"
 	"golang.org/x/net/context"
 )
 
@@ -25,6 +25,13 @@ type dumbCredentialStore struct {
 
 func (dcs dumbCredentialStore) Basic(*url.URL) (string, string) {
 	return dcs.auth.Username, dcs.auth.Password
+}
+
+func (dcs dumbCredentialStore) RefreshToken(*url.URL, string) string {
+	return dcs.auth.IdentityToken
+}
+
+func (dcs dumbCredentialStore) SetRefreshToken(*url.URL, string, string) {
 }
 
 // NewV2Repository returns a repository (v2 only). It creates a HTTP transport
@@ -37,64 +44,41 @@ func NewV2Repository(ctx context.Context, repoInfo *registry.RepositoryInfo, end
 		repoName = repoInfo.RemoteName()
 	}
 
+	direct := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}
+
 	// TODO(dmcgowan): Call close idle connections when complete, use keep alive
 	base := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		Dial: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).Dial,
+		Proxy:               http.ProxyFromEnvironment,
+		Dial:                direct.Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
 		TLSClientConfig:     endpoint.TLSConfig,
 		// TODO(dmcgowan): Call close idle connections when complete and use keep alive
 		DisableKeepAlives: true,
 	}
 
-	modifiers := registry.DockerHeaders(dockerversion.DockerUserAgent(), metaHeaders)
+	proxyDialer, err := sockets.DialerFromEnvironment(direct)
+	if err == nil {
+		base.Dial = proxyDialer.Dial
+	}
+
+	modifiers := registry.DockerHeaders(dockerversion.DockerUserAgent(ctx), metaHeaders)
 	authTransport := transport.NewTransport(base, modifiers...)
-	pingClient := &http.Client{
-		Transport: authTransport,
-		Timeout:   15 * time.Second,
-	}
-	endpointStr := strings.TrimRight(endpoint.URL.String(), "/") + "/v2/"
-	req, err := http.NewRequest("GET", endpointStr, nil)
+
+	challengeManager, foundVersion, err := registry.PingV2Registry(endpoint, authTransport)
 	if err != nil {
-		return nil, false, fallbackError{err: err}
-	}
-	resp, err := pingClient.Do(req)
-	if err != nil {
-		return nil, false, fallbackError{err: err}
-	}
-	defer resp.Body.Close()
-
-	// We got a HTTP request through, so we're using the right TLS settings.
-	// From this point forward, set transportOK to true in any fallbackError
-	// we return.
-
-	v2Version := auth.APIVersion{
-		Type:    "registry",
-		Version: "2.0",
-	}
-
-	versions := auth.APIVersions(resp, registry.DefaultRegistryVersionHeader)
-	for _, pingVersion := range versions {
-		if pingVersion == v2Version {
-			// The version header indicates we're definitely
-			// talking to a v2 registry. So don't allow future
-			// fallbacks to the v1 protocol.
-
-			foundVersion = true
-			break
+		transportOK := false
+		if responseErr, ok := err.(registry.PingResponseError); ok {
+			transportOK = true
+			err = responseErr.Err
 		}
-	}
-
-	challengeManager := auth.NewSimpleChallengeManager()
-	if err := challengeManager.AddResponse(resp); err != nil {
 		return nil, foundVersion, fallbackError{
 			err:         err,
 			confirmedV2: foundVersion,
-			transportOK: true,
+			transportOK: transportOK,
 		}
 	}
 
@@ -103,7 +87,18 @@ func NewV2Repository(ctx context.Context, repoInfo *registry.RepositoryInfo, end
 		modifiers = append(modifiers, auth.NewAuthorizer(challengeManager, passThruTokenHandler))
 	} else {
 		creds := dumbCredentialStore{auth: authConfig}
-		tokenHandler := auth.NewTokenHandler(authTransport, creds, repoName, actions...)
+		tokenHandlerOptions := auth.TokenHandlerOptions{
+			Transport:   authTransport,
+			Credentials: creds,
+			Scopes: []auth.Scope{
+				auth.RepositoryScope{
+					Repository: repoName,
+					Actions:    actions,
+				},
+			},
+			ClientID: registry.AuthClientID,
+		}
+		tokenHandler := auth.NewTokenHandlerWithOptions(tokenHandlerOptions)
 		basicHandler := auth.NewBasicHandler(creds)
 		modifiers = append(modifiers, auth.NewAuthorizer(challengeManager, tokenHandler, basicHandler))
 	}

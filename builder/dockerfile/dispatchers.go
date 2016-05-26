@@ -9,8 +9,6 @@ package dockerfile
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -20,17 +18,11 @@ import (
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/pkg/signal"
-	"github.com/docker/docker/pkg/system"
 	runconfigopts "github.com/docker/docker/runconfig/opts"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/strslice"
 	"github.com/docker/go-connections/nat"
 )
-
-// dispatch with no layer / parsing. This is effectively not a command.
-func nullDispatch(b *Builder, args []string, attributes map[string]bool, original string) error {
-	return nil
-}
 
 // ENV foo bar
 //
@@ -211,7 +203,7 @@ func from(b *Builder, args []string, attributes map[string]bool, original string
 			// TODO: shouldn't we error out if error is different from "not found" ?
 		}
 		if image == nil {
-			image, err = b.docker.PullOnBuild(name, b.options.AuthConfigs, b.Output)
+			image, err = b.docker.PullOnBuild(b.clientCtx, name, b.options.AuthConfigs, b.Output)
 			if err != nil {
 				return err
 			}
@@ -262,22 +254,19 @@ func workdir(b *Builder, args []string, attributes map[string]bool, original str
 		return errExactlyOneArgument("WORKDIR")
 	}
 
-	if err := b.flags.Parse(); err != nil {
+	err := b.flags.Parse()
+	if err != nil {
 		return err
 	}
 
 	// This is from the Dockerfile and will not necessarily be in platform
 	// specific semantics, hence ensure it is converted.
-	workdir := filepath.FromSlash(args[0])
-
-	if !system.IsAbs(workdir) {
-		current := filepath.FromSlash(b.runConfig.WorkingDir)
-		workdir = filepath.Join(string(os.PathSeparator), current, workdir)
+	b.runConfig.WorkingDir, err = normaliseWorkdir(b.runConfig.WorkingDir, args[0])
+	if err != nil {
+		return err
 	}
 
-	b.runConfig.WorkingDir = workdir
-
-	return b.commit("", b.runConfig.Cmd, fmt.Sprintf("WORKDIR %v", workdir))
+	return b.commit("", b.runConfig.Cmd, fmt.Sprintf("WORKDIR %v", b.runConfig.WorkingDir))
 }
 
 // RUN some command yo

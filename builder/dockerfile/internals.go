@@ -6,6 +6,7 @@ package dockerfile
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,9 +17,11 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/api/types/backend"
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/builder/dockerfile/parser"
 	"github.com/docker/docker/pkg/archive"
@@ -45,6 +48,7 @@ func (b *Builder) commit(id string, autoCmd strslice.StrSlice, comment string) e
 		return fmt.Errorf("Please provide a source image with `from` prior to commit")
 	}
 	b.runConfig.Image = b.image
+
 	if id == "" {
 		cmd := b.runConfig.Cmd
 		if runtime.GOOS != "windows" {
@@ -70,10 +74,12 @@ func (b *Builder) commit(id string, autoCmd strslice.StrSlice, comment string) e
 	autoConfig := *b.runConfig
 	autoConfig.Cmd = autoCmd
 
-	commitCfg := &types.ContainerCommitConfig{
-		Author: b.maintainer,
-		Pause:  true,
-		Config: &autoConfig,
+	commitCfg := &backend.ContainerCommitConfig{
+		ContainerCommitConfig: types.ContainerCommitConfig{
+			Author: b.maintainer,
+			Pause:  true,
+			Config: &autoConfig,
+		},
 	}
 
 	// Commit the container
@@ -81,6 +87,7 @@ func (b *Builder) commit(id string, autoCmd strslice.StrSlice, comment string) e
 	if err != nil {
 		return err
 	}
+
 	b.image = imageID
 	return nil
 }
@@ -193,14 +200,8 @@ func (b *Builder) runContextCommand(args []string, allowRemote bool, allowLocalD
 
 	// Twiddle the destination when its a relative path - meaning, make it
 	// relative to the WORKINGDIR
-	if !system.IsAbs(dest) {
-		hasSlash := strings.HasSuffix(dest, string(os.PathSeparator))
-		dest = filepath.Join(string(os.PathSeparator), filepath.FromSlash(b.runConfig.WorkingDir), dest)
-
-		// Make sure we preserve any trailing slash
-		if hasSlash {
-			dest += string(os.PathSeparator)
-		}
+	if dest, err = normaliseDest(cmdName, b.runConfig.WorkingDir, dest); err != nil {
+		return err
 	}
 
 	for _, info := range infos {
@@ -527,15 +528,15 @@ func (b *Builder) create() (string, error) {
 	b.tmpContainers[c.ID] = struct{}{}
 	fmt.Fprintf(b.Stdout, " ---> Running in %s\n", stringid.TruncateID(c.ID))
 
-	if len(config.Cmd) > 0 {
-		// override the entry point that may have been picked up from the base image
-		if err := b.docker.ContainerUpdateCmdOnBuild(c.ID, config.Cmd); err != nil {
-			return "", err
-		}
+	// override the entry point that may have been picked up from the base image
+	if err := b.docker.ContainerUpdateCmdOnBuild(c.ID, config.Cmd); err != nil {
+		return "", err
 	}
 
 	return c.ID, nil
 }
+
+var errCancelled = errors.New("build cancelled")
 
 func (b *Builder) run(cID string) (err error) {
 	errCh := make(chan error)
@@ -544,14 +545,19 @@ func (b *Builder) run(cID string) (err error) {
 	}()
 
 	finished := make(chan struct{})
-	defer close(finished)
+	var once sync.Once
+	finish := func() { close(finished) }
+	cancelErrCh := make(chan error, 1)
+	defer once.Do(finish)
 	go func() {
 		select {
-		case <-b.cancelled:
+		case <-b.clientCtx.Done():
 			logrus.Debugln("Build cancelled, killing and removing container:", cID)
 			b.docker.ContainerKill(cID, 0)
 			b.removeContainer(cID)
+			cancelErrCh <- errCancelled
 		case <-finished:
+			cancelErrCh <- nil
 		}
 	}()
 
@@ -571,8 +577,8 @@ func (b *Builder) run(cID string) (err error) {
 			Code:    ret,
 		}
 	}
-
-	return nil
+	once.Do(finish)
+	return <-cancelErrCh
 }
 
 func (b *Builder) removeContainer(c string) error {
@@ -612,25 +618,8 @@ func (b *Builder) readDockerfile() error {
 		}
 	}
 
-	f, err := b.context.Open(b.options.Dockerfile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("Cannot locate specified Dockerfile: %s", b.options.Dockerfile)
-		}
-		return err
-	}
-	if f, ok := f.(*os.File); ok {
-		// ignoring error because Open already succeeded
-		fi, err := f.Stat()
-		if err != nil {
-			return fmt.Errorf("Unexpected error reading Dockerfile: %v", err)
-		}
-		if fi.Size() == 0 {
-			return fmt.Errorf("The Dockerfile (%s) cannot be empty", b.options.Dockerfile)
-		}
-	}
-	b.dockerfile, err = parser.Parse(f)
-	f.Close()
+	err := b.parseDockerfile()
+
 	if err != nil {
 		return err
 	}
@@ -646,6 +635,33 @@ func (b *Builder) readDockerfile() error {
 	if dockerIgnore, ok := b.context.(builder.DockerIgnoreContext); ok {
 		dockerIgnore.Process([]string{b.options.Dockerfile})
 	}
+	return nil
+}
+
+func (b *Builder) parseDockerfile() error {
+	f, err := b.context.Open(b.options.Dockerfile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("Cannot locate specified Dockerfile: %s", b.options.Dockerfile)
+		}
+		return err
+	}
+	defer f.Close()
+	if f, ok := f.(*os.File); ok {
+		// ignoring error because Open already succeeded
+		fi, err := f.Stat()
+		if err != nil {
+			return fmt.Errorf("Unexpected error reading Dockerfile: %v", err)
+		}
+		if fi.Size() == 0 {
+			return fmt.Errorf("The Dockerfile (%s) cannot be empty", b.options.Dockerfile)
+		}
+	}
+	b.dockerfile, err = parser.Parse(f)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
