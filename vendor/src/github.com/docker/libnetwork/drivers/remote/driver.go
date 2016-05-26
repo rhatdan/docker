@@ -3,7 +3,6 @@ package remote
 import (
 	"fmt"
 	"net"
-	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/plugins"
@@ -12,10 +11,6 @@ import (
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/drivers/remote/api"
 	"github.com/docker/libnetwork/types"
-)
-
-const (
-	missingMethod = "404 page not found"
 )
 
 type driver struct {
@@ -88,7 +83,18 @@ func (d *driver) call(methodName string, arg interface{}, retVal maybeError) err
 	return nil
 }
 
-func (d *driver) CreateNetwork(id string, options map[string]interface{}, ipV4Data, ipV6Data []driverapi.IPAMData) error {
+func (d *driver) NetworkAllocate(id string, option map[string]string, ipV4Data, ipV6Data []driverapi.IPAMData) (map[string]string, error) {
+	return nil, types.NotImplementedErrorf("not implemented")
+}
+
+func (d *driver) NetworkFree(id string) error {
+	return types.NotImplementedErrorf("not implemented")
+}
+
+func (d *driver) EventNotify(etype driverapi.EventType, nid, tableName, key string, value []byte) {
+}
+
+func (d *driver) CreateNetwork(id string, options map[string]interface{}, nInfo driverapi.NetworkInfo, ipV4Data, ipV6Data []driverapi.IPAMData) error {
 	create := &api.CreateNetworkRequest{
 		NetworkID: id,
 		Options:   options,
@@ -260,7 +266,7 @@ func (d *driver) ProgramExternalConnectivity(nid, eid string, options map[string
 		Options:    options,
 	}
 	err := d.call("ProgramExternalConnectivity", data, &api.ProgramExternalConnectivityResponse{})
-	if err != nil && strings.Contains(err.Error(), missingMethod) {
+	if err != nil && plugins.IsNotFound(err) {
 		// It is not mandatory yet to support this method
 		return nil
 	}
@@ -274,7 +280,7 @@ func (d *driver) RevokeExternalConnectivity(nid, eid string) error {
 		EndpointID: eid,
 	}
 	err := d.call("RevokeExternalConnectivity", data, &api.RevokeExternalConnectivityResponse{})
-	if err != nil && strings.Contains(err.Error(), missingMethod) {
+	if err != nil && plugins.IsNotFound(err) {
 		// It is not mandatory yet to support this method
 		return nil
 	}

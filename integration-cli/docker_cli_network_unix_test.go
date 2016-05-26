@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/pkg/integration/checker"
+	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/versions/v1p20"
@@ -308,16 +309,23 @@ func (s *DockerNetworkSuite) TestDockerNetworkRmPredefined(c *check.C) {
 }
 
 func (s *DockerNetworkSuite) TestDockerNetworkLsFilter(c *check.C) {
+	testNet := "testnet1"
+	testLabel := "foo"
+	testValue := "bar"
 	out, _ := dockerCmd(c, "network", "create", "dev")
 	defer func() {
 		dockerCmd(c, "network", "rm", "dev")
+		dockerCmd(c, "network", "rm", testNet)
 	}()
 	networkID := strings.TrimSpace(out)
 
-	// filter with partial ID and partial name
-	// only show 'bridge' and 'dev' network
-	out, _ = dockerCmd(c, "network", "ls", "-f", "id="+networkID[0:5], "-f", "name=dge")
-	assertNwList(c, out, []string{"bridge", "dev"})
+	// filter with partial ID
+	// only show 'dev' network
+	out, _ = dockerCmd(c, "network", "ls", "-f", "id="+networkID[0:5])
+	assertNwList(c, out, []string{"dev"})
+
+	out, _ = dockerCmd(c, "network", "ls", "-f", "name=dge")
+	assertNwList(c, out, []string{"bridge"})
 
 	// only show built-in network (bridge, none, host)
 	out, _ = dockerCmd(c, "network", "ls", "-f", "type=builtin")
@@ -331,6 +339,28 @@ func (s *DockerNetworkSuite) TestDockerNetworkLsFilter(c *check.C) {
 	// it should be equivalent of ls without option
 	out, _ = dockerCmd(c, "network", "ls", "-f", "type=custom", "-f", "type=builtin")
 	assertNwList(c, out, []string{"bridge", "dev", "host", "none"})
+
+	out, _ = dockerCmd(c, "network", "create", "--label", testLabel+"="+testValue, testNet)
+	assertNwIsAvailable(c, testNet)
+
+	out, _ = dockerCmd(c, "network", "ls", "-f", "label="+testLabel)
+	assertNwList(c, out, []string{testNet})
+
+	out, _ = dockerCmd(c, "network", "ls", "-f", "label="+testLabel+"="+testValue)
+	assertNwList(c, out, []string{testNet})
+
+	out, _ = dockerCmd(c, "network", "ls", "-f", "label=nonexistent")
+	outArr := strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(len(outArr), check.Equals, 1, check.Commentf("%s\n", out))
+
+	out, _ = dockerCmd(c, "network", "ls", "-f", "driver=null")
+	assertNwList(c, out, []string{"none"})
+
+	out, _ = dockerCmd(c, "network", "ls", "-f", "driver=host")
+	assertNwList(c, out, []string{"host"})
+
+	out, _ = dockerCmd(c, "network", "ls", "-f", "driver=bridge")
+	assertNwList(c, out, []string{"bridge", "dev", testNet})
 }
 
 func (s *DockerNetworkSuite) TestDockerNetworkCreateDelete(c *check.C) {
@@ -1080,6 +1110,52 @@ func (s *DockerNetworkSuite) TestDockerNetworkConnectWithPortMapping(c *check.C)
 	dockerCmd(c, "network", "connect", "test1", "c1")
 }
 
+func verifyPortMap(c *check.C, container, port, originalMapping string, mustBeEqual bool) {
+	chk := checker.Equals
+	if !mustBeEqual {
+		chk = checker.Not(checker.Equals)
+	}
+	currentMapping, _ := dockerCmd(c, "port", container, port)
+	c.Assert(currentMapping, chk, originalMapping)
+}
+
+func (s *DockerNetworkSuite) TestDockerNetworkConnectDisconnectWithPortMapping(c *check.C) {
+	// Connect and disconnect a container with explicit and non-explicit
+	// host port mapping to/from networks which do cause and do not cause
+	// the container default gateway to change, and verify docker port cmd
+	// returns congruent information
+	testRequires(c, NotArm)
+	cnt := "c1"
+	dockerCmd(c, "network", "create", "aaa")
+	dockerCmd(c, "network", "create", "ccc")
+
+	dockerCmd(c, "run", "-d", "--name", cnt, "-p", "9000:90", "-p", "70", "busybox", "top")
+	c.Assert(waitRun(cnt), check.IsNil)
+	curPortMap, _ := dockerCmd(c, "port", cnt, "70")
+	curExplPortMap, _ := dockerCmd(c, "port", cnt, "90")
+
+	// Connect to a network which causes the container's default gw switch
+	dockerCmd(c, "network", "connect", "aaa", cnt)
+	verifyPortMap(c, cnt, "70", curPortMap, false)
+	verifyPortMap(c, cnt, "90", curExplPortMap, true)
+
+	// Read current mapping
+	curPortMap, _ = dockerCmd(c, "port", cnt, "70")
+
+	// Disconnect from a network which causes the container's default gw switch
+	dockerCmd(c, "network", "disconnect", "aaa", cnt)
+	verifyPortMap(c, cnt, "70", curPortMap, false)
+	verifyPortMap(c, cnt, "90", curExplPortMap, true)
+
+	// Read current mapping
+	curPortMap, _ = dockerCmd(c, "port", cnt, "70")
+
+	// Connect to a network which does not cause the container's default gw switch
+	dockerCmd(c, "network", "connect", "ccc", cnt)
+	verifyPortMap(c, cnt, "70", curPortMap, true)
+	verifyPortMap(c, cnt, "90", curExplPortMap, true)
+}
+
 func (s *DockerNetworkSuite) TestDockerNetworkConnectWithMac(c *check.C) {
 	macAddress := "02:42:ac:11:00:02"
 	dockerCmd(c, "network", "create", "mynetwork")
@@ -1348,7 +1424,7 @@ func (s *DockerSuite) TestUserDefinedNetworkConnectDisconnectAlias(c *check.C) {
 	dockerCmd(c, "network", "create", "-d", "bridge", "net1")
 	dockerCmd(c, "network", "create", "-d", "bridge", "net2")
 
-	dockerCmd(c, "run", "-d", "--net=net1", "--name=first", "--net-alias=foo", "busybox", "top")
+	cid, _ := dockerCmd(c, "run", "-d", "--net=net1", "--name=first", "--net-alias=foo", "busybox", "top")
 	c.Assert(waitRun("first"), check.IsNil)
 
 	dockerCmd(c, "run", "-d", "--net=net1", "--name=second", "busybox", "top")
@@ -1358,6 +1434,10 @@ func (s *DockerSuite) TestUserDefinedNetworkConnectDisconnectAlias(c *check.C) {
 	_, _, err := dockerCmdWithError("exec", "second", "ping", "-c", "1", "first")
 	c.Assert(err, check.IsNil)
 	_, _, err = dockerCmdWithError("exec", "second", "ping", "-c", "1", "foo")
+	c.Assert(err, check.IsNil)
+
+	// ping first container's short-id alias
+	_, _, err = dockerCmdWithError("exec", "second", "ping", "-c", "1", stringid.TruncateID(cid))
 	c.Assert(err, check.IsNil)
 
 	// connect first container to net2 network
@@ -1378,6 +1458,9 @@ func (s *DockerSuite) TestUserDefinedNetworkConnectDisconnectAlias(c *check.C) {
 
 	// ping to net2 scoped alias "bar" must still succeed
 	_, _, err = dockerCmdWithError("exec", "second", "ping", "-c", "1", "bar")
+	c.Assert(err, check.IsNil)
+	// ping to net2 scoped alias short-id must still succeed
+	_, _, err = dockerCmdWithError("exec", "second", "ping", "-c", "1", stringid.TruncateID(cid))
 	c.Assert(err, check.IsNil)
 
 	// verify the alias option is rejected when running on predefined network

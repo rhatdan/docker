@@ -82,6 +82,7 @@ Creates a new container.
       --stop-signal="SIGTERM"       Signal to stop a container
       --shm-size=[]                 Size of `/dev/shm`. The format is `<number><unit>`. `number` must be greater than `0`.  Unit is optional and can be `b` (bytes), `k` (kilobytes), `m` (megabytes), or `g` (gigabytes). If you omit the unit, the system uses bytes. If you omit the size entirely, the system uses `64m`.
       --storage-opt=[]              Set storage driver options per container
+      --sysctl[=*[]*]]              Configure namespaced kernel parameters at runtime
       -t, --tty                     Allocate a pseudo-TTY
       -u, --user=""                 Username or UID
       --userns=""                   Container user namespace
@@ -163,7 +164,8 @@ Linux namespaces. On Microsoft Windows, you can specify these values:
 
 | Value     | Description                                                                                                                                                   |
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `default` | Use the value specified by the Docker daemon's `--exec-opt` . If the `daemon` does not specify an isolation technology, Microsoft Windows uses `process` as its default value.  |
+| `default` | Use the value specified by the Docker daemon's `--exec-opt` . If the `daemon` does not specify an isolation technology, Microsoft Windows uses `process` as its default value if the
+daemon is running on Windows server, or `hyperv` if running on Windows client.  |
 | `process` | Namespace isolation only.                                                                                                                                     |
 | `hyperv`   | Hyper-V hypervisor partition-based isolation.                                                                                                                  |
 

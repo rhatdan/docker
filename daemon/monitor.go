@@ -40,7 +40,10 @@ func (daemon *Daemon) StateChanged(id string, e libcontainerd.StateInfo) error {
 		// FIXME: here is race condition between two RUN instructions in Dockerfile
 		// because they share same runconfig and change image. Must be fixed
 		// in builder/builder.go
-		return c.ToDisk()
+		if err := c.ToDisk(); err != nil {
+			return err
+		}
+		return daemon.postRunProcessing(c, e)
 	case libcontainerd.StateRestart:
 		c.Lock()
 		defer c.Unlock()
@@ -77,6 +80,7 @@ func (daemon *Daemon) StateChanged(id string, e libcontainerd.StateInfo) error {
 			c.Reset(false)
 			return err
 		}
+		daemon.LogContainerEvent(c, "start")
 	case libcontainerd.StatePause:
 		c.Paused = true
 		daemon.LogContainerEvent(c, "pause")

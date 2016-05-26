@@ -9,8 +9,20 @@ import (
 	"strings"
 )
 
+// constants for the IP address type
+const (
+	IP = iota // IPv4 and IPv6
+	IPv4
+	IPv6
+)
+
 // UUID represents a globally unique ID of various resources like network and endpoint
 type UUID string
+
+// QosPolicy represents a quality of service policy on an endpoint
+type QosPolicy struct {
+	MaxEgressBandwidth uint64
+}
 
 // TransportPort represent a local Layer 4 endpoint
 type TransportPort struct {
@@ -316,6 +328,12 @@ func GetMinimalIPNet(nw *net.IPNet) *net.IPNet {
 		return &net.IPNet{IP: nw.IP.To4(), Mask: m}
 	}
 	return nw
+}
+
+// IsIPNetValid returns true if the ipnet is a valid network/mask
+// combination. Otherwise returns false.
+func IsIPNetValid(nw *net.IPNet) bool {
+	return nw.String() != "0.0.0.0/0"
 }
 
 var v4inV6MaskPrefix = []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}

@@ -76,9 +76,20 @@ func rfc5424formatterWithAppNameAsTag(p syslog.Priority, hostname, tag, content 
 	return msg
 }
 
+// The timestamp field in rfc5424 is derived from rfc3339. Whereas rfc3339 makes allowances
+// for multiple syntaxes, there are further restrictions in rfc5424, i.e., the maximium
+// resolution is limited to "TIME-SECFRAC" which is 6 (microsecond resolution)
+func rfc5424microformatterWithAppNameAsTag(p syslog.Priority, hostname, tag, content string) string {
+	timestamp := time.Now().Format("2006-01-02T15:04:05.999999Z07:00")
+	pid := os.Getpid()
+	msg := fmt.Sprintf("<%d>%d %s %s %s %d %s %s",
+		p, 1, timestamp, hostname, tag, pid, tag, content)
+	return msg
+}
+
 // New creates a syslog logger using the configuration passed in on
 // the context. Supported context configuration variables are
-// syslog-address, syslog-facility, & syslog-tag.
+// syslog-address, syslog-facility, syslog-format.
 func New(ctx logger.Context) (logger.Logger, error) {
 	tag, err := loggerutils.ParseLogTag(ctx, "{{.ID}}")
 	if err != nil {
@@ -152,8 +163,8 @@ func parseAddress(address string) (string, string, error) {
 		return "", "", err
 	}
 
-	// unix socket validation
-	if url.Scheme == "unix" {
+	// unix and unixgram socket validation
+	if url.Scheme == "unix" || url.Scheme == "unixgram" {
 		if _, err := os.Stat(url.Path); err != nil {
 			return "", "", err
 		}
@@ -173,13 +184,14 @@ func parseAddress(address string) (string, string, error) {
 }
 
 // ValidateLogOpt looks for syslog specific log options
-// syslog-address, syslog-facility, & syslog-tag.
+// syslog-address, syslog-facility.
 func ValidateLogOpt(cfg map[string]string) error {
 	for key := range cfg {
 		switch key {
+		case "env":
+		case "labels":
 		case "syslog-address":
 		case "syslog-facility":
-		case "syslog-tag":
 		case "syslog-tls-ca-cert":
 		case "syslog-tls-cert":
 		case "syslog-tls-key":
@@ -240,6 +252,8 @@ func parseLogFormat(logFormat string) (syslog.Formatter, syslog.Framer, error) {
 		return syslog.RFC3164Formatter, syslog.DefaultFramer, nil
 	case "rfc5424":
 		return rfc5424formatterWithAppNameAsTag, syslog.RFC5425MessageLengthFramer, nil
+	case "rfc5424micro":
+		return rfc5424microformatterWithAppNameAsTag, syslog.RFC5425MessageLengthFramer, nil
 	default:
 		return nil, nil, errors.New("Invalid syslog format")
 	}

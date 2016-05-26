@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"hash"
 	"io"
@@ -132,7 +133,7 @@ type FileMeta struct {
 }
 
 // CheckHashes verifies all the checksums specified by the "hashes" of the payload.
-func CheckHashes(payload []byte, hashes Hashes) error {
+func CheckHashes(payload []byte, name string, hashes Hashes) error {
 	cnt := 0
 
 	// k, v indicate the hash algorithm and the corresponding value
@@ -141,20 +142,20 @@ func CheckHashes(payload []byte, hashes Hashes) error {
 		case notary.SHA256:
 			checksum := sha256.Sum256(payload)
 			if subtle.ConstantTimeCompare(checksum[:], v) == 0 {
-				return fmt.Errorf("%s checksum mismatched", k)
+				return ErrMismatchedChecksum{alg: notary.SHA256, name: name, expected: hex.EncodeToString(v)}
 			}
 			cnt++
 		case notary.SHA512:
 			checksum := sha512.Sum512(payload)
 			if subtle.ConstantTimeCompare(checksum[:], v) == 0 {
-				return fmt.Errorf("%s checksum mismatched", k)
+				return ErrMismatchedChecksum{alg: notary.SHA512, name: name, expected: hex.EncodeToString(v)}
 			}
 			cnt++
 		}
 	}
 
 	if cnt == 0 {
-		return fmt.Errorf("at least one supported hash needed")
+		return ErrMissingMeta{Role: name}
 	}
 
 	return nil
@@ -169,12 +170,12 @@ func CheckValidHashStructures(hashes Hashes) error {
 		switch k {
 		case notary.SHA256:
 			if len(v) != sha256.Size {
-				return fmt.Errorf("invalid %s checksum", notary.SHA256)
+				return ErrInvalidChecksum{alg: notary.SHA256}
 			}
 			cnt++
 		case notary.SHA512:
 			if len(v) != sha512.Size {
-				return fmt.Errorf("invalid %s checksum", notary.SHA512)
+				return ErrInvalidChecksum{alg: notary.SHA512}
 			}
 			cnt++
 		}

@@ -74,13 +74,16 @@ The following logging options are supported for the `syslog` logging driver:
 
     --log-opt syslog-address=[tcp|udp|tcp+tls]://host:port
     --log-opt syslog-address=unix://path
+    --log-opt syslog-address=unixgram://path
     --log-opt syslog-facility=daemon
     --log-opt syslog-tls-ca-cert=/etc/ca-certificates/custom/ca.pem
     --log-opt syslog-tls-cert=/etc/ca-certificates/custom/cert.pem
     --log-opt syslog-tls-key=/etc/ca-certificates/custom/key.pem
     --log-opt syslog-tls-skip-verify=true
     --log-opt tag="mailer"
-    --log-opt syslog-format=[rfc5424|rfc3164] 
+    --log-opt syslog-format=[rfc5424|rfc5424micro|rfc3164]
+    --log-opt env=ENV1,ENV2,ENV3
+    --log-opt labels=label1,label2,label3
 
 `syslog-address` specifies the remote syslog server address where the driver connects to.
 If not specified it defaults to the local unix socket of the running system.
@@ -128,6 +131,7 @@ This option is ignored if the address protocol is not `tcp+tls`.
 This verification is enabled by default, but it can be overriden by setting
 this option to `true`. This option is ignored if the address protocol is not `tcp+tls`.
 
+`tag` configures a string that is appended to the APP-NAME in the syslog message.
 By default, Docker uses the first 12 characters of the container ID to tag log messages.
 Refer to the [log tag option documentation](log_tags.md) for customizing
 the log tag format.
@@ -135,8 +139,14 @@ the log tag format.
 `syslog-format` specifies syslog message format to use when logging.
 If not specified it defaults to the local unix syslog format without hostname specification.
 Specify rfc3164 to perform logging in RFC-3164 compatible format. Specify rfc5424 to perform 
-logging in RFC-5424 compatible format
+logging in RFC-5424 compatible format. Specify rfc5424micro to perform logging in RFC-5424
+compatible format with microsecond timestamp resolution.
 
+`env` should be a comma-separated list of keys of environment variables. Used for
+advanced [log tag options](log_tags.md).
+
+`labels` should be a comma-separated list of keys of labels. Used for advanced
+[log tag options](log_tags.md).
 
 ## journald options
 

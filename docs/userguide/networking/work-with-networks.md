@@ -66,7 +66,7 @@ before you can create one. These conditions are:
 * A cluster of hosts with connectivity to the key-value store.
 * A properly configured Engine `daemon` on each host in the swarm.
 
-The `docker daemon` options that support the `overlay` network are:
+The `dockerd` options that support the `overlay` network are:
 
 * `--cluster-store`
 * `--cluster-store-opt`
@@ -228,7 +228,8 @@ $ docker run --net=isolated_nw --ip=172.25.3.3 -itd --name=container3 busybox
 As you can see you were able to specify the ip address for your container.
 As long as the network to which the container is connecting was created with
 a user specified subnet, you will be able to select the IPv4 and/or IPv6 address(es)
-for your container when executing `docker run` and `docker network connect` commands.
+for your container when executing `docker run` and `docker network connect` commands
+by respectively passing the `--ip` and `--ip6` flags for IPv4 and IPv6.
 The selected IP address is part of the container networking configuration and will be
 preserved across container reload. The feature is only available on user defined networks,
 because they guarantee their subnets configuration does not change across daemon reload.
@@ -288,7 +289,7 @@ examine its networking stack:
 $ docker attach container2
 ```
 
-If you look a the container's network stack you should see two Ethernet interfaces, one for the default bridge network and one for the `isolated_nw` network.
+If you look at the container's network stack you should see two Ethernet interfaces, one for the default bridge network and one for the `isolated_nw` network.
 
 ```bash
 / # ifconfig

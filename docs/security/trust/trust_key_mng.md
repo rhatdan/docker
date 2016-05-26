@@ -37,7 +37,7 @@ workflow.  They need to be
 
 Note: Prior to Docker Engine 1.11, the snapshot key was also generated and stored
 locally client-side. [Use the Notary CLI to manage your snapshot key locally
-again](https://docs.docker.com/notary/advanced_usage/#rotate-keys) for
+again](/notary/advanced_usage.md#rotate-keys) for
 repositories created with newer versions of Docker.
 
 ## Choosing a passphrase
@@ -64,6 +64,16 @@ Before backing them up, you should `tar` them into an archive:
 $ umask 077; tar -zcvf private_keys_backup.tar.gz ~/.docker/trust/private; umask 022
 ```
 
+## Hardware storage and signing
+
+Docker Content Trust can store and sign with root keys from a Yubikey 4. The
+Yubikey is prioritized over keys stored in the filesystem. When you initialize a
+new repository with content trust, Docker Engine looks for a root key locally. If a
+key is not found and the Yubikey 4 exists, Docker Engine creates a root key in the
+Yubikey 4. Please consult the [Notary documentation](/notary/advanced_usage.md#use-a-yubikey) for more details.
+
+Prior to Docker Engine 1.11, this feature was only in the experimental branch.
+
 ## Lost keys
 
 If a publisher loses keys it means losing the ability to sign trusted content for
@@ -76,7 +86,7 @@ the tagged image prior to the loss. Image consumers would get an error for
 content that they already downloaded:
 
 ```
-could not validate the path to a trusted root: failed to validate data with current trusted certificates
+Warning: potential malicious behavior - trust data has insufficient signatures for remote repository docker.io/my/image: valid signatures did not meet threshold
 ```
 
 To correct this, they need to download a new image tag with that is signed with

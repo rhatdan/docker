@@ -66,7 +66,8 @@ DEFAULT_BUNDLES=(
 	validate-toml
 	validate-vet
 
-	binary
+	binary-client
+	binary-daemon
 	dynbinary
 
 	test-unit
@@ -79,7 +80,7 @@ DEFAULT_BUNDLES=(
 )
 
 VERSION=$(< ./VERSION)
-if command -v git &> /dev/null && git rev-parse &> /dev/null; then
+if command -v git &> /dev/null && [ -d .git ] && git rev-parse &> /dev/null; then
 	GITCOMMIT=$(git rev-parse --short HEAD)
 	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 		GITCOMMIT="$GITCOMMIT-unsupported"
@@ -92,7 +93,7 @@ if command -v git &> /dev/null && git rev-parse &> /dev/null; then
 		git status --porcelain --untracked-files=no
 		echo "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 	fi
-	! BUILDTIME=$(date --rfc-3339 ns | sed -e 's/ /T/') &> /dev/null
+	! BUILDTIME=$(date --rfc-3339 ns 2> /dev/null | sed -e 's/ /T/') &> /dev/null
 	if [ -z $BUILDTIME ]; then
 		# If using bash 3.1 which doesn't support --rfc-3389, eg Windows CI
 		BUILDTIME=$(date -u)
@@ -112,6 +113,12 @@ if [ "$AUTO_GOPATH" ]; then
 	mkdir -p .gopath/src/"$(dirname "${DOCKER_PKG}")"
 	ln -sf ../../../.. .gopath/src/"${DOCKER_PKG}"
 	export GOPATH="${PWD}/.gopath:${PWD}/vendor"
+
+	if [ "$(go env GOOS)" = 'solaris' ]; then
+		# sys/unix is installed outside the standard library on solaris
+		# TODO need to allow for version change, need to get version from go
+		export GOPATH="${GOPATH}:/usr/lib/gocode/1.5"
+	fi
 fi
 
 if [ ! "$GOPATH" ]; then
@@ -126,13 +133,11 @@ if [ "$DOCKER_EXPERIMENTAL" ]; then
 	DOCKER_BUILDTAGS+=" experimental"
 fi
 
-if [ -z "$DOCKER_CLIENTONLY" ]; then
-	DOCKER_BUILDTAGS+=" daemon"
-	if pkg-config 'libsystemd >= 209' 2> /dev/null ; then
-		DOCKER_BUILDTAGS+=" journald"
-	elif pkg-config 'libsystemd-journal' 2> /dev/null ; then
-		DOCKER_BUILDTAGS+=" journald journald_compat"
-	fi
+DOCKER_BUILDTAGS+=" daemon"
+if pkg-config 'libsystemd >= 209' 2> /dev/null ; then
+	DOCKER_BUILDTAGS+=" journald"
+elif pkg-config 'libsystemd-journal' 2> /dev/null ; then
+	DOCKER_BUILDTAGS+=" journald journald_compat"
 fi
 
 # test whether "btrfs/version.h" exists and apply btrfs_noversion appropriately
@@ -319,7 +324,7 @@ copy_containerd() {
 		if [ -x /usr/local/bin/docker-runc ]; then
 			echo "Copying nested executables into $dir"
 			for file in containerd containerd-shim containerd-ctr runc; do
-				cp "/usr/local/bin/docker-$file" "$dir/"
+				cp `which "docker-$file"` "$dir/"
 				if [ "$2" == "hash" ]; then
 					hash_files "$dir/docker-$file"
 				fi

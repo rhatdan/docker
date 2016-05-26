@@ -3,7 +3,6 @@ package data
 import (
 	"bytes"
 	"fmt"
-	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/go/canonical/json"
@@ -19,20 +18,23 @@ type SignedSnapshot struct {
 
 // Snapshot is the Signed component of a snapshot.json
 type Snapshot struct {
-	Type    string    `json:"_type"`
-	Version int       `json:"version"`
-	Expires time.Time `json:"expires"`
-	Meta    Files     `json:"meta"`
+	SignedCommon
+	Meta Files `json:"meta"`
 }
 
-// isValidSnapshotStructure returns an error, or nil, depending on whether the content of the
+// IsValidSnapshotStructure returns an error, or nil, depending on whether the content of the
 // struct is valid for snapshot metadata.  This does not check signatures or expiry, just that
 // the metadata content is valid.
-func isValidSnapshotStructure(s Snapshot) error {
+func IsValidSnapshotStructure(s Snapshot) error {
 	expectedType := TUFTypes[CanonicalSnapshotRole]
 	if s.Type != expectedType {
 		return ErrInvalidMetadata{
 			role: CanonicalSnapshotRole, msg: fmt.Sprintf("expected type %s, not %s", expectedType, s.Type)}
+	}
+
+	if s.Version < 1 {
+		return ErrInvalidMetadata{
+			role: CanonicalSnapshotRole, msg: "version cannot be less than one"}
 	}
 
 	for _, role := range []string{CanonicalRootRole, CanonicalTargetsRole} {
@@ -82,9 +84,11 @@ func NewSnapshot(root *Signed, targets *Signed) (*SignedSnapshot, error) {
 	return &SignedSnapshot{
 		Signatures: make([]Signature, 0),
 		Signed: Snapshot{
-			Type:    TUFTypes["snapshot"],
-			Version: 0,
-			Expires: DefaultExpires("snapshot"),
+			SignedCommon: SignedCommon{
+				Type:    TUFTypes[CanonicalSnapshotRole],
+				Version: 0,
+				Expires: DefaultExpires(CanonicalSnapshotRole),
+			},
 			Meta: Files{
 				CanonicalRootRole:    rootMeta,
 				CanonicalTargetsRole: targetsMeta,
@@ -122,7 +126,9 @@ func (sp *SignedSnapshot) AddMeta(role string, meta FileMeta) {
 // not found
 func (sp *SignedSnapshot) GetMeta(role string) (*FileMeta, error) {
 	if meta, ok := sp.Signed.Meta[role]; ok {
-		return &meta, nil
+		if _, ok := meta.Hashes["sha256"]; ok {
+			return &meta, nil
+		}
 	}
 	return nil, ErrMissingMeta{Role: role}
 }
@@ -151,7 +157,7 @@ func SnapshotFromSigned(s *Signed) (*SignedSnapshot, error) {
 	if err := defaultSerializer.Unmarshal(*s.Signed, &sp); err != nil {
 		return nil, err
 	}
-	if err := isValidSnapshotStructure(sp); err != nil {
+	if err := IsValidSnapshotStructure(sp); err != nil {
 		return nil, err
 	}
 	sigs := make([]Signature, len(s.Signatures))

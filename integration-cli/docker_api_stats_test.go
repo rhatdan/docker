@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/docker/docker/pkg/integration/checker"
-	"github.com/docker/docker/pkg/version"
 	"github.com/docker/engine-api/types"
+	"github.com/docker/engine-api/types/versions"
 	"github.com/go-check/check"
 )
 
@@ -107,9 +107,22 @@ func (s *DockerSuite) TestApiStatsNetworkStats(c *check.C) {
 	if runtime.GOOS == "windows" {
 		countParam = "-n" // Ping count parameter is -n on Windows
 	}
-	pingout, err := exec.Command("ping", contIP, countParam, strconv.Itoa(numPings)).Output()
-	pingouts := string(pingout[:])
+	pingout, err := exec.Command("ping", contIP, countParam, strconv.Itoa(numPings)).CombinedOutput()
+	if err != nil && runtime.GOOS == "linux" {
+		// If it fails then try a work-around, but just for linux.
+		// If this fails too then go back to the old error for reporting.
+		//
+		// The ping will sometimes fail due to an apparmor issue where it
+		// denies access to the libc.so.6 shared library - running it
+		// via /lib64/ld-linux-x86-64.so.2 seems to work around it.
+		pingout2, err2 := exec.Command("/lib64/ld-linux-x86-64.so.2", "/bin/ping", contIP, "-c", strconv.Itoa(numPings)).CombinedOutput()
+		if err2 == nil {
+			pingout = pingout2
+			err = err2
+		}
+	}
 	c.Assert(err, checker.IsNil)
+	pingouts := string(pingout[:])
 	nwStatsPost := getNetworkStats(c, id)
 	for _, v := range nwStatsPost {
 		postRxPackets += v.RxPackets
@@ -136,7 +149,7 @@ func (s *DockerSuite) TestApiStatsNetworkStatsVersioning(c *check.C) {
 	for i := 17; i <= 21; i++ {
 		apiVersion := fmt.Sprintf("v1.%d", i)
 		statsJSONBlob := getVersionedStats(c, id, apiVersion)
-		if version.Version(apiVersion).LessThan("v1.21") {
+		if versions.LessThan(apiVersion, "v1.21") {
 			c.Assert(jsonBlobHasLTv121NetworkStats(statsJSONBlob), checker.Equals, true,
 				check.Commentf("Stats JSON blob from API %s %#v does not look like a <v1.21 API stats structure", apiVersion, statsJSONBlob))
 		} else {
@@ -226,4 +239,43 @@ func (s *DockerSuite) TestApiStatsContainerNotFound(c *check.C) {
 	status, _, err = sockRequest("GET", "/containers/nonexistent/stats?stream=0", nil)
 	c.Assert(err, checker.IsNil)
 	c.Assert(status, checker.Equals, http.StatusNotFound)
+}
+
+func (s *DockerSuite) TestApiStatsNoStreamConnectedContainers(c *check.C) {
+	testRequires(c, DaemonIsLinux)
+
+	out1, _ := runSleepingContainer(c)
+	id1 := strings.TrimSpace(out1)
+	c.Assert(waitRun(id1), checker.IsNil)
+
+	out2, _ := runSleepingContainer(c, "--net", "container:"+id1)
+	id2 := strings.TrimSpace(out2)
+	c.Assert(waitRun(id2), checker.IsNil)
+
+	ch := make(chan error)
+	go func() {
+		resp, body, err := sockRequestRaw("GET", fmt.Sprintf("/containers/%s/stats?stream=false", id2), nil, "")
+		defer body.Close()
+		if err != nil {
+			ch <- err
+		}
+		if resp.StatusCode != http.StatusOK {
+			ch <- fmt.Errorf("Invalid StatusCode %v", resp.StatusCode)
+		}
+		if resp.Header.Get("Content-Type") != "application/json" {
+			ch <- fmt.Errorf("Invalid 'Content-Type' %v", resp.Header.Get("Content-Type"))
+		}
+		var v *types.Stats
+		if err := json.NewDecoder(body).Decode(&v); err != nil {
+			ch <- err
+		}
+		ch <- nil
+	}()
+
+	select {
+	case err := <-ch:
+		c.Assert(err, checker.IsNil, check.Commentf("Error in stats remote API: %v", err))
+	case <-time.After(15 * time.Second):
+		c.Fatalf("Stats did not return after timeout")
+	}
 }

@@ -23,6 +23,7 @@ parent = "smn_cli"
       --cap-drop=[]                 Drop Linux capabilities
       --cgroup-parent=""            Optional parent cgroup for the container
       --cidfile=""                  Write the container ID to the file
+      --cpu-percent=0               Limit percentage of CPU available for execution by the container. Windows daemon only.
       --cpu-period=0                Limit CPU CFS (Completely Fair Scheduler) period
       --cpu-quota=0                 Limit CPU CFS (Completely Fair Scheduler) quota
       --cpuset-cpus=""              CPUs in which to allow execution (0-3, 0,1)
@@ -58,6 +59,15 @@ parent = "smn_cli"
       --log-opt=[]                  Log driver specific options
       -m, --memory=""               Memory limit
       --mac-address=""              Container MAC address (e.g. 92:d0:c6:0a:29:33)
+      --io-maxbandwidth=""          Maximum IO bandwidth limit for the system drive
+                                    (Windows only). The format is `<number><unit>`.
+                                    Unit is optional and can be `b` (bytes per second),
+                                    `k` (kilobytes per second), `m` (megabytes per second),
+                                    or `g` (gigabytes per second). If you omit the unit,
+                                    the system uses bytes per second.
+                                    --io-maxbandwidth and --io-maxiops are mutually exclusive options.
+      --io-maxiops=0                Maximum IO per second limit for the system drive (Windows only).
+                                    --io-maxbandwidth and --io-maxiops are mutually exclusive options.
       --memory-reservation=""       Memory soft limit
       --memory-swap=""              A positive integer equal to memory plus swap. Specify -1 to enable unlimited swap.
       --memory-swappiness=""        Tune a container's memory swappiness behavior. Accepts an integer between 0 and 100.
@@ -84,6 +94,7 @@ parent = "smn_cli"
       --sig-proxy=true              Proxy received signals to the process
       --stop-signal="SIGTERM"       Signal to stop a container
       --storage-opt=[]              Set storage driver options per container
+      --sysctl[=*[]*]]              Configure namespaced kernel parameters at runtime
       -t, --tty                     Allocate a pseudo-TTY
       -u, --user=""                 Username or UID (format: <name|uid>[:<group|gid>])
       --userns=""                   Container user namespace
@@ -235,12 +246,12 @@ system's interfaces.
 This sets simple (non-array) environmental variables in the container. For
 illustration all three
 flags are shown here. Where `-e`, `--env` take an environment variable and
-value, or if no `=` is provided, then that variable's current value is passed
-through (i.e. `$MYVAR1` from the host is set to `$MYVAR1` in the container).
-When no `=` is provided and that variable is not defined in the client's
-environment then that variable will be removed from the container's list of
-environment variables.
-All three flags, `-e`, `--env` and `--env-file` can be repeated.
+value, or if no `=` is provided, then that variable's current value, set via
+`export`, is passed through (i.e. `$MYVAR1` from the host is set to `$MYVAR1`
+in the container). When no `=` is provided and that variable is not defined
+in the client's environment then that variable will be removed from the
+container's list of environment variables. All three flags, `-e`, `--env` and
+`--env-file` can be repeated.
 
 Regardless of the order of these three flags, the `--env-file` are processed
 first, and then `-e`, `--env` flags. This way, the `-e` or `--env` will
@@ -607,16 +618,45 @@ On Microsoft Windows, can take any of these values:
 | `process` | Namespace isolation only.                                                                                                                                     |
 | `hyperv`   | Hyper-V hypervisor partition-based isolation.                                                                                                                  |
 
-In practice, when running on Microsoft Windows without a `daemon` option set,  these two commands are equivalent:
-
+On Windows, the default isolation for client is `hyperv`, and for server is
+`process`. Therefore when running on Windows server without a `daemon` option 
+set, these two commands are equivalent:
 ```
 $ docker run -d --isolation default busybox top
 $ docker run -d --isolation process busybox top
 ```
 
-If you have set the `--exec-opt isolation=hyperv` option on the Docker `daemon`, any of these commands also result in `hyperv` isolation:
+If you have set the `--exec-opt isolation=hyperv` option on the Docker `daemon`, 
+if running on Windows server, any of these commands also result in `hyperv` isolation:
 
 ```
 $ docker run -d --isolation default busybox top
 $ docker run -d --isolation hyperv busybox top
 ```
+
+### Configure namespaced kernel parameters (sysctls) at runtime
+
+The `--sysctl` sets namespaced kernel parameters (sysctls) in the
+container. For example, to turn on IP forwarding in the containers
+network namespace, run this command:
+
+    $ docker run --sysctl net.ipv4.ip_forward=1 someimage
+
+
+> **Note**: Not all sysctls are namespaced. docker does not support changing sysctls
+> inside of a container that also modify the host system. As the kernel 
+> evolves we expect to see more sysctls become namespaced.
+
+#### Currently supported sysctls
+
+  `IPC Namespace`:
+
+  kernel.msgmax, kernel.msgmnb, kernel.msgmni, kernel.sem, kernel.shmall, kernel.shmmax, kernel.shmmni, kernel.shm_rmid_forced
+  Sysctls beginning with fs.mqueue.*
+
+  If you use the `--ipc=host` option these sysctls will not be allowed.
+
+  `Network Namespace`:
+      Sysctls beginning with net.*
+
+  If you use the `--net=host` option using these sysctls will not be allowed.

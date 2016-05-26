@@ -41,6 +41,9 @@ func (daemon *Daemon) ContainerStart(name string, hostConfig *containertypes.Hos
 			if err := daemon.setSecurityOptions(container, hostConfig); err != nil {
 				return err
 			}
+			if err := daemon.mergeAndVerifyLogConfig(&hostConfig.LogConfig); err != nil {
+				return err
+			}
 			if err := daemon.setHostConfig(container, hostConfig); err != nil {
 				return err
 			}
@@ -107,10 +110,6 @@ func (daemon *Daemon) containerStart(container *container.Container) (err error)
 			}
 			container.ToDisk()
 			daemon.Cleanup(container)
-			attributes := map[string]string{
-				"exitCode": fmt.Sprintf("%d", container.ExitCode),
-			}
-			daemon.LogContainerEventWithAttributes(container, "die", attributes)
 		}
 	}()
 
@@ -131,7 +130,6 @@ func (daemon *Daemon) containerStart(container *container.Container) (err error)
 		return err
 	}
 
-	defer daemon.LogContainerEvent(container, "start") // this is logged even on error
 	if err := daemon.containerd.Create(container.ID, *spec, libcontainerd.WithRestartManager(container.RestartManager(true))); err != nil {
 		// if we receive an internal error from the initial start of a container then lets
 		// return it instead of entering the restart loop
@@ -149,6 +147,7 @@ func (daemon *Daemon) containerStart(container *container.Container) (err error)
 		}
 
 		container.Reset(false)
+
 		return err
 	}
 

@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -130,21 +129,6 @@ func newDriver() *driver {
 
 // Init registers a new instance of bridge driver
 func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
-	if _, err := os.Stat("/proc/sys/net/bridge"); err != nil {
-		if out, err := exec.Command("modprobe", "-va", "bridge", "br_netfilter").CombinedOutput(); err != nil {
-			logrus.Warnf("Running modprobe bridge br_netfilter failed with message: %s, error: %v", out, err)
-		}
-	}
-	if out, err := exec.Command("modprobe", "-va", "nf_nat").CombinedOutput(); err != nil {
-		logrus.Warnf("Running modprobe nf_nat failed with message: `%s`, error: %v", strings.TrimSpace(string(out)), err)
-	}
-	if out, err := exec.Command("modprobe", "-va", "xt_conntrack").CombinedOutput(); err != nil {
-		logrus.Warnf("Running modprobe xt_conntrack failed with message: `%s`, error: %v", strings.TrimSpace(string(out)), err)
-	}
-	if err := iptables.FirewalldInit(); err != nil {
-		logrus.Debugf("Fail to initialize firewalld: %v, using raw iptables instead", err)
-	}
-
 	d := newDriver()
 	if err := d.configure(config); err != nil {
 		return err
@@ -387,6 +371,11 @@ func (d *driver) configure(option map[string]interface{}) error {
 	}
 
 	if config.EnableIPTables {
+		if _, err := os.Stat("/proc/sys/net/bridge"); err != nil {
+			if out, err := exec.Command("modprobe", "-va", "bridge", "br_netfilter").CombinedOutput(); err != nil {
+				logrus.Warnf("Running modprobe bridge br_netfilter failed with message: %s, error: %v", out, err)
+			}
+		}
 		removeIPChains()
 		natChain, filterChain, isolationChain, err = setupIPChains(config)
 		if err != nil {
@@ -546,8 +535,19 @@ func (d *driver) getNetworks() []*bridgeNetwork {
 	return ls
 }
 
+func (d *driver) NetworkAllocate(id string, option map[string]string, ipV4Data, ipV6Data []driverapi.IPAMData) (map[string]string, error) {
+	return nil, types.NotImplementedErrorf("not implemented")
+}
+
+func (d *driver) NetworkFree(id string) error {
+	return types.NotImplementedErrorf("not implemented")
+}
+
+func (d *driver) EventNotify(etype driverapi.EventType, nid, tableName, key string, value []byte) {
+}
+
 // Create a new network using bridge plugin
-func (d *driver) CreateNetwork(id string, option map[string]interface{}, ipV4Data, ipV6Data []driverapi.IPAMData) error {
+func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo driverapi.NetworkInfo, ipV4Data, ipV6Data []driverapi.IPAMData) error {
 	if len(ipV4Data) == 0 || ipV4Data[0].Pool.String() == "0.0.0.0/0" {
 		return types.BadRequestErrorf("ipv4 pool is empty")
 	}

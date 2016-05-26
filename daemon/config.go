@@ -18,6 +18,17 @@ import (
 )
 
 const (
+	// defaultMaxConcurrentDownloads is the default value for
+	// maximum number of downloads that
+	// may take place at a time for each pull.
+	defaultMaxConcurrentDownloads = 3
+	// defaultMaxConcurrentUploads is the default value for
+	// maximum number of uploads that
+	// may take place at a time for each push.
+	defaultMaxConcurrentUploads = 5
+)
+
+const (
 	defaultNetworkMtu    = 1500
 	disableNetworkBridge = "none"
 )
@@ -77,6 +88,8 @@ type CommonConfig struct {
 	Root                 string              `json:"graph,omitempty"`
 	SocketGroup          string              `json:"group,omitempty"`
 	TrustKeyPath         string              `json:"-"`
+	CorsHeaders          string              `json:"api-cors-header,omitempty"`
+	EnableCors           bool                `json:"api-enable-cors,omitempty"`
 
 	// ClusterStore is the storage backend used for the cluster information. It is used by both
 	// multihost networking (to store networks and endpoints information) and by the node discovery
@@ -91,6 +104,14 @@ type CommonConfig struct {
 	// discovery. This should be a 'host:port' combination on which that daemon instance is
 	// reachable by other hosts.
 	ClusterAdvertise string `json:"cluster-advertise,omitempty"`
+
+	// MaxConcurrentDownloads is the maximum number of downloads that
+	// may take place at a time for each pull.
+	MaxConcurrentDownloads *int `json:"max-concurrent-downloads,omitempty"`
+
+	// MaxConcurrentUploads is the maximum number of uploads that
+	// may take place at a time for each push.
+	MaxConcurrentUploads *int `json:"max-concurrent-uploads,omitempty"`
 
 	Debug     bool     `json:"debug,omitempty"`
 	Hosts     []string `json:"hosts,omitempty"`
@@ -114,6 +135,8 @@ type CommonConfig struct {
 // Subsequent calls to `flag.Parse` will populate config with values parsed
 // from the command-line.
 func (config *Config) InstallCommonFlags(cmd *flag.FlagSet, usageFn func(string) string) {
+	var maxConcurrentDownloads, maxConcurrentUploads int
+
 	config.ServiceOptions.InstallCliFlags(cmd, usageFn)
 
 	cmd.Var(opts.NewNamedListOptsRef("storage-opts", &config.GraphOptions, nil), []string{"-storage-opt"}, usageFn("Set storage driver options"))
@@ -135,6 +158,12 @@ func (config *Config) InstallCommonFlags(cmd *flag.FlagSet, usageFn func(string)
 	cmd.StringVar(&config.ClusterAdvertise, []string{"-cluster-advertise"}, "", usageFn("Address or interface name to advertise"))
 	cmd.StringVar(&config.ClusterStore, []string{"-cluster-store"}, "", usageFn("Set the cluster store"))
 	cmd.Var(opts.NewNamedMapOpts("cluster-store-opts", config.ClusterOpts, nil), []string{"-cluster-store-opt"}, usageFn("Set cluster store options"))
+	cmd.StringVar(&config.CorsHeaders, []string{"-api-cors-header"}, "", usageFn("Set CORS headers in the remote API"))
+	cmd.IntVar(&maxConcurrentDownloads, []string{"-max-concurrent-downloads"}, defaultMaxConcurrentDownloads, usageFn("Set the max concurrent downloads for each pull"))
+	cmd.IntVar(&maxConcurrentUploads, []string{"-max-concurrent-uploads"}, defaultMaxConcurrentUploads, usageFn("Set the max concurrent uploads for each push"))
+
+	config.MaxConcurrentDownloads = &maxConcurrentDownloads
+	config.MaxConcurrentUploads = &maxConcurrentUploads
 }
 
 // IsValueSet returns true if a configuration value
@@ -352,7 +381,8 @@ func findConfigurationConflicts(config map[string]interface{}, flags *flag.FlagS
 }
 
 // validateConfiguration validates some specific configs.
-// such as config.DNS, config.Labels, config.DNSSearch
+// such as config.DNS, config.Labels, config.DNSSearch,
+// as well as config.MaxConcurrentDownloads, config.MaxConcurrentUploads.
 func validateConfiguration(config *Config) error {
 	// validate DNS
 	for _, dns := range config.DNS {
@@ -375,5 +405,14 @@ func validateConfiguration(config *Config) error {
 		}
 	}
 
+	// validate MaxConcurrentDownloads
+	if config.IsValueSet("max-concurrent-downloads") && config.MaxConcurrentDownloads != nil && *config.MaxConcurrentDownloads < 0 {
+		return fmt.Errorf("invalid max concurrent downloads: %d", *config.MaxConcurrentDownloads)
+	}
+
+	// validate MaxConcurrentUploads
+	if config.IsValueSet("max-concurrent-uploads") && config.MaxConcurrentUploads != nil && *config.MaxConcurrentUploads < 0 {
+		return fmt.Errorf("invalid max concurrent uploads: %d", *config.MaxConcurrentUploads)
+	}
 	return nil
 }

@@ -29,6 +29,7 @@ func (l *tarexporter) Load(inTar io.ReadCloser, outStream io.Writer, quiet bool)
 	)
 	if !quiet {
 		progressOutput = sf.NewProgressOutput(outStream, false)
+		outStream = &streamformatter.StdoutFormatter{Writer: outStream, StreamFormatter: streamformatter.NewJSONStreamFormatter()}
 	}
 
 	tmpDir, err := ioutil.TempDir("", "docker-import-")
@@ -121,6 +122,7 @@ func (l *tarexporter) Load(inTar io.ReadCloser, outStream io.Writer, quiet bool)
 		}
 
 		parentLinks = append(parentLinks, parentLink{imgID, m.Parent})
+		l.loggerImgEvent.LogImageEvent(imgID.String(), imgID.String(), "load")
 	}
 
 	for _, p := range validatedParentLinks(parentLinks) {
@@ -144,7 +146,7 @@ func (l *tarexporter) setParentID(id, parentID image.ID) error {
 		return err
 	}
 	if !checkValidParent(img, parent) {
-		return fmt.Errorf("image %v is not a valid parent for %v", parent.ID, img.ID)
+		return fmt.Errorf("image %v is not a valid parent for %v", parent.ID(), img.ID())
 	}
 	return l.is.SetParent(id, parentID)
 }

@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"io"
+	"net/http/httputil"
 	"os"
 	"runtime"
 	"strings"
@@ -146,20 +147,20 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 		hostConfig.ConsoleSize[0], hostConfig.ConsoleSize[1] = cli.getTtySize()
 	}
 
-	createResponse, err := cli.createContainer(config, hostConfig, networkingConfig, hostConfig.ContainerIDFile, *flName)
+	ctx, cancelFun := context.WithCancel(context.Background())
+
+	createResponse, err := cli.createContainer(ctx, config, hostConfig, networkingConfig, hostConfig.ContainerIDFile, *flName)
 	if err != nil {
 		cmd.ReportError(err.Error(), true)
 		return runStartContainerErr(err)
 	}
 	if sigProxy {
-		sigc := cli.forwardAllSignals(createResponse.ID)
+		sigc := cli.forwardAllSignals(ctx, createResponse.ID)
 		defer signal.StopCatch(sigc)
 	}
 	var (
 		waitDisplayID chan struct{}
 		errCh         chan error
-		cancelFun     context.CancelFunc
-		ctx           context.Context
 	)
 	if !config.AttachStdout && !config.AttachStderr {
 		// Make this asynchronous to allow the client to write to stdin before having to read the ID
@@ -197,34 +198,43 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 		}
 
 		options := types.ContainerAttachOptions{
-			ContainerID: createResponse.ID,
-			Stream:      true,
-			Stdin:       config.AttachStdin,
-			Stdout:      config.AttachStdout,
-			Stderr:      config.AttachStderr,
-			DetachKeys:  cli.configFile.DetachKeys,
+			Stream:     true,
+			Stdin:      config.AttachStdin,
+			Stdout:     config.AttachStdout,
+			Stderr:     config.AttachStderr,
+			DetachKeys: cli.configFile.DetachKeys,
 		}
 
-		resp, err := cli.client.ContainerAttach(context.Background(), options)
-		if err != nil {
-			return err
+		resp, errAttach := cli.client.ContainerAttach(ctx, createResponse.ID, options)
+		if errAttach != nil && errAttach != httputil.ErrPersistEOF {
+			// ContainerAttach returns an ErrPersistEOF (connection closed)
+			// means server met an error and put it in Hijacked connection
+			// keep the error and read detailed error message from hijacked connection later
+			return errAttach
 		}
-		ctx, cancelFun = context.WithCancel(context.Background())
+		defer resp.Close()
+
 		errCh = promise.Go(func() error {
-			return cli.holdHijackedConnection(ctx, config.Tty, in, out, stderr, resp)
+			errHijack := cli.holdHijackedConnection(ctx, config.Tty, in, out, stderr, resp)
+			if errHijack == nil {
+				return errAttach
+			}
+			return errHijack
 		})
 	}
 
 	if *flAutoRemove {
 		defer func() {
-			if err := cli.removeContainer(createResponse.ID, true, false, false); err != nil {
+			// Explicitly not sharing the context as it could be "Done" (by calling cancelFun)
+			// and thus the container would not be removed.
+			if err := cli.removeContainer(context.Background(), createResponse.ID, true, false, true); err != nil {
 				fmt.Fprintf(cli.err, "%v\n", err)
 			}
 		}()
 	}
 
 	//start the container
-	if err := cli.client.ContainerStart(context.Background(), createResponse.ID); err != nil {
+	if err := cli.client.ContainerStart(ctx, createResponse.ID, ""); err != nil {
 		// If we have holdHijackedConnection, we should notify
 		// holdHijackedConnection we are going to exit and wait
 		// to avoid the terminal are not restored.
@@ -238,7 +248,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 	}
 
 	if (config.AttachStdin || config.AttachStdout || config.AttachStderr) && config.Tty && cli.isTerminalOut {
-		if err := cli.monitorTtySize(createResponse.ID, false); err != nil {
+		if err := cli.monitorTtySize(ctx, createResponse.ID, false); err != nil {
 			fmt.Fprintf(cli.err, "Error monitoring TTY size: %s\n", err)
 		}
 	}
@@ -263,23 +273,23 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 	if *flAutoRemove {
 		// Autoremove: wait for the container to finish, retrieve
 		// the exit code and remove the container
-		if status, err = cli.client.ContainerWait(context.Background(), createResponse.ID); err != nil {
+		if status, err = cli.client.ContainerWait(ctx, createResponse.ID); err != nil {
 			return runStartContainerErr(err)
 		}
-		if _, status, err = getExitCode(cli, createResponse.ID); err != nil {
+		if _, status, err = cli.getExitCode(ctx, createResponse.ID); err != nil {
 			return err
 		}
 	} else {
 		// No Autoremove: Simply retrieve the exit code
 		if !config.Tty {
 			// In non-TTY mode, we can't detach, so we must wait for container exit
-			if status, err = cli.client.ContainerWait(context.Background(), createResponse.ID); err != nil {
+			if status, err = cli.client.ContainerWait(ctx, createResponse.ID); err != nil {
 				return err
 			}
 		} else {
 			// In TTY mode, there is a race: if the process dies too slowly, the state could
 			// be updated after the getExitCode call and result in the wrong exit code being reported
-			if _, status, err = getExitCode(cli, createResponse.ID); err != nil {
+			if _, status, err = cli.getExitCode(ctx, createResponse.ID); err != nil {
 				return err
 			}
 		}

@@ -6,7 +6,6 @@ import (
 	"net"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/docker/libkv/store/boltdb"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/netlabel"
@@ -35,7 +34,7 @@ func (d *driver) initStore(option map[string]interface{}) error {
 
 func (d *driver) populateNetworks() error {
 	kvol, err := d.store.List(datastore.Key(bridgePrefix), &networkConfiguration{})
-	if err != nil && err != datastore.ErrKeyNotFound && err != boltdb.ErrBoltBucketNotFound {
+	if err != nil && err != datastore.ErrKeyNotFound {
 		return fmt.Errorf("failed to get bridge network configurations from store: %v", err)
 	}
 
@@ -95,6 +94,7 @@ func (ncfg *networkConfiguration) MarshalJSON() ([]byte, error) {
 	nMap["EnableIPMasquerade"] = ncfg.EnableIPMasquerade
 	nMap["EnableICC"] = ncfg.EnableICC
 	nMap["Mtu"] = ncfg.Mtu
+	nMap["Internal"] = ncfg.Internal
 	nMap["DefaultBridge"] = ncfg.DefaultBridge
 	nMap["DefaultBindingIP"] = ncfg.DefaultBindingIP.String()
 	nMap["DefaultGatewayIPv4"] = ncfg.DefaultGatewayIPv4.String()
@@ -143,6 +143,9 @@ func (ncfg *networkConfiguration) UnmarshalJSON(b []byte) error {
 	ncfg.EnableIPMasquerade = nMap["EnableIPMasquerade"].(bool)
 	ncfg.EnableICC = nMap["EnableICC"].(bool)
 	ncfg.Mtu = int(nMap["Mtu"].(float64))
+	if v, ok := nMap["Internal"]; ok {
+		ncfg.Internal = v.(bool)
+	}
 
 	return nil
 }

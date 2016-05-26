@@ -3,7 +3,6 @@ package data
 import (
 	"bytes"
 	"fmt"
-	"time"
 
 	"github.com/docker/go/canonical/json"
 	"github.com/docker/notary"
@@ -18,20 +17,23 @@ type SignedTimestamp struct {
 
 // Timestamp is the Signed component of a timestamp.json
 type Timestamp struct {
-	Type    string    `json:"_type"`
-	Version int       `json:"version"`
-	Expires time.Time `json:"expires"`
-	Meta    Files     `json:"meta"`
+	SignedCommon
+	Meta Files `json:"meta"`
 }
 
-// isValidTimestampStructure returns an error, or nil, depending on whether the content of the struct
+// IsValidTimestampStructure returns an error, or nil, depending on whether the content of the struct
 // is valid for timestamp metadata.  This does not check signatures or expiry, just that
 // the metadata content is valid.
-func isValidTimestampStructure(t Timestamp) error {
+func IsValidTimestampStructure(t Timestamp) error {
 	expectedType := TUFTypes[CanonicalTimestampRole]
 	if t.Type != expectedType {
 		return ErrInvalidMetadata{
 			role: CanonicalTimestampRole, msg: fmt.Sprintf("expected type %s, not %s", expectedType, t.Type)}
+	}
+
+	if t.Version < 1 {
+		return ErrInvalidMetadata{
+			role: CanonicalTimestampRole, msg: "version cannot be less than one"}
 	}
 
 	// Meta is a map of FileMeta, so if the role isn't in the map it returns
@@ -64,9 +66,11 @@ func NewTimestamp(snapshot *Signed) (*SignedTimestamp, error) {
 	return &SignedTimestamp{
 		Signatures: make([]Signature, 0),
 		Signed: Timestamp{
-			Type:    TUFTypes["timestamp"],
-			Version: 0,
-			Expires: DefaultExpires("timestamp"),
+			SignedCommon: SignedCommon{
+				Type:    TUFTypes[CanonicalTimestampRole],
+				Version: 0,
+				Expires: DefaultExpires(CanonicalTimestampRole),
+			},
 			Meta: Files{
 				CanonicalSnapshotRole: snapshotMeta,
 			},
@@ -120,7 +124,7 @@ func TimestampFromSigned(s *Signed) (*SignedTimestamp, error) {
 	if err := defaultSerializer.Unmarshal(*s.Signed, &ts); err != nil {
 		return nil, err
 	}
-	if err := isValidTimestampStructure(ts); err != nil {
+	if err := IsValidTimestampStructure(ts); err != nil {
 		return nil, err
 	}
 	sigs := make([]Signature, len(s.Signatures))

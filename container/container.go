@@ -23,6 +23,7 @@ import (
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/promise"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/docker/pkg/symlink"
@@ -131,7 +132,7 @@ func (container *Container) ToDisk() error {
 		return err
 	}
 
-	jsonSource, err := os.Create(pth)
+	jsonSource, err := ioutils.NewAtomicFileWriter(pth, 0666)
 	if err != nil {
 		return err
 	}
@@ -191,7 +192,7 @@ func (container *Container) WriteHostConfig() error {
 		return err
 	}
 
-	f, err := os.Create(pth)
+	f, err := ioutils.NewAtomicFileWriter(pth, 0666)
 	if err != nil {
 		return err
 	}
@@ -250,6 +251,13 @@ func (container *Container) GetResourcePath(path string) (string, error) {
 
 	cleanPath := cleanResourcePath(path)
 	r, e := symlink.FollowSymlinkInScope(filepath.Join(container.BaseFS, cleanPath), container.BaseFS)
+
+	// Log this here on the daemon side as there's otherwise no indication apart
+	// from the error being propagated all the way back to the client. This makes
+	// debugging significantly easier and clearly indicates the error comes from the daemon.
+	if e != nil {
+		logrus.Errorf("Failed to FollowSymlinkInScope BaseFS %s cleanPath %s path %s %s\n", container.BaseFS, cleanPath, path, e)
+	}
 	return r, e
 }
 
@@ -332,9 +340,6 @@ func (container *Container) GetProcessLabel() string {
 // GetMountLabel returns the mounting label for the container.
 // This label is empty if the container is privileged.
 func (container *Container) GetMountLabel() string {
-	if container.HostConfig.Privileged {
-		return ""
-	}
 	return container.MountLabel
 }
 
@@ -479,7 +484,9 @@ func copyEscapable(dst io.Writer, src io.ReadCloser, keys []byte) (written int64
 		nr, er := src.Read(buf)
 		if nr > 0 {
 			// ---- Docker addition
+			preservBuf := []byte{}
 			for i, key := range keys {
+				preservBuf = append(preservBuf, buf[0:nr]...)
 				if nr != 1 || buf[0] != key {
 					break
 				}
@@ -491,8 +498,15 @@ func copyEscapable(dst io.Writer, src io.ReadCloser, keys []byte) (written int64
 				}
 				nr, er = src.Read(buf)
 			}
-			// ---- End of docker
-			nw, ew := dst.Write(buf[0:nr])
+			var nw int
+			var ew error
+			if len(preservBuf) > 0 {
+				nw, ew = dst.Write(preservBuf)
+				nr = len(preservBuf)
+			} else {
+				// ---- End of docker
+				nw, ew = dst.Write(buf[0:nr])
+			}
 			if nw > 0 {
 				written += int64(nw)
 			}
@@ -519,29 +533,8 @@ func copyEscapable(dst io.Writer, src io.ReadCloser, keys []byte) (written int64
 // ShouldRestart decides whether the daemon should restart the container or not.
 // This is based on the container's restart policy.
 func (container *Container) ShouldRestart() bool {
-	return container.HostConfig.RestartPolicy.Name == "always" ||
-		(container.HostConfig.RestartPolicy.Name == "unless-stopped" && !container.HasBeenManuallyStopped) ||
-		(container.HostConfig.RestartPolicy.Name == "on-failure" && container.ExitCode != 0)
-}
-
-// AddBindMountPoint adds a new bind mount point configuration to the container.
-func (container *Container) AddBindMountPoint(name, source, destination string, rw bool) {
-	container.MountPoints[destination] = &volume.MountPoint{
-		Name:        name,
-		Source:      source,
-		Destination: destination,
-		RW:          rw,
-	}
-}
-
-// AddLocalMountPoint adds a new local mount point configuration to the container.
-func (container *Container) AddLocalMountPoint(name, destination string, rw bool) {
-	container.MountPoints[destination] = &volume.MountPoint{
-		Name:        name,
-		Driver:      volume.DefaultDriverName,
-		Destination: destination,
-		RW:          rw,
-	}
+	shouldRestart, _, _ := container.restartManager.ShouldRestart(uint32(container.ExitCode), container.HasBeenManuallyStopped, container.FinishedAt.Sub(container.StartedAt))
+	return shouldRestart
 }
 
 // AddMountPointWithVolume adds a new mount point configured with a volume to the container.
@@ -667,7 +660,8 @@ func getEndpointPortMapInfo(ep libnetwork.Endpoint) (nat.PortMap, error) {
 	return pm, nil
 }
 
-func getSandboxPortMapInfo(sb libnetwork.Sandbox) nat.PortMap {
+// GetSandboxPortMapInfo retrieves the current port-mapping programmed for the given sandbox
+func GetSandboxPortMapInfo(sb libnetwork.Sandbox) nat.PortMap {
 	pm := nat.PortMap{}
 	if sb == nil {
 		return pm
@@ -824,7 +818,7 @@ func (container *Container) BuildCreateEndpointOptions(n libnetwork.Network, epC
 	}
 
 	// Port-mapping rules belong to the container & applicable only to non-internal networks
-	portmaps := getSandboxPortMapInfo(sb)
+	portmaps := GetSandboxPortMapInfo(sb)
 	if n.Info().Internal() || len(portmaps) > 0 {
 		return createOptions, nil
 	}
@@ -905,14 +899,16 @@ func (container *Container) FullHostname() string {
 	return fullHostname
 }
 
-// RestartManager returns the current restartmanager instace connected to container.
+// RestartManager returns the current restartmanager instance connected to container.
 func (container *Container) RestartManager(reset bool) restartmanager.RestartManager {
 	if reset {
 		container.RestartCount = 0
+		container.restartManager = nil
 	}
 	if container.restartManager == nil {
-		container.restartManager = restartmanager.New(container.HostConfig.RestartPolicy)
+		container.restartManager = restartmanager.New(container.HostConfig.RestartPolicy, container.RestartCount)
 	}
+
 	return container.restartManager
 }
 

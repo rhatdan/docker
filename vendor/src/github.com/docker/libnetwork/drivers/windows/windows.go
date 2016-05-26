@@ -42,6 +42,7 @@ type endpointConfiguration struct {
 	MacAddress   net.HardwareAddr
 	PortBindings []types.PortBinding
 	ExposedPorts []types.TransportPort
+	QosPolicies  []types.QosPolicy
 }
 
 type hnsEndpoint struct {
@@ -148,8 +149,11 @@ func (c *networkConfiguration) processIPAM(id string, ipamV4Data, ipamV6Data []d
 	return nil
 }
 
+func (d *driver) EventNotify(etype driverapi.EventType, nid, tableName, key string, value []byte) {
+}
+
 // Create a new network
-func (d *driver) CreateNetwork(id string, option map[string]interface{}, ipV4Data, ipV6Data []driverapi.IPAMData) error {
+func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo driverapi.NetworkInfo, ipV4Data, ipV6Data []driverapi.IPAMData) error {
 	if _, err := d.getNetwork(id); err == nil {
 		return types.ForbiddenErrorf("network %s exists", id)
 	}
@@ -257,6 +261,26 @@ func (d *driver) DeleteNetwork(nid string) error {
 	return nil
 }
 
+func convertQosPolicies(qosPolicies []types.QosPolicy) ([]json.RawMessage, error) {
+	var qps []json.RawMessage
+
+	// Enumerate through the qos policies specified by the user and convert
+	// them into the internal structure matching the JSON blob that can be
+	// understood by the HCS.
+	for _, elem := range qosPolicies {
+		encodedPolicy, err := json.Marshal(hcsshim.QosPolicy{
+			Type: "QOS",
+			MaximumOutgoingBandwidthInBytes: elem.MaxEgressBandwidth,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+		qps = append(qps, encodedPolicy)
+	}
+	return qps, nil
+}
+
 func convertPortBindings(portBindings []types.PortBinding) ([]json.RawMessage, error) {
 	var pbs []json.RawMessage
 
@@ -347,6 +371,14 @@ func parseEndpointOptions(epOptions map[string]interface{}) (*endpointConfigurat
 		}
 	}
 
+	if opt, ok := epOptions[QosPolicies]; ok {
+		if policies, ok := opt.([]types.QosPolicy); ok {
+			ec.QosPolicies = policies
+		} else {
+			return nil, fmt.Errorf("Invalid endpoint configuration")
+		}
+	}
+
 	return ec, nil
 }
 
@@ -375,9 +407,18 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 	}
 
 	endpointStruct.Policies, err = convertPortBindings(ec.PortBindings)
-
 	if err != nil {
 		return err
+	}
+
+	qosPolicies, err := convertQosPolicies(ec.QosPolicies)
+	if err != nil {
+		return err
+	}
+	endpointStruct.Policies = append(endpointStruct.Policies, qosPolicies...)
+
+	if ifInfo.Address() != nil {
+		endpointStruct.IPAddress = ifInfo.Address().IP
 	}
 
 	configurationb, err := json.Marshal(endpointStruct)
@@ -415,8 +456,13 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 	n.endpoints[eid] = endpoint
 	n.Unlock()
 
-	ifInfo.SetIPAddress(endpoint.addr)
-	ifInfo.SetMacAddress(endpoint.macAddress)
+	if ifInfo.Address() == nil {
+		ifInfo.SetIPAddress(endpoint.addr)
+	}
+
+	if macAddress == nil {
+		ifInfo.SetMacAddress(endpoint.macAddress)
+	}
 
 	return nil
 }
@@ -524,6 +570,14 @@ func (d *driver) ProgramExternalConnectivity(nid, eid string, options map[string
 
 func (d *driver) RevokeExternalConnectivity(nid, eid string) error {
 	return nil
+}
+
+func (d *driver) NetworkAllocate(id string, option map[string]string, ipV4Data, ipV6Data []driverapi.IPAMData) (map[string]string, error) {
+	return nil, types.NotImplementedErrorf("not implemented")
+}
+
+func (d *driver) NetworkFree(id string) error {
+	return types.NotImplementedErrorf("not implemented")
 }
 
 func (d *driver) Type() string {

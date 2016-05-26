@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"sync"
 	"syscall"
 
 	"github.com/Sirupsen/logrus"
@@ -19,6 +18,7 @@ import (
 	"github.com/docker/docker/pkg/chrootarchive"
 	"github.com/docker/docker/pkg/idtools"
 
+	"github.com/docker/docker/pkg/mount"
 	"github.com/opencontainers/runc/libcontainer/label"
 )
 
@@ -28,6 +28,7 @@ import (
 var (
 	// ErrApplyDiffFallback is returned to indicate that a normal ApplyDiff is applied as a fallback from Naive diff writer.
 	ErrApplyDiffFallback = fmt.Errorf("Fall back to normal ApplyDiff")
+	backingFs            = "<unknown>"
 )
 
 // ApplyDiffProtoDriver wraps the ProtoDriver by extending the interface with ApplyDiff method.
@@ -90,14 +91,11 @@ func (d *naiveDiffDriverWithApply) ApplyDiff(id, parent string, diff archive.Rea
 
 // Driver contains information about the home directory and the list of active mounts that are created using this driver.
 type Driver struct {
-	home          string
-	pathCacheLock sync.Mutex
-	pathCache     map[string]string
-	uidMaps       []idtools.IDMap
-	gidMaps       []idtools.IDMap
+	home    string
+	uidMaps []idtools.IDMap
+	gidMaps []idtools.IDMap
+	ctr     *graphdriver.RefCounter
 }
-
-var backingFs = "<unknown>"
 
 func init() {
 	graphdriver.Register("overlay", Init)
@@ -120,16 +118,9 @@ func Init(home string, options []string, uidMaps, gidMaps []idtools.IDMap) (grap
 		backingFs = fsName
 	}
 
-	// check if they are running over btrfs or aufs
 	switch fsMagic {
-	case graphdriver.FsMagicBtrfs:
-		logrus.Error("'overlay' is not supported over btrfs.")
-		return nil, graphdriver.ErrIncompatibleFS
-	case graphdriver.FsMagicAufs:
-		logrus.Error("'overlay' is not supported over aufs.")
-		return nil, graphdriver.ErrIncompatibleFS
-	case graphdriver.FsMagicZfs:
-		logrus.Error("'overlay' is not supported over zfs.")
+	case graphdriver.FsMagicAufs, graphdriver.FsMagicBtrfs, graphdriver.FsMagicOverlay, graphdriver.FsMagicZfs:
+		logrus.Errorf("'overlay' is not supported over %s", backingFs)
 		return nil, graphdriver.ErrIncompatibleFS
 	}
 
@@ -142,11 +133,15 @@ func Init(home string, options []string, uidMaps, gidMaps []idtools.IDMap) (grap
 		return nil, err
 	}
 
+	if err := mount.MakePrivate(home); err != nil {
+		return nil, err
+	}
+
 	d := &Driver{
-		home:      home,
-		pathCache: make(map[string]string),
-		uidMaps:   uidMaps,
-		gidMaps:   gidMaps,
+		home:    home,
+		uidMaps: uidMaps,
+		gidMaps: gidMaps,
+		ctr:     graphdriver.NewRefCounter(graphdriver.NewFsChecker(graphdriver.FsMagicOverlay)),
 	}
 
 	return NaiveDiffDriverWithApply(d, uidMaps, gidMaps), nil
@@ -214,10 +209,17 @@ func (d *Driver) GetMetadata(id string) (map[string]string, error) {
 	return metadata, nil
 }
 
-// Cleanup simply returns nil and do not change the existing filesystem.
-// This is required to satisfy the graphdriver.Driver interface.
+// Cleanup any state created by overlay which should be cleaned when daemon
+// is being shutdown. For now, we just have to unmount the bind mounted
+// we had created.
 func (d *Driver) Cleanup() error {
-	return nil
+	return mount.Unmount(d.home)
+}
+
+// CreateReadWrite creates a layer that is writable for use as a container
+// file system.
+func (d *Driver) CreateReadWrite(id, parent, mountLabel string, storageOpt map[string]string) error {
+	return d.Create(id, parent, mountLabel, storageOpt)
 }
 
 // Create is used to create the upper, lower, and merge directories required for overlay fs for a given id.
@@ -322,48 +324,41 @@ func (d *Driver) Remove(id string) error {
 	if err := os.RemoveAll(d.dir(id)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	d.pathCacheLock.Lock()
-	delete(d.pathCache, id)
-	d.pathCacheLock.Unlock()
 	return nil
 }
 
 // Get creates and mounts the required file system for the given id and returns the mount path.
-func (d *Driver) Get(id string, mountLabel string) (string, error) {
+func (d *Driver) Get(id string, mountLabel string) (s string, err error) {
 	dir := d.dir(id)
 	if _, err := os.Stat(dir); err != nil {
 		return "", err
 	}
-
 	// If id has a root, just return it
 	rootDir := path.Join(dir, "root")
 	if _, err := os.Stat(rootDir); err == nil {
-		d.pathCacheLock.Lock()
-		d.pathCache[id] = rootDir
-		d.pathCacheLock.Unlock()
 		return rootDir, nil
 	}
-
+	mergedDir := path.Join(dir, "merged")
+	if count := d.ctr.Increment(mergedDir); count > 1 {
+		return mergedDir, nil
+	}
+	defer func() {
+		if err != nil {
+			if c := d.ctr.Decrement(mergedDir); c <= 0 {
+				syscall.Unmount(mergedDir, 0)
+			}
+		}
+	}()
 	lowerID, err := ioutil.ReadFile(path.Join(dir, "lower-id"))
 	if err != nil {
 		return "", err
 	}
-	lowerDir := path.Join(d.dir(string(lowerID)), "root")
-	upperDir := path.Join(dir, "upper")
-	workDir := path.Join(dir, "work")
-	mergedDir := path.Join(dir, "merged")
-
-	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
-
-	// if it's mounted already, just return
-	mounted, err := d.mounted(mergedDir)
-	if err != nil {
-		return "", err
-	}
-	if mounted {
-		return mergedDir, nil
-	}
-
+	var (
+		lowerDir = path.Join(d.dir(string(lowerID)), "root")
+		upperDir = path.Join(dir, "upper")
+		workDir  = path.Join(dir, "work")
+		opts     = fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
+	)
 	if err := syscall.Mount("overlay", mergedDir, "overlay", 0, label.FormatMountLabel(opts, mountLabel)); err != nil {
 		return "", fmt.Errorf("error creating overlay mount to %s: %v", mergedDir, err)
 	}
@@ -373,45 +368,20 @@ func (d *Driver) Get(id string, mountLabel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	if err := os.Chown(path.Join(workDir, "work"), rootUID, rootGID); err != nil {
 		return "", err
 	}
-
-	d.pathCacheLock.Lock()
-	d.pathCache[id] = mergedDir
-	d.pathCacheLock.Unlock()
-
 	return mergedDir, nil
-}
-
-func (d *Driver) mounted(dir string) (bool, error) {
-	return graphdriver.Mounted(graphdriver.FsMagicOverlay, dir)
 }
 
 // Put unmounts the mount path created for the give id.
 func (d *Driver) Put(id string) error {
-	d.pathCacheLock.Lock()
-	mountpoint, exists := d.pathCache[id]
-	d.pathCacheLock.Unlock()
-
-	if !exists {
-		logrus.Debugf("Put on a non-mounted device %s", id)
-		// but it might be still here
-		if d.Exists(id) {
-			mountpoint = path.Join(d.dir(id), "merged")
-		}
-
-		d.pathCacheLock.Lock()
-		d.pathCache[id] = mountpoint
-		d.pathCacheLock.Unlock()
+	mountpoint := path.Join(d.dir(id), "merged")
+	if count := d.ctr.Decrement(mountpoint); count > 0 {
+		return nil
 	}
-
-	if mounted, err := d.mounted(mountpoint); mounted || err != nil {
-		if err = syscall.Unmount(mountpoint, 0); err != nil {
-			logrus.Debugf("Failed to unmount %s overlay: %v", id, err)
-		}
-		return err
+	if err := syscall.Unmount(mountpoint, 0); err != nil {
+		logrus.Debugf("Failed to unmount %s overlay: %v", id, err)
 	}
 	return nil
 }

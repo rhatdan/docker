@@ -193,7 +193,8 @@ the digest value is predictable and referenceable.
 ## PID settings (--pid)
 
     --pid=""  : Set the PID (Process) Namespace mode for the container,
-           'host': use the host's PID namespace inside the container
+                 'container:<name|id>': joins another container's PID namespace
+                 'host': use the host's PID namespace inside the container
 
 By default, all containers have the PID namespace enabled.
 
@@ -227,6 +228,23 @@ Use the following command to run `htop` inside a container:
 
 ```
 $ docker run -it --rm --pid=host myhtop
+```
+
+Joining another container's pid namespace can be used for debugging that container.
+
+### Example
+
+Start a container running a redis server:
+
+```bash
+$ docker run --name my-redis -d redis
+```
+
+Debug the redis container by running another container that has strace in it:
+
+```bash
+$ docker run --it --pid=container:my-redis bash
+$ strace -p 1
 ```
 
 ## UTS settings (--uts)
@@ -291,7 +309,8 @@ you can override this with `--dns`.
 
 By default, the MAC address is generated using the IP address allocated to the
 container. You can set the container's MAC address explicitly by providing a
-MAC address via the `--mac-address` parameter (format:`12:34:56:78:9a:bc`).
+MAC address via the `--mac-address` parameter (format:`12:34:56:78:9a:bc`).Be
+aware that Docker does not check if manually specified MAC addresses are unique.
 
 Supported networks :
 
@@ -363,11 +382,14 @@ name, they must be linked.
 With the network set to `host` a container will share the host's
 network stack and all interfaces from the host will be available to the
 container.  The container's hostname will match the hostname on the host
-system.  Note that `--add-host` `--dns` `--dns-search`
-`--dns-opt` and `--mac-address` are invalid in `host` netmode. Even in `host`
+system. Note that `--mac-address` is invalid in `host` netmode. Even in `host`
 network mode a container has its own UTS namespace by default. As such
 `--hostname` is allowed in `host` network mode and will only change the
 hostname inside the container.
+Similar to `--hostname`, the `--add-host`, `--dns`, `--dns-search`, and
+`--dns-opt` options can be used in `host` network mode. These options update
+`/etc/hosts` or `/etc/resolv.conf` inside the container. No change are made to
+`/etc/hosts` and `/etc/resolv.conf` on the host.
 
 Compared to the default `bridge` mode, the `host` mode gives *significantly*
 better networking performance since it uses the host's native networking stack
@@ -562,20 +584,18 @@ the exit codes follow the `chroot` standard, see below:
 **_126_** if the **_contained command_** cannot be invoked
 
     $ docker run busybox /etc; echo $?
-    # exec: "/etc": permission denied
-      docker: Error response from daemon: Contained command could not be invoked
+    # docker: Error response from daemon: Container command '/etc' could not be invoked.
       126
 
 **_127_** if the **_contained command_** cannot be found
 
     $ docker run busybox foo; echo $?
-    # exec: "foo": executable file not found in $PATH
-      docker: Error response from daemon: Contained command not found or does not exist
+    # docker: Error response from daemon: Container command 'foo' not found or does not exist.
       127
 
 **_Exit code_** of **_contained command_** otherwise
 
-    $ docker run busybox /bin/sh -c 'exit 3'
+    $ docker run busybox /bin/sh -c 'exit 3'; echo $?
     # 3
 
 ## Clean up (--rm)
@@ -595,7 +615,7 @@ associated with the container when the container is removed. This is similar
 to running `docker rm -v my-container`. Only volumes that are specified without a
 name are removed. For example, with
 `docker run --rm -v /foo -v awesome:/bar busybox top`, the volume for `/foo` will be removed,
-but the volume for `/bar` will not. Volumes inheritted via `--volumes-from` will be removed
+but the volume for `/bar` will not. Volumes inherited via `--volumes-from` will be removed
 with the same logic -- if the original volume was specified with a name it will **not** be removed.
 
 ## Security configuration
@@ -608,20 +628,17 @@ with the same logic -- if the original volume was specified with a name it will 
                                          to the container
     --security-opt="no-new-privileges" : Disable container processes from gaining
                                          new privileges
-    --security-opt="seccomp:unconfined": Turn off seccomp confinement for the container
-    --security-opt="seccomp:profile.json: White listed syscalls seccomp Json file to be used as a seccomp filter
+    --security-opt="seccomp=unconfined": Turn off seccomp confinement for the container
+    --security-opt="seccomp=profile.json: White listed syscalls seccomp Json file to be used as a seccomp filter
 
 
 You can override the default labeling scheme for each container by specifying
-the `--security-opt` flag. For example, you can specify the MCS/MLS level, a
-requirement for MLS systems. Specifying the level in the following command
+the `--security-opt` flag. Specifying the level in the following command
 allows you to share the same content between containers.
 
     $ docker run --security-opt label=level:s0:c100,c200 -it fedora bash
 
-An MLS example might be:
-
-    $ docker run --security-opt label=level:TopSecret -it rhel7 bash
+> **Note**: Automatic translation of MLS labels is not currently supported.
 
 To disable the security labeling for this container versus running with the
 `--permissive` flag, use the following command:
@@ -849,7 +866,7 @@ limit and "K" the kernel limit. There are three possible ways to set limits:
         deployments where the total amount of memory per-cgroup is overcommitted.
         Overcommitting kernel memory limits is definitely not recommended, since the
         box can still run out of non-reclaimable memory.
-        In this case, the you can configure K so that the sum of all groups is
+        In this case, you can configure K so that the sum of all groups is
         never greater than the total memory. Then, freely set U at the expense of
         the system's service quality.
       </td>
@@ -1056,7 +1073,7 @@ Both flags take limits in the `<device-path>:<limit>` format. Both read and
 write rates must be a positive integer.
 
 ## Additional groups
-    --group-add: Add Linux capabilities
+    --group-add: Add additional groups to run as 
 
 By default, the docker container process runs with the supplementary groups looked
 up for the specified user. If one wants to add more to that list of groups, then
@@ -1072,19 +1089,11 @@ one can use this flag:
     --privileged=false: Give extended privileges to this container
     --device=[]: Allows you to run devices inside the container without the --privileged flag.
 
-> **Note:**
-> With Docker 1.10 and greater, the default seccomp profile will also block
-> syscalls, regardless of `--cap-add` passed to the container. We recommend in
-> these cases to create your own custom seccomp profile based off our
-> [default](https://github.com/docker/docker/blob/master/profiles/seccomp/default.json).
-> Or if you don't want to run with the default seccomp profile, you can pass
-> `--security-opt=seccomp=unconfined` on run.
-
 By default, Docker containers are "unprivileged" and cannot, for
 example, run a Docker daemon inside a Docker container. This is because
 by default a container is not allowed to access any devices, but a
 "privileged" container is given access to all devices (see
-the documentation on [cgroups devices](https://www.kernel.org/doc/Documentation/cgroups/devices.txt)).
+the documentation on [cgroups devices](https://www.kernel.org/doc/Documentation/cgroup-v1/devices.txt)).
 
 When the operator executes `docker run --privileged`, Docker will enable
 to access to all devices on the host as well as set some configuration
@@ -1197,6 +1206,11 @@ To mount a FUSE based filesystem, you need to combine both `--cap-add` and
     -rw-rw-r-- 1 1000 1000    461 Dec  4 06:08 .gitignore
     ....
 
+The default seccomp profile will adjust to the selected capabilities, in order to allow
+use of facilities allowed by the capabilities, so you should not have to adjust this,
+since Docker 1.12. In Docker 1.10 and 1.11 this did not happen and it may be necessary
+to use a custom seccomp profile or use `--security-opt seccomp=unconfined` when adding
+capabilities.
 
 ## Logging drivers (--log-driver)
 
@@ -1332,7 +1346,7 @@ If the operator uses `--link` when starting a new client container in the
 default bridge network, then the client container can access the exposed
 port via a private networking interface.
 If `--link` is used when starting a container in a user-defined network as
-described in [*Docker network overview*""](../userguide/networking/index.md)),
+described in [*Docker network overview*](../userguide/networking/index.md)),
 it will provide a named alias for the container being linked to.
 
 ### ENV (environment variables)
@@ -1434,7 +1448,7 @@ The `host-src` can either be an absolute path or a `name` value. If you
 supply an absolute path for the `host-dir`, Docker bind-mounts to the path
 you specify. If you supply a `name`, Docker creates a named volume by that `name`.
 
-A `name` value must start with start with an alphanumeric character,
+A `name` value must start with an alphanumeric character,
 followed by `a-z0-9`, `_` (underscore), `.` (period) or `-` (hyphen).
 An absolute path starts with a `/` (forward slash).
 

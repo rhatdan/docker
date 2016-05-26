@@ -1,16 +1,12 @@
 package libcontainerd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
-	"strconv"
 	"strings"
-
 	"syscall"
-	"time"
 
 	"github.com/Microsoft/hcsshim"
 	"github.com/Sirupsen/logrus"
@@ -22,10 +18,6 @@ type client struct {
 	// Platform specific properties below here (none presently on Windows)
 }
 
-// defaultContainerNAT is the default name of the container NAT device that is
-// preconfigured on the server. TODO Windows - Remove for TP5 support as not needed.
-const defaultContainerNAT = "ContainerNAT"
-
 // Win32 error codes that are used for various workarounds
 // These really should be ALL_CAPS to match golangs syscall library and standard
 // Win32 error conventions, but golint insists on CamelCase.
@@ -35,70 +27,6 @@ const (
 	ErrorBadPathname   = syscall.Errno(161)        // The specified path is invalid
 	ErrorInvalidObject = syscall.Errno(0x800710D8) // The object identifier does not represent a valid object
 )
-
-type layer struct {
-	ID   string
-	Path string
-}
-
-type defConfig struct {
-	DefFile string
-}
-
-type portBinding struct {
-	Protocol     string
-	InternalPort int
-	ExternalPort int
-}
-
-type natSettings struct {
-	Name         string
-	PortBindings []portBinding
-}
-
-type networkConnection struct {
-	NetworkName string
-	Nat         natSettings
-}
-type networkSettings struct {
-	MacAddress string
-}
-
-type device struct {
-	DeviceType string
-	Connection interface{}
-	Settings   interface{}
-}
-
-type mappedDir struct {
-	HostPath      string
-	ContainerPath string
-	ReadOnly      bool
-}
-
-// TODO Windows: @darrenstahlmsft Add ProcessorCount
-type containerInit struct {
-	SystemType              string      // HCS requires this to be hard-coded to "Container"
-	Name                    string      // Name of the container. We use the docker ID.
-	Owner                   string      // The management platform that created this container
-	IsDummy                 bool        // Used for development purposes.
-	VolumePath              string      // Windows volume path for scratch space
-	Devices                 []device    // Devices used by the container
-	IgnoreFlushesDuringBoot bool        // Optimization hint for container startup in Windows
-	LayerFolderPath         string      // Where the layer folders are located
-	Layers                  []layer     // List of storage layers
-	ProcessorWeight         uint64      `json:",omitempty"` // CPU Shares 0..10000 on Windows; where 0 will be omitted and HCS will default.
-	ProcessorMaximum        int64       `json:",omitempty"` // CPU maximum usage percent 1..100
-	StorageIOPSMaximum      uint64      `json:",omitempty"` // Maximum Storage IOPS
-	StorageBandwidthMaximum uint64      `json:",omitempty"` // Maximum Storage Bandwidth in bytes per second
-	StorageSandboxSize      uint64      `json:",omitempty"` // Size in bytes that the container system drive should be expanded to if smaller
-	MemoryMaximumInMB       int64       `json:",omitempty"` // Maximum memory available to the container in Megabytes
-	HostName                string      // Hostname
-	MappedDirectories       []mappedDir // List of mapped directories (volumes/mounts)
-	SandboxPath             string      // Location of unmounted sandbox (used for Hyper-V containers)
-	HvPartition             bool        // True if it a Hyper-V Container
-	EndpointList            []string    // List of networking endpoints to be attached to container
-}
 
 // defaultOwner is a tag passed to HCS to allow it to differentiate between
 // container creator management stacks. We hard code "docker" in the case
@@ -110,7 +38,7 @@ const defaultOwner = "docker"
 func (clnt *client) Create(containerID string, spec Spec, options ...CreateOption) error {
 	logrus.Debugln("LCD client.Create() with spec", spec)
 
-	cu := &containerInit{
+	configuration := &hcsshim.ContainerConfig{
 		SystemType: "Container",
 		Name:       containerID,
 		Owner:      defaultOwner,
@@ -122,50 +50,55 @@ func (clnt *client) Create(containerID string, spec Spec, options ...CreateOptio
 	}
 
 	if spec.Windows.Networking != nil {
-		cu.EndpointList = spec.Windows.Networking.EndpointList
+		configuration.EndpointList = spec.Windows.Networking.EndpointList
 	}
 
 	if spec.Windows.Resources != nil {
 		if spec.Windows.Resources.CPU != nil {
 			if spec.Windows.Resources.CPU.Shares != nil {
-				cu.ProcessorWeight = *spec.Windows.Resources.CPU.Shares
+				configuration.ProcessorWeight = *spec.Windows.Resources.CPU.Shares
 			}
 			if spec.Windows.Resources.CPU.Percent != nil {
-				cu.ProcessorMaximum = *spec.Windows.Resources.CPU.Percent * 100 // ProcessorMaximum is a value between 1 and 10000
+				configuration.ProcessorMaximum = *spec.Windows.Resources.CPU.Percent * 100 // ProcessorMaximum is a value between 1 and 10000
 			}
 		}
 		if spec.Windows.Resources.Memory != nil {
 			if spec.Windows.Resources.Memory.Limit != nil {
-				cu.MemoryMaximumInMB = *spec.Windows.Resources.Memory.Limit / 1024 / 1024
+				configuration.MemoryMaximumInMB = *spec.Windows.Resources.Memory.Limit / 1024 / 1024
 			}
 		}
 		if spec.Windows.Resources.Storage != nil {
 			if spec.Windows.Resources.Storage.Bps != nil {
-				cu.StorageBandwidthMaximum = *spec.Windows.Resources.Storage.Bps
+				configuration.StorageBandwidthMaximum = *spec.Windows.Resources.Storage.Bps
 			}
 			if spec.Windows.Resources.Storage.Iops != nil {
-				cu.StorageIOPSMaximum = *spec.Windows.Resources.Storage.Iops
+				configuration.StorageIOPSMaximum = *spec.Windows.Resources.Storage.Iops
 			}
 			if spec.Windows.Resources.Storage.SandboxSize != nil {
-				cu.StorageSandboxSize = *spec.Windows.Resources.Storage.SandboxSize
+				configuration.StorageSandboxSize = *spec.Windows.Resources.Storage.SandboxSize
 			}
 		}
 	}
 
-	cu.HvPartition = (spec.Windows.HvRuntime != nil)
+	if spec.Windows.HvRuntime != nil {
+		configuration.HvPartition = true
+		configuration.HvRuntime = &hcsshim.HvRuntime{
+			ImagePath: spec.Windows.HvRuntime.ImagePath,
+		}
+	}
 
-	// TODO Windows @jhowardmsft. FIXME post TP5.
-	//	if spec.Windows.HvRuntime != nil {
-	//		if spec.WIndows.HVRuntime.ImagePath != "" {
-	//			cu.TBD = spec.Windows.HvRuntime.ImagePath
-	//		}
-	//	}
-
-	if cu.HvPartition {
-		cu.SandboxPath = filepath.Dir(spec.Windows.LayerFolder)
+	if configuration.HvPartition {
+		configuration.SandboxPath = filepath.Dir(spec.Windows.LayerFolder)
 	} else {
-		cu.VolumePath = spec.Root.Path
-		cu.LayerFolderPath = spec.Windows.LayerFolder
+		configuration.VolumePath = spec.Root.Path
+		configuration.LayerFolderPath = spec.Windows.LayerFolder
+	}
+
+	for _, option := range options {
+		if s, ok := option.(*ServicingOption); ok {
+			configuration.Servicing = s.IsServicing
+			break
+		}
 	}
 
 	for _, layerPath := range spec.Windows.LayerPaths {
@@ -174,124 +107,25 @@ func (clnt *client) Create(containerID string, spec Spec, options ...CreateOptio
 		if err != nil {
 			return err
 		}
-		cu.Layers = append(cu.Layers, layer{
+		configuration.Layers = append(configuration.Layers, hcsshim.Layer{
 			ID:   g.ToString(),
 			Path: layerPath,
 		})
 	}
 
 	// Add the mounts (volumes, bind mounts etc) to the structure
-	mds := make([]mappedDir, len(spec.Mounts))
+	mds := make([]hcsshim.MappedDir, len(spec.Mounts))
 	for i, mount := range spec.Mounts {
-		mds[i] = mappedDir{
+		mds[i] = hcsshim.MappedDir{
 			HostPath:      mount.Source,
 			ContainerPath: mount.Destination,
 			ReadOnly:      mount.Readonly}
 	}
-	cu.MappedDirectories = mds
+	configuration.MappedDirectories = mds
 
-	// TODO Windows: vv START OF TP4 BLOCK OF CODE. REMOVE ONCE TP4 IS NO LONGER SUPPORTED
-	if hcsshim.IsTP4() &&
-		spec.Windows.Networking != nil &&
-		spec.Windows.Networking.Bridge != "" {
-		// Enumerate through the port bindings specified by the user and convert
-		// them into the internal structure matching the JSON blob that can be
-		// understood by the HCS.
-		var pbs []portBinding
-		for i, v := range spec.Windows.Networking.PortBindings {
-			proto := strings.ToUpper(i.Proto())
-			if proto != "TCP" && proto != "UDP" {
-				return fmt.Errorf("invalid protocol %s", i.Proto())
-			}
-
-			if len(v) > 1 {
-				return fmt.Errorf("Windows does not support more than one host port in NAT settings")
-			}
-
-			for _, v2 := range v {
-				var (
-					iPort, ePort int
-					err          error
-				)
-				if len(v2.HostIP) != 0 {
-					return fmt.Errorf("Windows does not support host IP addresses in NAT settings")
-				}
-				if ePort, err = strconv.Atoi(v2.HostPort); err != nil {
-					return fmt.Errorf("invalid container port %s: %s", v2.HostPort, err)
-				}
-				if iPort, err = strconv.Atoi(i.Port()); err != nil {
-					return fmt.Errorf("invalid internal port %s: %s", i.Port(), err)
-				}
-				if iPort < 0 || iPort > 65535 || ePort < 0 || ePort > 65535 {
-					return fmt.Errorf("specified NAT port is not in allowed range")
-				}
-				pbs = append(pbs,
-					portBinding{ExternalPort: ePort,
-						InternalPort: iPort,
-						Protocol:     proto})
-			}
-		}
-
-		dev := device{
-			DeviceType: "Network",
-			Connection: &networkConnection{
-				NetworkName: spec.Windows.Networking.Bridge,
-				Nat: natSettings{
-					Name:         defaultContainerNAT,
-					PortBindings: pbs,
-				},
-			},
-		}
-
-		if spec.Windows.Networking.MacAddress != "" {
-			windowsStyleMAC := strings.Replace(
-				spec.Windows.Networking.MacAddress, ":", "-", -1)
-			dev.Settings = networkSettings{
-				MacAddress: windowsStyleMAC,
-			}
-		}
-		cu.Devices = append(cu.Devices, dev)
-	} else {
-		logrus.Debugln("No network interface")
-	}
-	// TODO Windows: ^^ END OF TP4 BLOCK OF CODE. REMOVE ONCE TP4 IS NO LONGER SUPPORTED
-
-	configurationb, err := json.Marshal(cu)
+	hcsContainer, err := hcsshim.CreateContainer(containerID, configuration)
 	if err != nil {
 		return err
-	}
-
-	configuration := string(configurationb)
-
-	// TODO Windows TP5 timeframe. Remove when TP4 is no longer supported.
-	// The following a workaround for Windows TP4 which has a networking
-	// bug which fairly frequently returns an error. Back off and retry.
-	if !hcsshim.IsTP4() {
-		if err := hcsshim.CreateComputeSystem(containerID, configuration); err != nil {
-			return err
-		}
-	} else {
-		maxAttempts := 5
-		for i := 1; i <= maxAttempts; i++ {
-			err = hcsshim.CreateComputeSystem(containerID, configuration)
-			if err == nil {
-				break
-			}
-
-			if herr, ok := err.(*hcsshim.HcsError); ok {
-				if herr.Err != syscall.ERROR_NOT_FOUND && // Element not found
-					herr.Err != syscall.ERROR_FILE_NOT_FOUND && // The system cannot find the file specified
-					herr.Err != ErrorNoNetwork && // The network is not present or not started
-					herr.Err != ErrorBadPathname && // The specified path is invalid
-					herr.Err != CoEClassstring && // Invalid class string
-					herr.Err != ErrorInvalidObject { // The object identifier does not represent a valid object
-					logrus.Debugln("Failed to create temporary container ", err)
-					return err
-				}
-				logrus.Warnf("Invoking Windows TP4 retry hack (%d of %d)", i, maxAttempts-1)
-				time.Sleep(50 * time.Millisecond)
-			}
-		}
 	}
 
 	// Construct a container object for calling start on it.
@@ -307,7 +141,8 @@ func (clnt *client) Create(containerID string, spec Spec, options ...CreateOptio
 			},
 			processes: make(map[string]*process),
 		},
-		ociSpec: spec,
+		ociSpec:      spec,
+		hcsContainer: hcsContainer,
 	}
 
 	container.options = options
@@ -341,10 +176,17 @@ func (clnt *client) AddProcess(containerID, processFriendlyName string, procToAd
 	if err != nil {
 		return err
 	}
-
-	createProcessParms := hcsshim.CreateProcessParams{
-		EmulateConsole: procToAdd.Terminal,
-		ConsoleSize:    procToAdd.InitialConsoleSize,
+	// Note we always tell HCS to
+	// create stdout as it's required regardless of '-i' or '-t' options, so that
+	// docker can always grab the output through logs. We also tell HCS to always
+	// create stdin, even if it's not used - it will be closed shortly. Stderr
+	// is only created if it we're not -t.
+	createProcessParms := hcsshim.ProcessConfig{
+		EmulateConsole:   procToAdd.Terminal,
+		ConsoleSize:      procToAdd.InitialConsoleSize,
+		CreateStdInPipe:  true,
+		CreateStdOutPipe: true,
+		CreateStdErrPipe: !procToAdd.Terminal,
 	}
 
 	// Take working directory from the process to add if it is defined,
@@ -361,24 +203,26 @@ func (clnt *client) AddProcess(containerID, processFriendlyName string, procToAd
 
 	logrus.Debugf("commandLine: %s", createProcessParms.CommandLine)
 
-	// Start the command running in the container. Note we always tell HCS to
-	// create stdout as it's required regardless of '-i' or '-t' options, so that
-	// docker can always grab the output through logs. We also tell HCS to always
-	// create stdin, even if it's not used - it will be closed shortly. Stderr
-	// is only created if it we're not -t.
+	// Start the command running in the container.
 	var stdout, stderr io.ReadCloser
-	var pid uint32
-	iopipe := &IOPipe{Terminal: procToAdd.Terminal}
-	pid, iopipe.Stdin, stdout, stderr, err = hcsshim.CreateProcessInComputeSystem(
-		containerID,
-		true,
-		true,
-		!procToAdd.Terminal,
-		createProcessParms)
+	var stdin io.WriteCloser
+	newProcess, err := container.hcsContainer.CreateProcess(&createProcessParms)
 	if err != nil {
-		logrus.Errorf("AddProcess %s CreateProcessInComputeSystem() failed %s", containerID, err)
+		logrus.Errorf("AddProcess %s CreateProcess() failed %s", containerID, err)
 		return err
 	}
+
+	stdin, stdout, stderr, err = newProcess.Stdio()
+	if err != nil {
+		logrus.Errorf("%s getting std pipes failed %s", containerID, err)
+		return err
+	}
+
+	iopipe := &IOPipe{Terminal: procToAdd.Terminal}
+	iopipe.Stdin = createStdInCloser(stdin, newProcess)
+
+	// TEMP: Work around Windows BS/DEL behavior.
+	iopipe.Stdin = fixStdinBackspaceBehavior(iopipe.Stdin, container.ociSpec.Platform.OSVersion, procToAdd.Terminal)
 
 	// Convert io.ReadClosers to io.Readers
 	if stdout != nil {
@@ -388,17 +232,21 @@ func (clnt *client) AddProcess(containerID, processFriendlyName string, procToAd
 		iopipe.Stderr = openReaderFromPipe(stderr)
 	}
 
-	// Add the process to the containers list of processes
-	container.processes[processFriendlyName] =
-		&process{
-			processCommon: processCommon{
-				containerID:  containerID,
-				friendlyName: processFriendlyName,
-				client:       clnt,
-				systemPid:    pid,
-			},
-			commandLine: createProcessParms.CommandLine,
-		}
+	pid := newProcess.Pid()
+
+	proc := &process{
+		processCommon: processCommon{
+			containerID:  containerID,
+			friendlyName: processFriendlyName,
+			client:       clnt,
+			systemPid:    uint32(pid),
+		},
+		commandLine: createProcessParms.CommandLine,
+		hcsProcess:  newProcess,
+	}
+
+	// Add the process to the container's list of processes
+	container.processes[processFriendlyName] = proc
 
 	// Make sure the lock is not held while calling back into the daemon
 	clnt.unlock(containerID)
@@ -412,7 +260,7 @@ func (clnt *client) AddProcess(containerID, processFriendlyName string, procToAd
 	clnt.lock(containerID)
 
 	// Spin up a go routine waiting for exit to handle cleanup
-	go container.waitExit(pid, processFriendlyName, false)
+	go container.waitExit(proc, false)
 
 	return nil
 }
@@ -433,28 +281,26 @@ func (clnt *client) Signal(containerID string, sig int) error {
 		return err
 	}
 
+	cont.manualStopRequested = true
+
 	logrus.Debugf("lcd: Signal() containerID=%s sig=%d pid=%d", containerID, sig, cont.systemPid)
-	context := fmt.Sprintf("Signal: sig=%d pid=%d", sig, cont.systemPid)
 
 	if syscall.Signal(sig) == syscall.SIGKILL {
 		// Terminate the compute system
-		if err := hcsshim.TerminateComputeSystem(containerID, hcsshim.TimeoutInfinite, context); err != nil {
-			logrus.Errorf("Failed to terminate %s - %q", containerID, err)
+		if err := cont.hcsContainer.Terminate(); err != nil {
+			if err != hcsshim.ErrVmcomputeOperationPending {
+				logrus.Errorf("Failed to terminate %s - %q", containerID, err)
+			}
 		}
-
 	} else {
 		// Terminate Process
-		if err = hcsshim.TerminateProcessInComputeSystem(containerID, cont.systemPid); err != nil {
+		if err := cont.hcsProcess.Kill(); err != nil {
 			logrus.Warnf("Failed to terminate pid %d in %s: %q", cont.systemPid, containerID, err)
 			// Ignore errors
 			err = nil
 		}
-
-		// Shutdown the compute system
-		if err := hcsshim.ShutdownComputeSystem(containerID, hcsshim.TimeoutInfinite, context); err != nil {
-			logrus.Errorf("Failed to shutdown %s - %q", containerID, err)
-		}
 	}
+
 	return nil
 }
 
@@ -469,15 +315,17 @@ func (clnt *client) Resize(containerID, processFriendlyName string, width, heigh
 		return err
 	}
 
+	h, w := uint16(height), uint16(width)
+
 	if processFriendlyName == InitFriendlyName {
 		logrus.Debugln("Resizing systemPID in", containerID, cont.process.systemPid)
-		return hcsshim.ResizeConsoleInComputeSystem(containerID, cont.process.systemPid, height, width)
+		return cont.process.hcsProcess.ResizeConsole(w, h)
 	}
 
 	for _, p := range cont.processes {
 		if p.friendlyName == processFriendlyName {
 			logrus.Debugln("Resizing exec'd process", containerID, p.systemPid)
-			return hcsshim.ResizeConsoleInComputeSystem(containerID, p.systemPid, height, width)
+			return p.hcsProcess.ResizeConsole(w, h)
 		}
 	}
 
@@ -505,9 +353,10 @@ func (clnt *client) Restore(containerID string, unusedOnWindows ...CreateOption)
 	// TODO Windows: Implement this. For now, just tell the backend the container exited.
 	logrus.Debugf("lcd Restore %s", containerID)
 	return clnt.backend.StateChanged(containerID, StateInfo{
-		State:    StateExit,
-		ExitCode: 1 << 31,
-	})
+		CommonStateInfo: CommonStateInfo{
+			State:    StateExit,
+			ExitCode: 1 << 31,
+		}})
 }
 
 // GetPidsForContainer returns a list of process IDs running in a container.
