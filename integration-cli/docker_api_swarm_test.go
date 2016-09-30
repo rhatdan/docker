@@ -780,6 +780,7 @@ func (s *DockerSwarmSuite) TestAPISwarmNodeRemove(c *check.C) {
 }
 
 func (s *DockerSwarmSuite) TestAPISwarmNodeDrainPause(c *check.C) {
+	c.Skip("flaky")
 	d1 := s.AddDaemon(c, true, true)
 	d2 := s.AddDaemon(c, true, false)
 
