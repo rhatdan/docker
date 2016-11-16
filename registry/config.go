@@ -351,6 +351,9 @@ func newRepositoryInfo(config *serviceConfig, name reference.Named) (*Repository
 // IsIndexBlocked allows to check whether index/registry or endpoint
 // is on a block list.
 func IsIndexBlocked(indexName string) bool {
+	if indexName == DefaultV2Registry.Host || indexName == DefaultV1Registry.Host {
+		indexName = IndexName
+	}
 	if _, ok := BlockedRegistries[indexName]; ok {
 		return true
 	}

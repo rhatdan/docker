@@ -97,6 +97,7 @@ func Pull(ctx context.Context, ref reference.Named, imagePullConfig *ImagePullCo
 	if reference.IsReferenceFullyQualified(ref) {
 		return pullFromRegistry(ctx, ref, imagePullConfig)
 	}
+	// TODO(runcom): this should be moved before the check above for consistency...
 	if len(registry.DefaultRegistries) == 0 {
 		return fmt.Errorf("No configured registry to pull from.")
 	}
