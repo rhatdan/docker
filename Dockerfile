@@ -47,7 +47,6 @@ RUN apt-get update && apt-get install -y \
 	btrfs-tools \
 	build-essential \
 	clang \
-	cmake \
 	createrepo \
 	curl \
 	dpkg-sig \
@@ -76,12 +75,13 @@ RUN apt-get update && apt-get install -y \
 	python-websocket \
 	ubuntu-zfs \
 	xfsprogs \
-	vim-common \
 	libzfs-dev \
 	tar \
 	zip \
 	--no-install-recommends \
 # End dependencies cut
+	cmake \
+	vim-common \
 	automake \
 	git \
 	jq \

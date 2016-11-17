@@ -49,11 +49,11 @@ func testVersionPlatform(c *check.C, platform string) {
 	// Verify the second 'OS/Arch' matches the platform. Experimental has
 	// more lines of output than 'regular'
 	bFound := false
-	for i := 16; i < len(split); i++ {
-		if strings.Contains(split[i], "OS/Arch:") && strings.Contains(split[i], platform) {
+	for i := 14; i < len(split); i++ {
+		if strings.Contains(split[i], expected) {
 			bFound = true
 			break
 		}
 	}
-	c.Assert(bFound, checker.Equals, true, check.Commentf("Could not find server 'OS/Arch:' or '%s' in '%s'", platform, out))
+	c.Assert(bFound, checker.Equals, true, check.Commentf("Could not find server '%s' in '%s'", expected, out))
 }

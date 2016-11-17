@@ -83,7 +83,7 @@ func (p *v2Puller) checkTrusted(c gctx.Context, ref reference.Named) (reference.
 	if err != nil {
 		return nil, err
 	}
-	ref, err = reference.WithDigest(ref, digest.Digest(dgst))
+	ref, err = reference.WithDigest(reference.TrimNamed(ref), digest.Digest(dgst))
 	if err != nil {
 		return nil, err
 	}

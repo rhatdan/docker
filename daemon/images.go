@@ -181,22 +181,17 @@ func (daemon *Daemon) Images(imageFilters filters.Args, all bool, withExtraAttrs
 		newImage := newImage(img, size)
 
 		for _, ref := range daemon.referenceStore.References(id.Digest()) {
+			var found bool
 			if imageFilters.Include("reference") {
-				//var found bool
-				//var matchErr error
-				//for _, pattern := range imageFilters.Get("reference") {
-				//found, matchErr = distreference.Match(pattern, ref)
-				//if matchErr != nil {
-				//return nil, matchErr
-				//}
-				//}
-				//if !found {
-				//continue
-				//}
 				for _, pattern := range imageFilters.Get("reference") {
 					if !matchReference(pattern, ref) {
+						found = false
 						continue
 					}
+					found = true
+				}
+				if !found {
+					continue
 				}
 			}
 			if _, ok := ref.(reference.Canonical); ok {
