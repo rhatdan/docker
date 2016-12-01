@@ -102,7 +102,7 @@ func (p *v2Puller) pullV2Repository(ctx context.Context, ref reference.Named) (e
 			ref, err = p.checkTrusted(ctx, ref)
 			if err != nil {
 				if err == cimagedocker.ErrV1NotSupported {
-					return fmt.Errorf("unable to pull from V1 Docker registries with images signatures verification enabled, please set --signature-enabled=false in the docker daemon")
+					return fmt.Errorf("unable to pull from V1 Docker registries with image signature verification enabled. If you need to accept this risk and disable signature verification (for ALL images), run the docker daemon with --signature-enabled=false")
 				}
 				// do not fallback to v1 is there was any error checking image's signatures
 				return err
@@ -139,7 +139,7 @@ func (p *v2Puller) pullV2Repository(ctx context.Context, ref reference.Named) (e
 				if err != nil {
 					p.originalRef = nil
 					if err == cimagedocker.ErrV1NotSupported {
-						return fmt.Errorf("unable to pull from V1 Docker registries with images signatures verification enabled, please set --signature-enabled=false in the docker daemon")
+						return fmt.Errorf("unable to pull from V1 Docker registries with image signature verification enabled. If you need to accept this risk and disable signature verification (for ALL images), run the docker daemon with --signature-enabled=false")
 					}
 					return err
 				}
