@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/containers/image/docker/reference"
+	"github.com/docker/distribution/digest"
 )
 
 // ImageTransport is a top-level namespace for ways to to store/load an image.
@@ -91,8 +92,9 @@ type ImageReference interface {
 // BlobInfo collects known information about a blob (layer/config).
 // In some situations, some fields may be unknown, in others they may be mandatory; documenting an “unknown” value here does not override that.
 type BlobInfo struct {
-	Digest string // "" if unknown.
-	Size   int64  // -1 if unknown
+	Digest digest.Digest // "" if unknown.
+	Size   int64         // -1 if unknown
+	URLs   []string
 }
 
 // ImageSource is a service, possibly remote (= slow), to download components of a single image.
@@ -113,9 +115,10 @@ type ImageSource interface {
 	GetManifest() ([]byte, string, error)
 	// GetTargetManifest returns an image's manifest given a digest. This is mainly used to retrieve a single image's manifest
 	// out of a manifest list.
-	GetTargetManifest(digest string) ([]byte, string, error)
+	GetTargetManifest(digest digest.Digest) ([]byte, string, error)
 	// GetBlob returns a stream for the specified blob, and the blob’s size (or -1 if unknown).
-	GetBlob(digest string) (io.ReadCloser, int64, error)
+	// The Digest field in BlobInfo is guaranteed to be provided; Size may be -1.
+	GetBlob(BlobInfo) (io.ReadCloser, int64, error)
 	// GetSignatures returns the image's signatures.  It may use a remote (= slow) service.
 	GetSignatures() ([][]byte, error)
 }
@@ -143,6 +146,10 @@ type ImageDestination interface {
 	SupportsSignatures() error
 	// ShouldCompressLayers returns true iff it is desirable to compress layer blobs written to this destination.
 	ShouldCompressLayers() bool
+
+	// AcceptsForeignLayerURLs returns false iff foreign layers in manifest should be actually
+	// uploaded to the image destination, true otherwise.
+	AcceptsForeignLayerURLs() bool
 
 	// PutBlob writes contents of stream and returns data representing the result (with all data filled in).
 	// inputInfo.Digest can be optionally provided if known; it is not mandatory for the implementation to verify it.
@@ -209,7 +216,7 @@ type Image interface {
 
 // ManifestUpdateOptions is a way to pass named optional arguments to Image.UpdatedManifest
 type ManifestUpdateOptions struct {
-	LayerInfos       []BlobInfo // Complete BlobInfos (size+digest) which should replace the originals, in order (the root layer first, and then successive layered layers)
+	LayerInfos       []BlobInfo // Complete BlobInfos (size+digest+urls) which should replace the originals, in order (the root layer first, and then successive layered layers)
 	ManifestMIMEType string
 	// The values below are NOT requests to modify the image; they provide optional context which may or may not be used.
 	InformationOnly ManifestUpdateInformation
@@ -220,7 +227,7 @@ type ManifestUpdateOptions struct {
 type ManifestUpdateInformation struct {
 	Destination  ImageDestination // and yes, UpdatedManifest may write to Destination (see the schema2 → schema1 conversion logic in image/docker_schema2.go)
 	LayerInfos   []BlobInfo       // Complete BlobInfos (size+digest) which have been uploaded, in order (the root layer first, and then successive layered layers)
-	LayerDiffIDs []string         // Digest values for the _uncompressed_ contents of the blobs which have been uploaded, in the same order.
+	LayerDiffIDs []digest.Digest  // Digest values for the _uncompressed_ contents of the blobs which have been uploaded, in the same order.
 }
 
 // ImageInspectInfo is a set of metadata describing Docker images, primarily their manifest and configuration.

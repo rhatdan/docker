@@ -12,6 +12,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
+	"github.com/docker/distribution/digest"
 )
 
 // gzippedEmptyLayer is a gzip-compressed version of an empty tar file (1024 NULL bytes)
@@ -24,12 +25,13 @@ var gzippedEmptyLayer = []byte{
 }
 
 // gzippedEmptyLayerDigest is a digest of gzippedEmptyLayer
-const gzippedEmptyLayerDigest = "sha256:a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4"
+const gzippedEmptyLayerDigest = digest.Digest("sha256:a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4")
 
 type descriptor struct {
-	MediaType string `json:"mediaType"`
-	Size      int64  `json:"size"`
-	Digest    string `json:"digest"`
+	MediaType string        `json:"mediaType"`
+	Size      int64         `json:"size"`
+	Digest    digest.Digest `json:"digest"`
+	URLs      []string      `json:"urls,omitempty"`
 }
 
 type manifestSchema2 struct {
@@ -82,7 +84,11 @@ func (m *manifestSchema2) ConfigBlob() ([]byte, error) {
 		if m.src == nil {
 			return nil, fmt.Errorf("Internal error: neither src nor configBlob set in manifestSchema2")
 		}
-		stream, _, err := m.src.GetBlob(m.ConfigDescriptor.Digest)
+		stream, _, err := m.src.GetBlob(types.BlobInfo{
+			Digest: m.ConfigDescriptor.Digest,
+			Size:   m.ConfigDescriptor.Size,
+			URLs:   m.ConfigDescriptor.URLs,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -91,8 +97,7 @@ func (m *manifestSchema2) ConfigBlob() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		hash := sha256.Sum256(blob)
-		computedDigest := "sha256:" + hex.EncodeToString(hash[:])
+		computedDigest := digest.FromBytes(blob)
 		if computedDigest != m.ConfigDescriptor.Digest {
 			return nil, fmt.Errorf("Download config.json digest %s does not match expected %s", computedDigest, m.ConfigDescriptor.Digest)
 		}
@@ -107,7 +112,11 @@ func (m *manifestSchema2) ConfigBlob() ([]byte, error) {
 func (m *manifestSchema2) LayerInfos() []types.BlobInfo {
 	blobs := []types.BlobInfo{}
 	for _, layer := range m.LayersDescriptors {
-		blobs = append(blobs, types.BlobInfo{Digest: layer.Digest, Size: layer.Size})
+		blobs = append(blobs, types.BlobInfo{
+			Digest: layer.Digest,
+			Size:   layer.Size,
+			URLs:   layer.URLs,
+		})
 	}
 	return blobs
 }
@@ -149,6 +158,7 @@ func (m *manifestSchema2) UpdatedImage(options types.ManifestUpdateOptions) (typ
 		for i, info := range options.LayerInfos {
 			copy.LayersDescriptors[i].Digest = info.Digest
 			copy.LayersDescriptors[i].Size = info.Size
+			copy.LayersDescriptors[i].URLs = info.URLs
 		}
 	}
 
@@ -189,7 +199,7 @@ func (m *manifestSchema2) convertToManifestSchema1(dest types.ImageDestination) 
 		parentV1ID = v1ID
 		v1Index := len(imageConfig.History) - 1 - v2Index
 
-		var blobDigest string
+		var blobDigest digest.Digest
 		if historyEntry.EmptyLayer {
 			if !haveGzippedEmptyLayer {
 				logrus.Debugf("Uploading empty layer during conversion to schema 1")
@@ -252,12 +262,11 @@ func (m *manifestSchema2) convertToManifestSchema1(dest types.ImageDestination) 
 	return memoryImageFromManifest(m1), nil
 }
 
-func v1IDFromBlobDigestAndComponents(blobDigest string, others ...string) (string, error) {
-	blobDigestComponents := strings.SplitN(blobDigest, ":", 2)
-	if len(blobDigestComponents) != 2 {
-		return "", fmt.Errorf("Invalid layer digest %s: expecting algorithm:value", blobDigest)
+func v1IDFromBlobDigestAndComponents(blobDigest digest.Digest, others ...string) (string, error) {
+	if err := blobDigest.Validate(); err != nil {
+		return "", err
 	}
-	parts := append([]string{blobDigestComponents[1]}, others...)
+	parts := append([]string{blobDigest.Hex()}, others...)
 	v1IDHash := sha256.Sum256([]byte(strings.Join(parts, " ")))
 	return hex.EncodeToString(v1IDHash[:]), nil
 }

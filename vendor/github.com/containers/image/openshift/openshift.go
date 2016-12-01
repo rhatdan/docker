@@ -17,6 +17,7 @@ import (
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
 	"github.com/containers/image/version"
+	"github.com/docker/distribution/digest"
 )
 
 // openshiftClient is configuration for dealing with a single image stream, for reading or writing.
@@ -196,7 +197,7 @@ func (s *openshiftImageSource) Close() {
 	}
 }
 
-func (s *openshiftImageSource) GetTargetManifest(digest string) ([]byte, string, error) {
+func (s *openshiftImageSource) GetTargetManifest(digest digest.Digest) ([]byte, string, error) {
 	if err := s.ensureImageIsResolved(); err != nil {
 		return nil, "", err
 	}
@@ -213,11 +214,11 @@ func (s *openshiftImageSource) GetManifest() ([]byte, string, error) {
 }
 
 // GetBlob returns a stream for the specified blob, and the blob’s size (or -1 if unknown).
-func (s *openshiftImageSource) GetBlob(digest string) (io.ReadCloser, int64, error) {
+func (s *openshiftImageSource) GetBlob(info types.BlobInfo) (io.ReadCloser, int64, error) {
 	if err := s.ensureImageIsResolved(); err != nil {
 		return nil, 0, err
 	}
-	return s.docker.GetBlob(digest)
+	return s.docker.GetBlob(info)
 }
 
 func (s *openshiftImageSource) GetSignatures() ([][]byte, error) {
@@ -349,6 +350,12 @@ func (d *openshiftImageDestination) ShouldCompressLayers() bool {
 	return true
 }
 
+// AcceptsForeignLayerURLs returns false iff foreign layers in manifest should be actually
+// uploaded to the image destination, true otherwise.
+func (d *openshiftImageDestination) AcceptsForeignLayerURLs() bool {
+	return true
+}
+
 // PutBlob writes contents of stream and returns data representing the result (with all data filled in).
 // inputInfo.Digest can be optionally provided if known; it is not mandatory for the implementation to verify it.
 // inputInfo.Size is the expected length of stream, if known.
@@ -364,7 +371,7 @@ func (d *openshiftImageDestination) PutManifest(m []byte) error {
 	if err != nil {
 		return err
 	}
-	d.imageStreamImageName = manifestDigest
+	d.imageStreamImageName = manifestDigest.String()
 
 	return d.docker.PutManifest(m)
 }

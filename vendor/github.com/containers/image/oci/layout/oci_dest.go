@@ -1,8 +1,6 @@
 package layout
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
+	"github.com/docker/distribution/digest"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -53,6 +52,12 @@ func (d *ociImageDestination) ShouldCompressLayers() bool {
 	return false
 }
 
+// AcceptsForeignLayerURLs returns false iff foreign layers in manifest should be actually
+// uploaded to the image destination, true otherwise.
+func (d *ociImageDestination) AcceptsForeignLayerURLs() bool {
+	return false
+}
+
 // PutBlob writes contents of stream and returns data representing the result (with all data filled in).
 // inputInfo.Digest can be optionally provided if known; it is not mandatory for the implementation to verify it.
 // inputInfo.Size is the expected length of stream, if known.
@@ -75,14 +80,14 @@ func (d *ociImageDestination) PutBlob(stream io.Reader, inputInfo types.BlobInfo
 		}
 	}()
 
-	h := sha256.New()
-	tee := io.TeeReader(stream, h)
+	digester := digest.Canonical.New()
+	tee := io.TeeReader(stream, digester.Hash())
 
 	size, err := io.Copy(blobFile, tee)
 	if err != nil {
 		return types.BlobInfo{}, err
 	}
-	computedDigest := "sha256:" + hex.EncodeToString(h.Sum(nil))
+	computedDigest := digester.Digest()
 	if inputInfo.Size != -1 && size != inputInfo.Size {
 		return types.BlobInfo{}, fmt.Errorf("Size mismatch when copying %s, expected %d, got %d", computedDigest, inputInfo.Size, size)
 	}
@@ -122,8 +127,12 @@ func createManifest(m []byte) ([]byte, string, error) {
 			return nil, "", err
 		}
 		om.MediaType = imgspecv1.MediaTypeImageManifest
-		for i := range om.Layers {
-			om.Layers[i].MediaType = imgspecv1.MediaTypeImageLayer
+		for i, l := range om.Layers {
+			if l.MediaType == manifest.DockerV2Schema2ForeignLayerMediaType {
+				om.Layers[i].MediaType = imgspecv1.MediaTypeImageLayerNonDistributable
+			} else {
+				om.Layers[i].MediaType = imgspecv1.MediaTypeImageLayer
+			}
 		}
 		om.Config.MediaType = imgspecv1.MediaTypeImageConfig
 		b, err := json.Marshal(om)
@@ -153,7 +162,7 @@ func (d *ociImageDestination) PutManifest(m []byte) error {
 		return err
 	}
 	desc := imgspecv1.Descriptor{}
-	desc.Digest = digest
+	desc.Digest = digest.String()
 	// TODO(runcom): beaware and add support for OCI manifest list
 	desc.MediaType = mt
 	desc.Size = int64(len(ociMan))

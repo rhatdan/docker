@@ -1,8 +1,6 @@
 package image
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +11,7 @@ import (
 	"github.com/containers/image/docker/reference"
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
+	"github.com/docker/distribution/digest"
 )
 
 var (
@@ -20,7 +19,7 @@ var (
 )
 
 type fsLayersSchema1 struct {
-	BlobSum string `json:"blobSum"`
+	BlobSum digest.Digest `json:"blobSum"`
 }
 
 type historySchema1 struct {
@@ -204,7 +203,7 @@ func fixManifestLayers(manifest *manifestSchema1) error {
 		}
 	}
 	if imgs[len(imgs)-1].Parent != "" {
-		return errors.New("Invalid parent ID in the base layer of the image.")
+		return errors.New("Invalid parent ID in the base layer of the image")
 	}
 	// check general duplicates to error instead of a deadlock
 	idmap := make(map[string]struct{})
@@ -223,7 +222,7 @@ func fixManifestLayers(manifest *manifestSchema1) error {
 			manifest.FSLayers = append(manifest.FSLayers[:i], manifest.FSLayers[i+1:]...)
 			manifest.History = append(manifest.History[:i], manifest.History[i+1:]...)
 		} else if imgs[i].Parent != imgs[i+1].ID {
-			return fmt.Errorf("Invalid parent ID. Expected %v, got %v.", imgs[i+1].ID, imgs[i].Parent)
+			return fmt.Errorf("Invalid parent ID. Expected %v, got %v", imgs[i+1].ID, imgs[i].Parent)
 		}
 	}
 	return nil
@@ -237,7 +236,7 @@ func validateV1ID(id string) error {
 }
 
 // Based on github.com/docker/docker/distribution/pull_v2.go
-func (m *manifestSchema1) convertToManifestSchema2(uploadedLayerInfos []types.BlobInfo, layerDiffIDs []string) (types.Image, error) {
+func (m *manifestSchema1) convertToManifestSchema2(uploadedLayerInfos []types.BlobInfo, layerDiffIDs []digest.Digest) (types.Image, error) {
 	if len(m.History) == 0 {
 		// What would this even mean?! Anyhow, the rest of the code depends on fsLayers[0] and history[0] existing.
 		return nil, fmt.Errorf("Cannot convert an image with 0 history entries to %s", manifest.DockerV2Schema2MediaType)
@@ -254,7 +253,7 @@ func (m *manifestSchema1) convertToManifestSchema2(uploadedLayerInfos []types.Bl
 
 	rootFS := rootFS{
 		Type:      "layers",
-		DiffIDs:   []string{},
+		DiffIDs:   []digest.Digest{},
 		BaseLayer: "",
 	}
 	var layers []descriptor
@@ -287,11 +286,10 @@ func (m *manifestSchema1) convertToManifestSchema2(uploadedLayerInfos []types.Bl
 	if err != nil {
 		return nil, err
 	}
-	configHash := sha256.Sum256(configJSON)
 	configDescriptor := descriptor{
 		MediaType: "application/vnd.docker.container.image.v1+json",
 		Size:      int64(len(configJSON)),
-		Digest:    "sha256:" + hex.EncodeToString(configHash[:]),
+		Digest:    digest.FromBytes(configJSON),
 	}
 
 	m2 := manifestSchema2FromComponents(configDescriptor, configJSON, layers)

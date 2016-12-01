@@ -13,6 +13,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
+	"github.com/docker/distribution/digest"
 	"github.com/docker/distribution/registry/client"
 )
 
@@ -98,8 +99,8 @@ func (s *dockerImageSource) fetchManifest(tagOrDigest string) ([]byte, string, e
 
 // GetTargetManifest returns an image's manifest given a digest.
 // This is mainly used to retrieve a single image's manifest out of a manifest list.
-func (s *dockerImageSource) GetTargetManifest(digest string) ([]byte, string, error) {
-	return s.fetchManifest(digest)
+func (s *dockerImageSource) GetTargetManifest(digest digest.Digest) ([]byte, string, error) {
+	return s.fetchManifest(digest.String())
 }
 
 // ensureManifestIsLoaded sets s.cachedManifest and s.cachedManifestMIMEType
@@ -129,9 +130,42 @@ func (s *dockerImageSource) ensureManifestIsLoaded() error {
 	return nil
 }
 
+func (s *dockerImageSource) getExternalBlob(urls []string) (io.ReadCloser, int64, error) {
+	var (
+		resp *http.Response
+		err  error
+	)
+	for _, url := range urls {
+		resp, err = s.c.makeRequestToResolvedURL("GET", url, nil, nil, -1, false)
+		if err == nil {
+			if resp.StatusCode != http.StatusOK {
+				err = fmt.Errorf("error fetching external blob from %q: %d", url, resp.StatusCode)
+				logrus.Debug(err)
+				continue
+			}
+		}
+	}
+	if resp.Body != nil && err == nil {
+		return resp.Body, getBlobSize(resp), nil
+	}
+	return nil, 0, err
+}
+
+func getBlobSize(resp *http.Response) int64 {
+	size, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	if err != nil {
+		size = -1
+	}
+	return size
+}
+
 // GetBlob returns a stream for the specified blob, and the blob’s size (or -1 if unknown).
-func (s *dockerImageSource) GetBlob(digest string) (io.ReadCloser, int64, error) {
-	url := fmt.Sprintf(blobsURL, s.ref.ref.RemoteName(), digest)
+func (s *dockerImageSource) GetBlob(info types.BlobInfo) (io.ReadCloser, int64, error) {
+	if len(info.URLs) != 0 {
+		return s.getExternalBlob(info.URLs)
+	}
+
+	url := fmt.Sprintf(blobsURL, s.ref.ref.RemoteName(), info.Digest.String())
 	logrus.Debugf("Downloading %s", url)
 	res, err := s.c.makeRequest("GET", url, nil, nil)
 	if err != nil {
@@ -141,11 +175,7 @@ func (s *dockerImageSource) GetBlob(digest string) (io.ReadCloser, int64, error)
 		// print url also
 		return nil, 0, fmt.Errorf("Invalid status code returned when fetching blob %d", res.StatusCode)
 	}
-	size, err := strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
-	if err != nil {
-		size = -1
-	}
-	return res.Body, size, nil
+	return res.Body, getBlobSize(res), nil
 }
 
 func (s *dockerImageSource) GetSignatures() ([][]byte, error) {
@@ -246,7 +276,7 @@ func deleteImage(ctx *types.SystemContext, ref dockerReference) error {
 	switch get.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return fmt.Errorf("Unable to delete %v. Image may not exist or is not stored with a v2 Schema in a v2 registry.", ref.ref)
+		return fmt.Errorf("Unable to delete %v. Image may not exist or is not stored with a v2 Schema in a v2 registry", ref.ref)
 	default:
 		return fmt.Errorf("Failed to delete %v: %s (%v)", ref.ref, manifestBody, get.Status)
 	}

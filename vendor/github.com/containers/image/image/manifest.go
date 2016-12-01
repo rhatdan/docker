@@ -5,6 +5,7 @@ import (
 
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
+	"github.com/docker/distribution/digest"
 	"github.com/docker/docker/api/types/strslice"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -45,9 +46,9 @@ type imageHistory struct {
 }
 
 type rootFS struct {
-	Type      string   `json:"type"`
-	DiffIDs   []string `json:"diff_ids,omitempty"`
-	BaseLayer string   `json:"base_layer,omitempty"`
+	Type      string          `json:"type"`
+	DiffIDs   []digest.Digest `json:"diff_ids,omitempty"`
+	BaseLayer string          `json:"base_layer,omitempty"`
 }
 
 // genericManifest is an interface for parsing, modifying image manifests and related data.
@@ -113,7 +114,7 @@ func inspectManifest(m genericManifest) (*types.ImageInspectInfo, error) {
 	layers := m.LayerInfos()
 	info.Layers = make([]string, len(layers))
 	for i, layer := range layers {
-		info.Layers[i] = layer.Digest
+		info.Layers[i] = layer.Digest.String()
 	}
 	return info, nil
 }

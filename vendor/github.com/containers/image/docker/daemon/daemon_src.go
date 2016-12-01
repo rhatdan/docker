@@ -3,8 +3,6 @@ package daemon
 import (
 	"archive/tar"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/types"
+	"github.com/docker/distribution/digest"
 	"github.com/docker/docker/client"
 	"golang.org/x/net/context"
 )
@@ -26,7 +25,7 @@ type daemonImageSource struct {
 	// The following data is only available after ensureCachedDataIsPresent() succeeds
 	tarManifest       *manifestItem // nil if not available yet.
 	configBytes       []byte
-	configDigest      string
+	configDigest      digest.Digest
 	orderedDiffIDList []diffID
 	knownLayers       map[diffID]*layerInfo
 	// Other state
@@ -52,7 +51,9 @@ func newImageSource(ctx *types.SystemContext, ref daemonReference) (types.ImageS
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing docker engine client: %v", err)
 	}
-	inputStream, err := c.ImageSave(context.TODO(), []string{string(ref)}) // FIXME: ref should be per docker/reference.ParseIDOrReference, and we don't want NameOnly
+	// Per NewReference(), ref.StringWithinTransport() is either an image ID (config digest), or a !reference.NameOnly() reference.
+	// Either way ImageSave should create a tarball with exactly one image.
+	inputStream, err := c.ImageSave(context.TODO(), []string{ref.StringWithinTransport()})
 	if err != nil {
 		return nil, fmt.Errorf("Error loading image from docker engine: %v", err)
 	}
@@ -200,7 +201,7 @@ func (s *daemonImageSource) ensureCachedDataIsPresent() error {
 	if err != nil {
 		return err
 	}
-	var parsedConfig image // Most fields ommitted, we only care about layer DiffIDs.
+	var parsedConfig dockerImage // Most fields ommitted, we only care about layer DiffIDs.
 	if err := json.Unmarshal(configBytes, &parsedConfig); err != nil {
 		return fmt.Errorf("Error decoding tar config %s: %v", tarManifest.Config, err)
 	}
@@ -211,10 +212,9 @@ func (s *daemonImageSource) ensureCachedDataIsPresent() error {
 	}
 
 	// Success; commit.
-	configHash := sha256.Sum256(configBytes)
 	s.tarManifest = tarManifest
 	s.configBytes = configBytes
-	s.configDigest = "sha256:" + hex.EncodeToString(configHash[:])
+	s.configDigest = digest.FromBytes(configBytes)
 	s.orderedDiffIDList = parsedConfig.RootFS.DiffIDs
 	s.knownLayers = knownLayers
 	return nil
@@ -237,7 +237,7 @@ func (s *daemonImageSource) loadTarManifest() (*manifestItem, error) {
 	return &items[0], nil
 }
 
-func (s *daemonImageSource) prepareLayerData(tarManifest *manifestItem, parsedConfig *image) (map[diffID]*layerInfo, error) {
+func (s *daemonImageSource) prepareLayerData(tarManifest *manifestItem, parsedConfig *dockerImage) (map[diffID]*layerInfo, error) {
 	// Collect layer data available in manifest and config.
 	if len(tarManifest.Layers) != len(parsedConfig.RootFS.DiffIDs) {
 		return nil, fmt.Errorf("Inconsistent layer count: %d in manifest, %d in config", len(tarManifest.Layers), len(parsedConfig.RootFS.DiffIDs))
@@ -313,7 +313,7 @@ func (s *daemonImageSource) GetManifest() ([]byte, string, error) {
 				return nil, "", fmt.Errorf("Internal inconsistency: Information about layer %s missing", diffID)
 			}
 			m.Layers = append(m.Layers, distributionDescriptor{
-				Digest:    string(diffID), // diffID is a digest of the uncompressed tarball
+				Digest:    digest.Digest(diffID), // diffID is a digest of the uncompressed tarball
 				MediaType: manifest.DockerV2Schema2LayerMediaType,
 				Size:      li.size,
 			})
@@ -329,22 +329,22 @@ func (s *daemonImageSource) GetManifest() ([]byte, string, error) {
 
 // GetTargetManifest returns an image's manifest given a digest. This is mainly used to retrieve a single image's manifest
 // out of a manifest list.
-func (s *daemonImageSource) GetTargetManifest(digest string) ([]byte, string, error) {
+func (s *daemonImageSource) GetTargetManifest(digest digest.Digest) ([]byte, string, error) {
 	// How did we even get here? GetManifest() above has returned a manifest.DockerV2Schema2MediaType.
-	return nil, "", fmt.Errorf("Manifests list are not supported by docker-daemon:")
+	return nil, "", fmt.Errorf(`Manifest lists are not supported by "docker-daemon:"`)
 }
 
 // GetBlob returns a stream for the specified blob, and the blob’s size (or -1 if unknown).
-func (s *daemonImageSource) GetBlob(digest string) (io.ReadCloser, int64, error) {
+func (s *daemonImageSource) GetBlob(info types.BlobInfo) (io.ReadCloser, int64, error) {
 	if err := s.ensureCachedDataIsPresent(); err != nil {
 		return nil, 0, err
 	}
 
-	if digest == s.configDigest { // FIXME? Implement a more general algorithm matching instead of assuming sha256.
+	if info.Digest == s.configDigest { // FIXME? Implement a more general algorithm matching instead of assuming sha256.
 		return ioutil.NopCloser(bytes.NewReader(s.configBytes)), int64(len(s.configBytes)), nil
 	}
 
-	if li, ok := s.knownLayers[diffID(digest)]; ok { // diffID is a digest of the uncompressed tarball,
+	if li, ok := s.knownLayers[diffID(info.Digest)]; ok { // diffID is a digest of the uncompressed tarball,
 		stream, err := s.openTarComponent(li.path)
 		if err != nil {
 			return nil, 0, err
@@ -352,7 +352,7 @@ func (s *daemonImageSource) GetBlob(digest string) (io.ReadCloser, int64, error)
 		return stream, li.size, nil
 	}
 
-	return nil, 0, fmt.Errorf("Unknown blob %s", digest)
+	return nil, 0, fmt.Errorf("Unknown blob %s", info.Digest)
 }
 
 // GetSignatures returns the image's signatures.  It may use a remote (= slow) service.

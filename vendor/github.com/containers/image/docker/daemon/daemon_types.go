@@ -1,5 +1,7 @@
 package daemon
 
+import "github.com/docker/distribution/digest"
+
 // Various data structures.
 
 // Based on github.com/docker/docker/image/tarexport/tarexport.go
@@ -20,14 +22,14 @@ type manifestItem struct {
 }
 
 type imageID string
-type diffID string
+type diffID digest.Digest
 
 // Based on github.com/docker/distribution/blobs.go
 type distributionDescriptor struct {
-	MediaType string   `json:"mediaType,omitempty"`
-	Size      int64    `json:"size,omitempty"`
-	Digest    string   `json:"digest,omitempty"`
-	URLs      []string `json:"urls,omitempty"`
+	MediaType string        `json:"mediaType,omitempty"`
+	Size      int64         `json:"size,omitempty"`
+	Digest    digest.Digest `json:"digest,omitempty"`
+	URLs      []string      `json:"urls,omitempty"`
 }
 
 // Based on github.com/docker/distribution/manifest/schema2/manifest.go
@@ -41,7 +43,7 @@ type schema2Manifest struct {
 
 // Based on github.com/docker/docker/image/image.go
 // MOST CONTENT OMITTED AS UNNECESSARY
-type image struct {
+type dockerImage struct {
 	RootFS *rootFS `json:"rootfs,omitempty"`
 }
 

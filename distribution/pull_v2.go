@@ -11,6 +11,7 @@ import (
 	"runtime"
 
 	"github.com/Sirupsen/logrus"
+	cimagedocker "github.com/containers/image/docker"
 	"github.com/containers/image/signature"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/digest"
@@ -100,6 +101,9 @@ func (p *v2Puller) pullV2Repository(ctx context.Context, ref reference.Named) (e
 		if p.config.SignatureCheck {
 			ref, err = p.checkTrusted(ctx, ref)
 			if err != nil {
+				if err == cimagedocker.ErrV1NotSupported {
+					return fmt.Errorf("unable to pull from V1 Docker registries with images signatures verification enabled, please set --signature-enabled=false in the docker daemon")
+				}
 				// do not fallback to v1 is there was any error checking image's signatures
 				return err
 			}
@@ -134,6 +138,9 @@ func (p *v2Puller) pullV2Repository(ctx context.Context, ref reference.Named) (e
 				trustedRef, err := p.checkTrusted(ctx, tagRef)
 				if err != nil {
 					p.originalRef = nil
+					if err == cimagedocker.ErrV1NotSupported {
+						return fmt.Errorf("unable to pull from V1 Docker registries with images signatures verification enabled, please set --signature-enabled=false in the docker daemon")
+					}
 					return err
 				}
 				ref = trustedRef
