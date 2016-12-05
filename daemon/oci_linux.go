@@ -713,14 +713,16 @@ func (daemon *Daemon) createSpec(c *container.Container) (*specs.Spec, error) {
 	}
 
 	rootUID, rootGID := daemon.GetRemappedUIDGID()
-	m, err := c.SecretMountRHEL(rootUID, rootGID)
-	if err != nil {
-		return nil, err
-	}
-	// SecretMountRHEL() returns m == nil && err == nil
-	// we check m before appending and dereferencing it
-	if m != nil {
-		ms = append(ms, *m)
+	if daemon.configStore.EnableSecrets {
+		m, err := c.SecretMountRHEL(rootUID, rootGID)
+		if err != nil {
+			return nil, err
+		}
+		// SecretMountRHEL() returns m == nil && err == nil
+		// we check m before appending and dereferencing it
+		if m != nil {
+			ms = append(ms, *m)
+		}
 	}
 	sort.Sort(mounts(ms))
 	if err := setMounts(daemon, &s, c, ms); err != nil {
