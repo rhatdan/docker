@@ -44,6 +44,8 @@ type ImagePullConfig struct {
 	DownloadManager *xfer.LayerDownloadManager
 	// SignatureCheck controls whether to check image's signatures or not
 	SignatureCheck bool
+	// V2Only controls whether access to V1 registries is allowed
+	V2Only bool
 }
 
 // Puller is an interface that abstracts pulling for different API versions.

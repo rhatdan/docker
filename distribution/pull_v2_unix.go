@@ -4,6 +4,7 @@ package distribution
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/containers/image/docker"
 	containersImageRef "github.com/containers/image/docker/reference"
@@ -57,9 +58,13 @@ func (p *v2Puller) checkTrusted(c gctx.Context, ref reference.Named) (reference.
 		Password: authConfig.Password,
 	}
 	ctx := &types.SystemContext{
+		DockerDisableV1Ping:         p.config.V2Only,
 		DockerInsecureSkipTLSVerify: !isSecure,
 		DockerAuthConfig:            &dockerAuthConfig,
 		DockerRegistryUserAgent:     dockerversion.DockerUserAgent(c),
+	}
+	if p.config.RegistryService.SecureIndex(p.repoInfo.Index.Name) {
+		ctx.DockerCertPath = filepath.Join(registry.CertsDir, p.repoInfo.Index.Name)
 	}
 	img, err := imgRef.NewImage(ctx)
 	if err != nil {
