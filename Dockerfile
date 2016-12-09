@@ -260,7 +260,7 @@ COPY hack/dockerfile/install-binaries.sh /tmp/install-binaries.sh
 RUN /tmp/install-binaries.sh tomlv vndr runc containerd tini proxy
 
 # Install skopeo
-ENV SKOPEO_COMMIT v0.1.16
+ENV SKOPEO_COMMIT v0.1.17
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
 	&& git clone https://github.com/projectatomic/skopeo.git "$GOPATH/src/github.com/projectatomic/skopeo" \
