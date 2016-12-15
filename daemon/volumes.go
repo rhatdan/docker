@@ -152,6 +152,11 @@ func (daemon *Daemon) registerMountPoints(container *container.Container, hostCo
 			if bind.Driver == volume.DefaultDriverName {
 				setBindModeIfNull(bind)
 			}
+			if label.RelabelNeeded(bind.Mode) {
+				if err := label.Relabel(bind.Source, container.MountLabel, label.IsShared(bind.Mode)); err != nil {
+					return err
+				}
+			}
 		}
 
 		binds[bind.Destination] = true
