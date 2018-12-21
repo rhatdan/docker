@@ -40,26 +40,30 @@ func Setup(initLayerFs containerfs.ContainerFS, rootIdentity idtools.Identity) e
 			unix.Unlink(filepath.Join(initLayer, prev))
 		}
 
-		if _, err := os.Stat(filepath.Join(initLayer, pth)); err != nil {
+		tpath := filepath.Join(initLayer, pth)
+		if stat, err := os.Stat(tpath); err != nil {
 			if os.IsNotExist(err) {
 				if err := idtools.MkdirAllAndChownNew(filepath.Join(initLayer, filepath.Dir(pth)), 0755, rootIdentity); err != nil {
 					return err
 				}
 				switch typ {
 				case "dir":
-					if err := idtools.MkdirAllAndChownNew(filepath.Join(initLayer, pth), 0755, rootIdentity); err != nil {
+					if err := idtools.MkdirAllAndChownNew(tpath, 0755, rootIdentity); err != nil {
 						return err
 					}
 				case "file":
-					f, err := os.OpenFile(filepath.Join(initLayer, pth), os.O_CREATE, 0755)
+					f, err := os.OpenFile(tpath, os.O_CREATE, 0755)
 					if err != nil {
 						return err
 					}
 					f.Chown(rootIdentity.UID, rootIdentity.GID)
 					f.Close()
 				default:
-					if err := os.Symlink(typ, filepath.Join(initLayer, pth)); err != nil {
-						return err
+					// Replace pth only if it is not a symbolic link
+					if stat.Mode()&os.ModeSymlink != 0 {
+						if err := os.Symlink(typ, tpath); err != nil {
+							return err
+						}
 					}
 				}
 			} else {
